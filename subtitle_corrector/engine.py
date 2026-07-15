@@ -25,6 +25,7 @@
 
 from kiwipiepy import Kiwi
 
+from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS
 from .dictionary import compound_status, loanword_fix, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
@@ -35,6 +36,7 @@ from .report import FlagItem
 # 이상하게 바꾼다는 지적과 같은 종류의 문제).
 _SPELLING_CHECK_TAGS = {"NNG", "VV", "VA"}
 _LOANWORD_TAGS = {"NNG", "NNP"}
+_CONFUSABLE_LOOKUP = {word: pair for pair in CONFUSABLE_PAIRS for word in pair}
 
 _kiwi = Kiwi()
 
@@ -53,6 +55,12 @@ def correct_loanwords(text: str) -> tuple[str, list[str], list[tuple[str, str]]]
     candidates = [t for t in _kiwi.tokenize(text) if t.tag in _LOANWORD_TAGS]
     replacements = []  # (start, len, original, fix, needs_review, context)
     for t in candidates:
+        # 이미 표준국어대사전에 정식 등재된 단어는 애초에 외래어 오표기 후보가
+        # 아니므로 건드리지 않는다. 그렇지 않으면 "집"처럼 흔한 고유어가
+        # kornorms의 전혀 무관한 외래어 항목과 우연히 겹쳐 "지브" 같은 엉뚱한
+        # 말로 둔갑하는 사고가 생긴다 (실제로 발견된 버그).
+        if word_exists(t.form):
+            continue
         fix, needs_review, context = loanword_fix(t.form)
         if fix:
             replacements.append((t.start, t.len, t.form, fix, needs_review, context))
@@ -100,6 +108,23 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
         corrected = corrected[:start] + replacement + corrected[end:]
         applied.append(desc)
     return corrected, list(reversed(applied))
+
+
+def correct_always_wrong(text: str) -> tuple[str, list[str]]:
+    """문맥과 무관하게 예외 없이 항상 틀린 표현을 자동으로 고친다
+    (예: '그리고 나서' -> '그러고 나서'). 국립국어원 API로 조회하는 게
+    아니라 잘 알려진 관용적 오용 사례를 직접 정리한 목록(common_errors.py)에
+    근거하므로, 초코렛->초콜릿 같은 kornorms 확정 오류와 같은 성격이다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    """
+    corrected = text
+    applied = []
+    for wrong, right in ALWAYS_WRONG.items():
+        if wrong in corrected:
+            corrected = corrected.replace(wrong, right)
+            applied.append(f"{wrong} -> {right}")
+    return corrected, applied
 
 
 _AUX_EC_FORMS = {"아", "어", "여"}
@@ -171,6 +196,27 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def check_confusable_words(index: int, text: str) -> FlagItem | None:
+    """한글 맞춤법 제57항의 동음이의어 혼동 쌍(가름/갈음, 반드시/반듯이 등)이
+    등장하면 항상 확인 플래그한다. 의미가 완전히 다른 별개의 단어라 어느 쪽이
+    맞는지는 문맥을 봐야 알 수 있으므로, check_spelling과 달리 절대 자동
+    교정하지 않는다."""
+    matched = []
+    for t in _kiwi.tokenize(text):
+        for candidate in (t.form, t.lemma):
+            pair = _CONFUSABLE_LOOKUP.get(candidate)
+            if pair and pair not in matched:
+                matched.append(pair)
+    if not matched:
+        return None
+    pairs_desc = ", ".join("/".join(pair) for pair in matched)
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=f"자주 헷갈리는 동음이의어 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)",
+    )
+
+
 def check_spacing(index: int, text: str) -> FlagItem | None:
     """띄어쓰기 제안은 신뢰도를 알 수 없으므로 절대 자동 적용하지 않고
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
@@ -215,7 +261,10 @@ def correct_entries(
     for e in entries:
         corrected_text, applied_fixes, review_fixes = correct_loanwords(e.text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
-        applied_log.extend(f"[{e.index}] {fix}" for fix in applied_fixes + compound_fixes)
+        corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+        applied_log.extend(
+            f"[{e.index}] {fix}" for fix in applied_fixes + compound_fixes + always_wrong_fixes
+        )
 
         corrected_entries.append(
             SubtitleEntry(index=e.index, start=e.start, end=e.end, text=corrected_text)
@@ -237,6 +286,7 @@ def correct_entries(
             f
             for f in (
                 check_spelling(e.index, corrected_text),
+                check_confusable_words(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f
