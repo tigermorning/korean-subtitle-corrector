@@ -3,12 +3,16 @@ certifi==2026.6.17
 charset-normalizer==3.4.9
 colorama==0.4.6
 idna==3.18
+kiwipiepy==0.23.2
+kiwipiepy_model==0.23.0
 markdown-it-py==4.2.0
 mdurl==0.1.2
+numpy==2.5.1
 Pygments==2.20.0
 python-dotenv==1.2.2
 requests==2.34.2
 rich==15.0.0
 shellingham==1.5.4
+tqdm==4.68.4
 typer==0.26.8
 urllib3==2.7.0
