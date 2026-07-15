@@ -22,10 +22,12 @@
      항상 정답이 하나뿐이라 자동으로 정리한다(예: "오늘은날씨가좋네요" ->
      "오늘은 날씨가 좋네요"). 이건 "단어 경계가 어디인지 애매한" 문제가
      아니라 형태소 결합 규칙 자체가 예외 없이 고정되어 있어서다.
-   - 반면 내용어와 내용어가 바로 이어질 때(합성어/의존명사/보조용언처럼
-     하나로 합쳐질지 별개로 남을지)는 '한번/한 번'처럼 의미에 따라 정답이
-     갈릴 수 있어, 사전으로 확정되지 않는 한 절대 자동 적용하지 않고
-     플래그만 한다.
+   - 내용어와 내용어가 바로 이어질 때(합성어처럼 하나로 합쳐질지 별개로
+     남을지)는 '한번/한 번'처럼 의미에 따라 정답이 갈릴 수 있어, 사전으로
+     확정되지 않는 한 절대 자동 적용하지 않고 플래그만 한다.
+   - 예외적으로 보조 용언(제47항)은 "붙여 씀"이 허용되는 예외일 뿐 "띄어
+     씀"이 원칙이므로, 붙여 쓴 형태를 항상 원칙(띄어쓰기) 형태로 자동
+     통일한다 — 사용자가 붙여쓰기를 선호한다는 별도 지시가 없는 한.
 
 주의: 이건 여전히 PRD 3단계 판단 엔진 중 1단계(사전/규범 근거)에 해당한다.
 온라인가나다 아카이브 검색(2단계)은 아직 없다.
@@ -302,60 +304,130 @@ def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
 
 _AUX_EC_FORMS = {"아", "어", "여"}
 _AUX_NNB_FORMS = {"뻔", "만", "법", "듯", "성", "직", "척", "체", "양"}
+# "-아/어지다"(피동·사동)와 "-아/어하다"는 제47항의 "붙임 허용"(원칙은 띄어쓰기,
+# 붙임은 허용되는 예외) 대상이 아니라 별도 규정으로 "항상 붙임"이 원칙인
+# 완전히 다른 규칙이다. 형태만 보면 패턴 1(본용언-아/어+보조용언)과 똑같이
+# 생겨서(예: "전해지다"의 "지"도 kiwi가 VX로 태깅) 자칫 같은 패턴으로 오인해
+# "전해졌다"를 "전해 졌다"로 잘못 갈라놓을 위험이 있어, lemma로 구분해 제외한다.
+_ALWAYS_ATTACHED_AUX_LEMMAS = {"지다", "하다"}
 
 
 def _force_span(suggested: str, original_span: str, other_span: str) -> str:
     """suggested 안에서 other_span(kiwi가 밀어붙이려는 형태)을 original_span
-    (원문에 실제로 쓰인, 마찬가지로 유효한 형태)으로 되돌린다."""
+    (실제로 채택된, 정답으로 확정된 형태)으로 되돌린다."""
     if other_span != original_span:
         return suggested.replace(other_span, original_span)
     return suggested
 
 
+def _aux_verb_pattern_spans(s: str) -> list[str]:
+    """s를 토큰화해 보조 용언 붙임 허용 두 패턴(본용언-아/어+보조용언,
+    관형사형+의존명사+하다/싶다)에 해당하는 구간의 실제 표면 텍스트를
+    등장 순서대로 뽑아 돌려준다."""
+    tokens = _kiwi.tokenize(s)
+    spans = []
+    for i in range(1, len(tokens) - 1):
+        prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
+
+        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX)
+        if (
+            prev.tag in ("VV", "VA")
+            and cur.tag == "EC"
+            and nxt.tag == "VX"
+            and cur.form in _AUX_EC_FORMS
+            and nxt.lemma not in _ALWAYS_ATTACHED_AUX_LEMMAS
+        ):
+            stem_len = (cur.start + cur.len) - prev.start
+            if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
+                continue  # 항상 띄움 예외 -> 붙임 허용 대상이 아님
+            spans.append(s[prev.start : nxt.start + nxt.len])
+            continue
+
+        # 패턴 2: 관형사형(ETM, prev에 결합) + 의존명사(만/듯/척/체/법/양/성/직
+        # 등, NNB) + 하다/싶다(XSA, XSV 또는 VX)
+        if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
+            spans.append(s[prev.start : nxt.start + nxt.len])
+
+    return spans
+
+
 def _normalize_aux_verb_spacing(text: str, suggested: str) -> str:
-    """한글 맞춤법 제47항: 보조 용언은 붙여 써도, 띄어 써도 되는 경우(붙임
-    허용)가 원칙이다. kiwi.space()는 둘 중 하나의 형태를 임의로 강제 제안하는
-    경향이 있어("할만하다" -> "할 만하다"), 이미 올바른 표기까지 불필요하게
-    "확인 필요"로 플래그하는 오탐이 생긴다. 이를 막기 위해 붙임 허용 구간에서는
-    kiwi의 제안을 원문 형태로 되돌린다.
+    """한글 맞춤법 제47항의 보조 용언 붙임 허용 구간에서, kiwi.space()가 이미
+    확정된 형태(correct_aux_verb_spacing()이 원칙에 맞춰 띄어 쓴 형태)와
+    다른 형태를 제안해 불필요하게 "확인 필요" 플래그가 뜨는 것을 막는다.
+
+    kiwi는 이 구간에서 항상 같은 방식으로 띄어 쓰지 않는다(예: "할만하다"에
+    대해 "할 만하다"를 제안하기도 한다 — 관형사형+의존명사 사이는 띄우고
+    의존명사+하다 사이는 붙이는, 우리가 채택한 형태와는 또 다른 조합).
+    그래서 "붙인 형태/뗀 형태" 둘 중 하나로 단정하고 문자열을 맞바꾸는 대신,
+    text와 suggested 양쪽에서 이 패턴에 해당하는 구간을 각각 독립적으로 찾아
+    같은 등장 순서끼리 짝지어 그대로 맞바꾼다 — kiwi가 어떤 조합을 제안하든
+    안전하게 대응하기 위함이다.
+    """
+    text_spans = _aux_verb_pattern_spans(text)
+    suggested_spans = _aux_verb_pattern_spans(suggested)
+    for definitive_span, kiwi_span in zip(text_spans, suggested_spans):
+        suggested = _force_span(suggested, definitive_span, kiwi_span)
+    return suggested
+
+
+def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
+    """한글 맞춤법 제47항: 보조 용언은 "띄어 씀을 원칙으로 하되, 붙여 씀도
+    허용"한다 — 원칙은 띄어쓰기, 붙여쓰기는 허용되는 예외일 뿐이다. 이
+    도구는 그 원칙 쪽을 기본값으로 삼아, 붙여 쓴 형태를 띄어 쓴 형태로
+    자동 통일한다. 사용자가 붙여쓰기를 선호한다는 별도 지시가 없는 한
+    항상 이 기본값(원칙)을 적용한다.
+
+    _normalize_aux_verb_spacing()과 대상 패턴은 같지만 역할이 다르다 — 그쪽은
+    이미 붙여 쓴 형태를 "허용되는 정답"으로 보고 kiwi 제안을 원문에 맞춰
+    되돌리는(플래그 방지용) 함수였고, 이 함수는 원칙(띄어쓰기) 형태로
+    실제 텍스트 자체를 자동 교정한다.
 
     단, 본용언이 3음절 이상의 사전 등재 합성어인 경우(예: 덤벼들어보아라)는
-    항상 띄어 써야 하는 예외이므로 건드리지 않는다 — kiwi가 이미 정확히
-    띄어 주는 부분이다.
+    항상 띄어 써야 하는 별개의 예외라 이미 붙어 있을 수 없으므로(있다면 그건
+    이 함수의 대상이 아닌 다른 오류) 건드리지 않는다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
     tokens = _kiwi.tokenize(text)
-
-    def surface(tok):
-        # tok.form 대신 원문에서 실제 그 위치의 글자를 그대로 잘라 쓴다.
-        # 어미 활용으로 받침이 다음 형태소로 넘어가는 경우(예: '낸다' ->
-        # 내(VX)+ᆫ다(EF))에는 tok.form이 표면형과 달라서 문자열 슬라이싱이
-        # 어긋나기 때문이다.
-        return text[tok.start : tok.start + tok.len]
+    edits = set()  # {(gap_start, gap_end)}
 
     for i in range(1, len(tokens) - 1):
         prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
 
         # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX)
-        if prev.tag in ("VV", "VA") and cur.tag == "EC" and nxt.tag == "VX" and cur.form in _AUX_EC_FORMS:
+        if (
+            prev.tag in ("VV", "VA")
+            and cur.tag == "EC"
+            and nxt.tag == "VX"
+            and cur.form in _AUX_EC_FORMS
+            and nxt.lemma not in _ALWAYS_ATTACHED_AUX_LEMMAS
+        ):
             stem_len = (cur.start + cur.len) - prev.start
             if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
-                continue  # 항상 띄움 예외 -> kiwi 제안을 그대로 둔다
-            original_span = text[prev.start : nxt.start + nxt.len]
-            attached = text[prev.start : cur.start + cur.len] + surface(nxt)
-            spaced = text[prev.start : cur.start + cur.len] + " " + surface(nxt)
-            other = spaced if original_span == attached else attached
-            suggested = _force_span(suggested, original_span, other)
+                continue  # 항상 띄움 예외 -> 이미 붙어 있을 수 없음
+            gap_start, gap_end = cur.start + cur.len, nxt.start
+            if text[gap_start:gap_end] == "":
+                edits.add((gap_start, gap_end))
 
-        # 패턴 2: 관형사형(ETM, prev에 결합) + 의존명사(만/듯/척/체/법/양/성/직
-        # 등, NNB) + 하다/싶다(XSA, XSV 또는 VX) — 항상 붙임 허용
+        # 패턴 2: 관형사형(ETM) + 의존명사(만/듯/척/체/법/양/성/직 등, NNB) +
+        # 하다/싶다(XSA, XSV 또는 VX). 의존명사 앞뒤 두 간격 모두 원칙은
+        # 띄어쓰기이므로(제42항 의존명사 + 제47항 보조용언), 둘 다 정리한다.
+        # 한쪽만 띄우면("아는척 한다") kiwi가 남은 절반을 다른 품사로
+        # 재분석해(하다=XSV -> VV) 오히려 새로운 오탐 플래그를 만들어낸다.
         if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
-            original_span = text[prev.start : nxt.start + nxt.len]
-            attached = surface(prev) + surface(cur) + surface(nxt)
-            spaced = surface(prev) + " " + surface(cur) + surface(nxt)
-            other = spaced if original_span == attached else attached
-            suggested = _force_span(suggested, original_span, other)
+            lead_start, lead_end = prev.start + prev.len, cur.start
+            if text[lead_start:lead_end] == "":
+                edits.add((lead_start, lead_end))
+            gap_start, gap_end = cur.start + cur.len, nxt.start
+            if text[gap_start:gap_end] == "":
+                edits.add((gap_start, gap_end))
 
-    return suggested
+    corrected = text
+    for gap_start, gap_end in sorted(edits, key=lambda e: e[0], reverse=True):
+        corrected = corrected[:gap_start] + " " + corrected[gap_end:]
+    applied = [f"{text} -> {corrected}"] if corrected != text else []
+    return corrected, applied
 
 
 def check_spelling(index: int, text: str) -> FlagItem | None:
@@ -470,6 +542,7 @@ def correct_entries(
         corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(e.text)
         corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
+        corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
         applied_log.extend(
@@ -477,6 +550,7 @@ def correct_entries(
             for fix in applied_fixes
             + particle_fixes
             + compound_fixes
+            + aux_verb_fixes
             + always_wrong_fixes
             + discriminatory_fixes
         )
