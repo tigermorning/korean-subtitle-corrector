@@ -25,7 +25,7 @@
 
 from kiwipiepy import Kiwi
 
-from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS
+from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
 from .dictionary import compound_status, loanword_fix, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
@@ -110,6 +110,19 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     return corrected, list(reversed(applied))
 
 
+def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
+    """mapping의 각 (원문, 정답) 쌍을 text에 적용한다. 긴 표현부터 먼저
+    치환해서, 짧은 표현이 긴 표현의 일부일 때 잘못 겹쳐 치환되는 사고를
+    막는다 (예: '벙어리장갑'을 '벙어리'보다 먼저 처리)."""
+    corrected = text
+    applied = []
+    for wrong, right in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if wrong in corrected:
+            corrected = corrected.replace(wrong, right)
+            applied.append(f"{wrong} -> {right}")
+    return corrected, applied
+
+
 def correct_always_wrong(text: str) -> tuple[str, list[str]]:
     """문맥과 무관하게 예외 없이 항상 틀린 표현을 자동으로 고친다
     (예: '그리고 나서' -> '그러고 나서'). 국립국어원 API로 조회하는 게
@@ -118,13 +131,16 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
-    corrected = text
-    applied = []
-    for wrong, right in ALWAYS_WRONG.items():
-        if wrong in corrected:
-            corrected = corrected.replace(wrong, right)
-            applied.append(f"{wrong} -> {right}")
-    return corrected, applied
+    return _apply_replacements(text, ALWAYS_WRONG)
+
+
+def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
+    """차별적·비하적 표현은 관례냐 아니냐를 따질 문제가 아니라 항상 바꿔야
+    하므로 자동으로 교정한다 (예: '간질' -> '뇌전증').
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    """
+    return _apply_replacements(text, DISCRIMINATORY_TERMS)
 
 
 _AUX_EC_FORMS = {"아", "어", "여"}
@@ -217,6 +233,21 @@ def check_confusable_words(index: int, text: str) -> FlagItem | None:
     )
 
 
+def check_purified_terms(index: int, text: str) -> FlagItem | None:
+    """일반 순화어(예: 반팔->반소매)가 등장하면 확인 플래그한다. 차별적
+    표현과 달리 관례적 표현이 여전히 널리 쓰이는 경우가 있어(예: 유모차는
+    공식 순화어 유아차보다 압도적으로 많이 쓰임) 자동으로 바꾸지 않는다."""
+    matched = [word for word in PURIFIED_TERMS if word in text]
+    if not matched:
+        return None
+    suggestions = ", ".join(f"{word}->{PURIFIED_TERMS[word]}" for word in matched)
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=f"순화어 확인 필요: {suggestions} (관례적 표현이 더 적절할 수도 있음)",
+    )
+
+
 def check_spacing(index: int, text: str) -> FlagItem | None:
     """띄어쓰기 제안은 신뢰도를 알 수 없으므로 절대 자동 적용하지 않고
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
@@ -262,8 +293,10 @@ def correct_entries(
         corrected_text, applied_fixes, review_fixes = correct_loanwords(e.text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+        corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
         applied_log.extend(
-            f"[{e.index}] {fix}" for fix in applied_fixes + compound_fixes + always_wrong_fixes
+            f"[{e.index}] {fix}"
+            for fix in applied_fixes + compound_fixes + always_wrong_fixes + discriminatory_fixes
         )
 
         corrected_entries.append(
@@ -287,6 +320,7 @@ def correct_entries(
             for f in (
                 check_spelling(e.index, corrected_text),
                 check_confusable_words(e.index, corrected_text),
+                check_purified_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f
