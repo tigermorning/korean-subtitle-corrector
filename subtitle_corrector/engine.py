@@ -1,30 +1,53 @@
-"""자막 교정 엔진 — v1: 형태소 분석 기반 미등재 단어 탐지
+"""자막 교정 엔진
 
-명사/동사/형용사 같은 내용어만 형태소 단위로 뽑아 사전 기본형(표제어)으로
-복원한 뒤 표준국어대사전에 있는지 확인한다. 조사(은/는/이/가)나 어미(-세요,
--습니다) 같은 기능 형태소는 그 자체가 독립된 표제어가 아니므로 검사 대상에서
-제외한다.
+세 가지를 확인한다:
+1. 외래어 표기 — 국립국어원 어문 규범(kornorms)이 명시적으로 "이 표기는
+   틀렸다"고 확정하고 정답까지 준 경우만 **자동으로 교정**한다 (예: 초코렛
+   -> 초콜릿). 이건 문맥과 무관하게 하나의 공식 정답만 있는 경우라 자동 적용
+   해도 안전하다는 판단.
+2. 맞춤법 — 명사/동사/형용사 같은 내용어를 형태소 단위로 뽑아 사전 기본형
+   (표제어)으로 복원한 뒤 표준국어대사전에 있는지 확인한다. 없으면 플래그만
+   하고 자동 수정하지 않는다 (어떤 게 맞는 표기인지 알 수 없기 때문).
+3. 띄어쓰기 — kiwi.space()가 제안하는 띄어쓰기가 원문과 다르면 플래그한다.
+   신뢰도를 알 수 없고 '한번/한 번'처럼 문맥에 따라 정답이 갈리는 경우가
+   있어 절대 자동 적용하지 않는다.
 
-주의: 이건 여전히 PRD 3단계 판단 엔진 중 1단계(사전/규범 근거)의 "미등재 단어
-탐지"일 뿐이다. 문맥에 따라 갈리는 진짜 띄어쓰기 판단(예: "한번" vs "한 번")은
-형태소 분석만으로는 못 잡고, 온라인가나다 아카이브 검색과 사람 확인 단계가
-추가로 필요하다.
+주의: 이건 여전히 PRD 3단계 판단 엔진 중 1단계(사전/규범 근거)에 해당한다.
+온라인가나다 아카이브 검색(2단계)은 아직 없다.
 """
 
 from kiwipiepy import Kiwi
 
-from .dictionary import word_exists
+from .dictionary import known_loanword_fix, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
 
 _CONTENT_TAGS = {"NNG", "NNP", "VV", "VA"}
+_LOANWORD_TAGS = {"NNG", "NNP"}
 
 _kiwi = Kiwi()
 
 
 def _content_lemmas(text: str) -> list[str]:
-    tokens = _kiwi.tokenize(text)
-    return [t.lemma for t in tokens if t.tag in _CONTENT_TAGS]
+    return [t.lemma for t in _kiwi.tokenize(text) if t.tag in _CONTENT_TAGS]
+
+
+def correct_loanwords(text: str) -> tuple[str, list[str]]:
+    """kornorms가 명시적으로 확정한 외래어 표기 오류만 자동으로 고친다.
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')"""
+    candidates = [t for t in _kiwi.tokenize(text) if t.tag in _LOANWORD_TAGS]
+    replacements = []
+    for t in candidates:
+        fix = known_loanword_fix(t.form)
+        if fix:
+            replacements.append((t.start, t.len, t.form, fix))
+
+    corrected = text
+    applied = []
+    for start, length, original, fix in sorted(replacements, key=lambda r: r[0], reverse=True):
+        corrected = corrected[:start] + fix + corrected[start + length :]
+        applied.append(f"{original} -> {fix}")
+    return corrected, list(reversed(applied))
 
 
 def check_spelling(index: int, text: str) -> FlagItem | None:
@@ -53,10 +76,32 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     return None
 
 
-def check_entries(entries: list[SubtitleEntry]) -> list[FlagItem]:
+def correct_entries(
+    entries: list[SubtitleEntry],
+) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
+    """entries를 처리한다.
+
+    반환값: (자동 교정 반영된 entries, 플래그 목록, 자동 교정 로그)
+    나머지 검사(맞춤법/띄어쓰기)는 자동 교정이 끝난 텍스트를 기준으로 수행한다.
+    """
+    corrected_entries = []
     flags = []
+    applied_log = []
+
     for e in entries:
-        flags.extend(
-            f for f in (check_spelling(e.index, e.text), check_spacing(e.index, e.text)) if f
+        corrected_text, applied_fixes = correct_loanwords(e.text)
+        applied_log.extend(f"[{e.index}] {fix}" for fix in applied_fixes)
+
+        corrected_entries.append(
+            SubtitleEntry(index=e.index, start=e.start, end=e.end, text=corrected_text)
         )
-    return flags
+        flags.extend(
+            f
+            for f in (
+                check_spelling(e.index, corrected_text),
+                check_spacing(e.index, corrected_text),
+            )
+            if f
+        )
+
+    return corrected_entries, flags, applied_log

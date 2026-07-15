@@ -7,7 +7,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-from subtitle_corrector.engine import check_entries
+from subtitle_corrector.engine import correct_entries
 from subtitle_corrector.parsers import parse_srt, write_srt
 from subtitle_corrector.report import write_report
 
@@ -22,15 +22,19 @@ def correct(
 ):
     """자막 파일을 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     entries = parse_srt(input_file)
-    flags = check_entries(entries)
+    corrected_entries, flags, applied_log = correct_entries(entries)
 
     output = output or input_file.with_name(input_file.stem + "_corrected.srt")
     report_path = report or input_file.with_name(input_file.stem + "_report.csv")
 
-    write_srt(entries, output)
+    write_srt(corrected_entries, output)
     write_report(flags, report_path)
 
     typer.echo(f"교정된 자막: {output}")
+    if applied_log:
+        typer.echo(f"자동 교정 {len(applied_log)}건:")
+        for line in applied_log:
+            typer.echo(f"  {line}")
     typer.echo(f"플래그 항목 {len(flags)}건 -> 리포트: {report_path}")
 
 
