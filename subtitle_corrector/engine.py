@@ -102,6 +102,64 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     return corrected, list(reversed(applied))
 
 
+_AUX_EC_FORMS = {"아", "어", "여"}
+_AUX_NNB_FORMS = {"뻔", "만", "법", "듯", "성", "직", "척", "체", "양"}
+
+
+def _force_span(suggested: str, original_span: str, other_span: str) -> str:
+    """suggested 안에서 other_span(kiwi가 밀어붙이려는 형태)을 original_span
+    (원문에 실제로 쓰인, 마찬가지로 유효한 형태)으로 되돌린다."""
+    if other_span != original_span:
+        return suggested.replace(other_span, original_span)
+    return suggested
+
+
+def _normalize_aux_verb_spacing(text: str, suggested: str) -> str:
+    """한글 맞춤법 제47항: 보조 용언은 붙여 써도, 띄어 써도 되는 경우(붙임
+    허용)가 원칙이다. kiwi.space()는 둘 중 하나의 형태를 임의로 강제 제안하는
+    경향이 있어("할만하다" -> "할 만하다"), 이미 올바른 표기까지 불필요하게
+    "확인 필요"로 플래그하는 오탐이 생긴다. 이를 막기 위해 붙임 허용 구간에서는
+    kiwi의 제안을 원문 형태로 되돌린다.
+
+    단, 본용언이 3음절 이상의 사전 등재 합성어인 경우(예: 덤벼들어보아라)는
+    항상 띄어 써야 하는 예외이므로 건드리지 않는다 — kiwi가 이미 정확히
+    띄어 주는 부분이다.
+    """
+    tokens = _kiwi.tokenize(text)
+
+    def surface(tok):
+        # tok.form 대신 원문에서 실제 그 위치의 글자를 그대로 잘라 쓴다.
+        # 어미 활용으로 받침이 다음 형태소로 넘어가는 경우(예: '낸다' ->
+        # 내(VX)+ᆫ다(EF))에는 tok.form이 표면형과 달라서 문자열 슬라이싱이
+        # 어긋나기 때문이다.
+        return text[tok.start : tok.start + tok.len]
+
+    for i in range(1, len(tokens) - 1):
+        prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
+
+        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX)
+        if prev.tag in ("VV", "VA") and cur.tag == "EC" and nxt.tag == "VX" and cur.form in _AUX_EC_FORMS:
+            stem_len = (cur.start + cur.len) - prev.start
+            if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
+                continue  # 항상 띄움 예외 -> kiwi 제안을 그대로 둔다
+            original_span = text[prev.start : nxt.start + nxt.len]
+            attached = text[prev.start : cur.start + cur.len] + surface(nxt)
+            spaced = text[prev.start : cur.start + cur.len] + " " + surface(nxt)
+            other = spaced if original_span == attached else attached
+            suggested = _force_span(suggested, original_span, other)
+
+        # 패턴 2: 관형사형(ETM, prev에 결합) + 의존명사(만/듯/척/체/법/양/성/직
+        # 등, NNB) + 하다/싶다(XSA, XSV 또는 VX) — 항상 붙임 허용
+        if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
+            original_span = text[prev.start : nxt.start + nxt.len]
+            attached = surface(prev) + surface(cur) + surface(nxt)
+            spaced = surface(prev) + " " + surface(cur) + surface(nxt)
+            other = spaced if original_span == attached else attached
+            suggested = _force_span(suggested, original_span, other)
+
+    return suggested
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     unknown = [w for w in _content_lemmas(text) if not word_exists(w)]
     if unknown:
@@ -129,6 +187,8 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
             continue  # 이미 떨어져 있으면 합성어 자동 교정 대상이 아니었음
         if compound_status(t1.form + t2.form) == "합성어":
             suggested = suggested.replace(f"{t1.form} {t2.form}", t1.form + t2.form)
+
+    suggested = _normalize_aux_verb_spacing(text, suggested)
 
     if suggested != text:
         return FlagItem(
