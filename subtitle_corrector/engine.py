@@ -26,7 +26,7 @@
 from kiwipiepy import Kiwi
 
 from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
-from .dictionary import compound_status, loanword_fix, word_exists
+from .dictionary import compound_status, loanword_fix, usage_examples, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
 
@@ -254,6 +254,24 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def _usage_note(words: list[str]) -> str:
+    """여러 단어에 대해 우리말샘 실제 용례를 모아 플래그 사유에 덧붙일 참고
+    문구를 만든다. 번역가가 사전을 따로 찾아보지 않고도 각 단어가 실제
+    문장에서 어떻게 쓰이는지 바로 비교해 볼 수 있게 하기 위함이다. 용례를
+    하나도 못 찾으면 빈 문자열을 돌려주고(플래그 자체는 그대로 유지됨),
+    이미 처리한 단어는 중복 조회하지 않는다."""
+    notes = []
+    seen = set()
+    for word in words:
+        if word in seen:
+            continue
+        seen.add(word)
+        examples = usage_examples(word, limit=1)
+        if examples:
+            notes.append(f"{word}: '{examples[0]}'")
+    return " / ".join(notes)
+
+
 def check_confusable_words(index: int, text: str) -> FlagItem | None:
     """한글 맞춤법 제57항의 동음이의어 혼동 쌍(가름/갈음, 반드시/반듯이 등)이
     등장하면 항상 확인 플래그한다. 의미가 완전히 다른 별개의 단어라 어느 쪽이
@@ -268,11 +286,11 @@ def check_confusable_words(index: int, text: str) -> FlagItem | None:
     if not matched:
         return None
     pairs_desc = ", ".join("/".join(pair) for pair in matched)
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=f"자주 헷갈리는 동음이의어 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)",
-    )
+    reason = f"자주 헷갈리는 동음이의어 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)"
+    note = _usage_note([word for pair in matched for word in pair])
+    if note:
+        reason += f" | 우리말샘 용례) {note}"
+    return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
 def check_purified_terms(index: int, text: str) -> FlagItem | None:
@@ -283,11 +301,11 @@ def check_purified_terms(index: int, text: str) -> FlagItem | None:
     if not matched:
         return None
     suggestions = ", ".join(f"{word}->{PURIFIED_TERMS[word]}" for word in matched)
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=f"순화어 확인 필요: {suggestions} (관례적 표현이 더 적절할 수도 있음)",
-    )
+    reason = f"순화어 확인 필요: {suggestions} (관례적 표현이 더 적절할 수도 있음)"
+    note = _usage_note(matched + [PURIFIED_TERMS[word] for word in matched])
+    if note:
+        reason += f" | 우리말샘 용례) {note}"
+    return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
 def check_spacing(index: int, text: str) -> FlagItem | None:

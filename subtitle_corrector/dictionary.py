@@ -14,6 +14,7 @@ KORNORMS_API_KEY = os.getenv("KORNORMS_API_KEY")
 
 STDICT_URL = "https://stdict.korean.go.kr/api/search.do"
 OPENDICT_URL = "https://opendict.korean.go.kr/api/search"
+OPENDICT_VIEW_URL = "https://opendict.korean.go.kr/api/view"
 KORNORMS_URL = "https://korean.go.kr/kornorms/exampleReqList.do"
 
 
@@ -44,32 +45,118 @@ def search_opendict(query: str) -> dict:
     return response.json()
 
 
+def _opendict_item_is_standard(item: dict) -> bool:
+    """우리말샘은 이미 알려진 비표준 표기("초코렛", "스노우 체인" 등)도
+    하나의 표제어처럼 등재해 두고, 그 뜻풀이 끝에 "⇒규범 표기는 'OO'이다"라고
+    정답을 안내한다. 이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로
+    존재 확인 근거로 쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면
+    표준 표기로 본다."""
+    return any("규범 표기는" not in (sense.get("definition") or "") for sense in item.get("sense", []))
+
+
 def word_exists(query: str) -> bool:
-    """표준국어대사전에 정확히 일치하는 표제어가 있는지 확인"""
-    result = search_stdict(query)
-    channel = result.get("channel", {})
-    return int(channel.get("total", 0)) > 0
+    """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
+
+    표준국어대사전(규범 사전)을 먼저 확인하고, 없으면 우리말샘(개방형 사전)도
+    확인한다. 신조어·구어체 표현은 표준국어대사전에는 없지만 우리말샘에는
+    등재된 경우가 많아, 우리말샘도 국립국어원 공식 자료인 이상 정답 근거로
+    함께 사용한다.
+
+    우리말샘 쪽은 반드시 표제어가 정확히 일치하는지(`_opendict_item_is_standard`로
+    비표준 표기 여부까지) 확인한다 — 검색 API가 "스노우"로 조회해도 "스노우
+    체인", "스노우맨"처럼 그 단어가 포함된 여러 단어(구)를 함께 돌려주기
+    때문에, 총 검색 건수(`total`)만 보면 실제로는 등재되지 않은 단어까지
+    "존재함"으로 오판하게 된다."""
+    stdict_result = search_stdict(query)
+    if int(stdict_result.get("channel", {}).get("total", 0)) > 0:
+        return True
+    opendict_result = search_opendict(query)
+    for item in opendict_result.get("channel", {}).get("item", []):
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword == query and _opendict_item_is_standard(item):
+            return True
+    return False
 
 
 def compound_status(word: str) -> str | None:
-    """word(붙여 쓴 형태)가 표준국어대사전에 하나의 표제어로 등재되어 있는지
-    확인하고, 등재되어 있다면 합성어인지 명사구인지 구분해 돌려준다.
+    """word(붙여 쓴 형태)가 표준국어대사전 또는 우리말샘에 하나의 표제어로
+    등재되어 있는지 확인하고, 등재되어 있다면 합성어인지 명사구인지 구분해
+    돌려준다. 표준국어대사전을 먼저 확인하고, 없으면 우리말샘도 확인한다.
 
-    사전은 합성어를 하이픈으로("노천-카페", 품사 있음), 명사구를 캐럿으로
-    ("예방^접종", `pos`가 "품사 없음")로 표시한다. 즉 `pos` 필드만 보면
-    구분된다.
+    두 사전 모두 합성어를 하이픈으로("노천-카페"), 명사구를 캐럿으로
+    ("예방^접종")로 표시하는 동일한 표기 관례를 쓴다. 표준국어대사전은
+    `pos` 필드로도 구분되지만(하이픈 표제어는 `pos` 있음, 캐럿 표제어는
+    `pos: "품사 없음"`), 우리말샘 검색 결과는 표제어 단위 `pos`가 없어
+    하이픈/캐럿 표기 자체로만 판단한다 — 구분자가 전혀 없는 표제어는
+    합성어인지 단순 일치인지 애매하므로 안전하게 판단을 보류한다(None).
 
     반환값:
     - "합성어": 무조건 붙여 써야 하는 단어 (표제어 자체가 하나의 단어)
     - "명사구": 띄어쓰기가 원칙이지만 붙여 써도 허용되는 구
-    - None: 사전에 이 형태로 등재된 표제어가 없음 (판단 근거 없음)
+    - None: 두 사전 어디에도 이 형태로 등재된 표제어가 없거나 판단 근거가 불충분함
     """
     result = search_stdict(word)
     for item in result.get("channel", {}).get("item", []):
         headword = (item.get("word") or "").replace("-", "").replace("^", "")
         if headword == word:
             return "명사구" if item.get("pos") == "품사 없음" else "합성어"
+
+    opendict_result = search_opendict(word)
+    for item in opendict_result.get("channel", {}).get("item", []):
+        raw_word = item.get("word") or ""
+        headword = raw_word.replace("-", "").replace("^", "")
+        if headword != word or not _opendict_item_is_standard(item):
+            continue
+        if "-" in raw_word:
+            return "합성어"
+        if "^" in raw_word:
+            return "명사구"
     return None
+
+
+def _opendict_examples_for_target(target_code) -> list[str]:
+    """우리말샘 상세보기(view) API로 target_code(뜻풀이 하나)에 딸린 실제
+    용례 문장들을 가져온다. 예문의 {중괄호} 강조 표시는 벗겨서 돌려준다."""
+    if not OPENDICT_API_KEY:
+        raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
+    params = {"key": OPENDICT_API_KEY, "method": "target_code", "q": target_code, "req_type": "json"}
+    response = requests.get(OPENDICT_VIEW_URL, params=params, timeout=10)
+    response.raise_for_status()
+    if not response.text.strip():
+        return []
+    data = response.json()
+    sense_info = data.get("channel", {}).get("item", {}).get("senseInfo", {})
+    return [
+        example["example"].replace("{", "").replace("}", "")
+        for example in sense_info.get("example_info", [])
+        if example.get("example")
+    ]
+
+
+def usage_examples(word: str, limit: int = 2) -> list[str]:
+    """우리말샘에서 word와 정확히 일치하는 표제어의 실제 용례(예문)를 가져온다.
+
+    헷갈리는 표현(제57항 동음이의어)이나 순화어처럼 사람이 문맥으로 직접
+    판단해야 하는 플래그 항목에 참고 예문을 덧붙여, 번역가가 사전을 따로
+    찾아보지 않고도 바로 문맥을 확인할 수 있게 돕기 위함이다. 용례가 없거나
+    조회에 실패해도 플래그 판단 자체에는 영향이 없어야 하므로, 이 경우 빈
+    리스트만 돌려준다."""
+    try:
+        result = search_opendict(word)
+        for item in result.get("channel", {}).get("item", []):
+            headword = (item.get("word") or "").replace("-", "").replace("^", "")
+            if headword != word:
+                continue
+            for sense in item.get("sense", []):
+                target_code = sense.get("target_code")
+                if not target_code:
+                    continue
+                examples = _opendict_examples_for_target(target_code)
+                if examples:
+                    return examples[:limit]
+    except (RuntimeError, requests.RequestException, ValueError):
+        return []
+    return []
 
 
 def search_kornorms(keyword: str) -> list[dict]:
