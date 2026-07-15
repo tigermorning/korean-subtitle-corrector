@@ -51,6 +51,27 @@ def word_exists(query: str) -> bool:
     return int(channel.get("total", 0)) > 0
 
 
+def compound_status(word: str) -> str | None:
+    """word(붙여 쓴 형태)가 표준국어대사전에 하나의 표제어로 등재되어 있는지
+    확인하고, 등재되어 있다면 합성어인지 명사구인지 구분해 돌려준다.
+
+    사전은 합성어를 하이픈으로("노천-카페", 품사 있음), 명사구를 캐럿으로
+    ("예방^접종", `pos`가 "품사 없음")로 표시한다. 즉 `pos` 필드만 보면
+    구분된다.
+
+    반환값:
+    - "합성어": 무조건 붙여 써야 하는 단어 (표제어 자체가 하나의 단어)
+    - "명사구": 띄어쓰기가 원칙이지만 붙여 써도 허용되는 구
+    - None: 사전에 이 형태로 등재된 표제어가 없음 (판단 근거 없음)
+    """
+    result = search_stdict(word)
+    for item in result.get("channel", {}).get("item", []):
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword == word:
+            return "명사구" if item.get("pos") == "품사 없음" else "합성어"
+    return None
+
+
 def search_kornorms(keyword: str) -> list[dict]:
     """외래어·로마자 표기 용례를 조회한다 (한국어 어문 규범 Open API).
 

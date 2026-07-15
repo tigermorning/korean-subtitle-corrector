@@ -25,7 +25,7 @@
 
 from kiwipiepy import Kiwi
 
-from .dictionary import loanword_fix, word_exists
+from .dictionary import compound_status, loanword_fix, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
 
@@ -73,6 +73,35 @@ def correct_loanwords(text: str) -> tuple[str, list[str], list[tuple[str, str]]]
     return corrected, list(reversed(applied)), list(reversed(needs_review_log))
 
 
+def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
+    """인접한 두 명사가 사전에 하나의 합성어(품사 있음, 하이픈 표기)로
+    등재되어 있는데 띄어 쓰여 있으면 붙여 쓰도록 자동 교정한다.
+
+    사전이 "이 조합은 무조건 붙여 쓰는 하나의 단어"라고 직접 확인해 준
+    경우만 반영한다. 명사구(품사 없음, 캐럿 표기)는 띄어쓰기·붙여쓰기 둘 다
+    허용되므로 건드리지 않는다. kiwi.space()는 이런 합성어를 놓치는 경우가
+    있어(예: '노천 카페' -> 안 고침) 사전 조회로 보완한다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    """
+    tokens = [t for t in _kiwi.tokenize(text) if t.tag == "NNG"]
+    fixes = []  # (start, end, replacement, description)
+    for t1, t2 in zip(tokens, tokens[1:]):
+        gap = t2.start - (t1.start + t1.len)
+        if gap <= 0:
+            continue  # 이미 붙어 있음
+        combined = t1.form + t2.form
+        if compound_status(combined) == "합성어":
+            fixes.append((t1.start, t2.start + t2.len, combined, f"{t1.form} {t2.form} -> {combined}"))
+
+    corrected = text
+    applied = []
+    for start, end, replacement, desc in sorted(fixes, key=lambda f: f[0], reverse=True):
+        corrected = corrected[:start] + replacement + corrected[end:]
+        applied.append(desc)
+    return corrected, list(reversed(applied))
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     unknown = [w for w in _content_lemmas(text) if not word_exists(w)]
     if unknown:
@@ -89,6 +118,18 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
     문맥에 따라 정답이 갈리는 경우 잘못 우겨서 고치는 걸 막기 위함)."""
     suggested = _kiwi.space(text)
+
+    # kiwi는 사전에 등재된 합성어를 모르는 경우가 있어(예: '노천카페'), 이미
+    # correct_compound_spacing()이 사전 근거로 확정 붙여쓰기한 부분을 다시
+    # 갈라놓자고 제안할 수 있다. 확정된 합성어는 사전이 kiwi보다 권위 있는
+    # 근거이므로, kiwi의 제안에서 그 부분만 원상복구해 오탐을 막는다.
+    tokens = [t for t in _kiwi.tokenize(text) if t.tag == "NNG"]
+    for t1, t2 in zip(tokens, tokens[1:]):
+        if t2.start - (t1.start + t1.len) > 0:
+            continue  # 이미 떨어져 있으면 합성어 자동 교정 대상이 아니었음
+        if compound_status(t1.form + t2.form) == "합성어":
+            suggested = suggested.replace(f"{t1.form} {t2.form}", t1.form + t2.form)
+
     if suggested != text:
         return FlagItem(
             line_index=index,
@@ -113,7 +154,8 @@ def correct_entries(
 
     for e in entries:
         corrected_text, applied_fixes, review_fixes = correct_loanwords(e.text)
-        applied_log.extend(f"[{e.index}] {fix}" for fix in applied_fixes)
+        corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
+        applied_log.extend(f"[{e.index}] {fix}" for fix in applied_fixes + compound_fixes)
 
         corrected_entries.append(
             SubtitleEntry(index=e.index, start=e.start, end=e.end, text=corrected_text)
