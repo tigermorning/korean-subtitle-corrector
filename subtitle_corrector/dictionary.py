@@ -1,5 +1,6 @@
 """국립국어원 표준국어대사전 / 우리말샘 오픈API 연동"""
 
+import difflib
 import os
 
 import requests
@@ -73,21 +74,41 @@ def search_kornorms(keyword: str) -> list[dict]:
     return data.get("response", {}).get("items", []) or []
 
 
-def known_loanword_fix(token: str) -> str | None:
-    """token이 국립국어원이 명시적으로 틀렸다고 표시한 외래어 표기(relate_mark_o에
-    '(X)'로 표시)와 일치하면, 공식 정답(korean_mark)을 돌려준다.
-    token 자체가 이미 맞는 표기이거나 kornorms에 없는 단어면 None을 돌려준다.
+def _closest_segment(token: str, korean_mark: str) -> str:
+    """korean_mark가 '성, 이름' 형식(콤마로 여러 조각)이면, token과 가장 비슷한
+    조각 하나만 골라 돌려준다. 그렇지 않으면 korean_mark를 그대로 돌려준다.
 
-    인명·지명(foreign_gubun이 '일반 용어'가 아닌 경우)은 절대 자동 반영하지
-    않는다. 같은 이름에 성경식 표기와 현대 인명 표기처럼 서로 다른 관례가
-    동시에 존재할 수 있고, 어느 쪽이 맞는지는 영상 속 실제 발음을 들어야만
-    판단할 수 있어 텍스트만으로는 확정할 수 없기 때문이다 — 이런 경우는
-    항상 사람 확인으로 넘긴다.
+    인명 항목의 korean_mark는 전체 이름("스노, 에드거 파크스")을 담고 있어서,
+    token 하나("스노우")를 그대로 전체 이름으로 바꿔버리면 문장에 엉뚱한
+    이름 전체가 삽입되는 오류가 생긴다. 이를 막기 위한 안전장치다.
+    """
+    parts = [p.strip() for p in korean_mark.split(",") if p.strip()]
+    if len(parts) <= 1:
+        return korean_mark
+    return max(parts, key=lambda p: difflib.SequenceMatcher(None, token, p).ratio())
+
+
+def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:
+    """token이 국립국어원이 명시적으로 틀렸다고 표시한 외래어 표기(relate_mark_o에
+    '(X)'로 표시)와 일치하면, 공식 정답(korean_mark 중 token에 해당하는 부분)을
+    돌려준다. token 자체가 이미 맞는 표기이거나 kornorms에 없는 단어면
+    (None, False, None)을 돌려준다.
+
+    반환값: (교정값 또는 None, 사람 확인 필요 여부, 참고용 전체 맥락 또는 None)
+    - 일반 용어: 확인 불필요 (조용히 자동 반영), 맥락 정보 없음
+    - 인명·지명: 원지음 표기 원칙에 따라 우선 자동 반영하되, 같은 이름에
+      성경식 표기와 현대 인명 표기처럼 서로 다른 관례가 동시에 존재할 수
+      있어 실제 발음은 영상을 들어야만 확정할 수 있다 — 그래서 항상
+      "확인 필요"로 표시하고, 사람이 리포트에서 바로 판단할 수 있도록
+      원어 표기 전체("srclang_mark -> korean_mark")를 맥락으로 함께 준다.
     """
     for item in search_kornorms(token):
-        if item.get("foreign_gubun") != "일반 용어":
-            continue
         correct = item.get("korean_mark")
-        if correct and correct != token:
-            return correct
-    return None
+        if not correct:
+            continue
+        segment = _closest_segment(token, correct)
+        if segment != token:
+            needs_review = item.get("foreign_gubun") != "일반 용어"
+            context = f"{item.get('srclang_mark')} -> {correct}" if needs_review else None
+            return segment, needs_review, context
+    return None, False, None
