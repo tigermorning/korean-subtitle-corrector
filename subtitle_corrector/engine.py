@@ -643,6 +643,58 @@ def _inserted_space_ranges(original: str, suggested: str) -> list[tuple[int, int
     return points
 
 
+def _removed_space_points(original: str, suggested: str) -> list[tuple[int, int]]:
+    """kiwi.space()가 원문에 이미 있던 공백을 지워버린(두 단어를 붙여버린)
+    지점들을 찾는다. _inserted_space_ranges()와 반대 방향이다.
+
+    반환값: (원문 상의 공백 위치, suggested 상에서 다시 공백을 끼워 넣어야
+    할 위치) 목록."""
+    matcher = difflib.SequenceMatcher(a=original, b=suggested, autojunk=False)
+    points = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "delete" and original[i1:i2] == " ":
+            points.append((i1, j1))
+    return points
+
+
+def _protect_unfounded_joining(text: str, suggested: str) -> str:
+    """kiwi.space()가 사전에도 없고 어문 규정에도 근거가 없는 채로 원문의
+    공백을 지워버리는(두 단어를 붙여버리는) 것을 되돌린다.
+
+    "그만하려고 합니다"(-려고 하다: 의도를 나타내는 본동사 구성, 제47항
+    보조 용언 붙임 허용 대상이 전혀 아니라 항상 띄어 써야 함)를 kiwi가
+    "그만하려고합니다"로 붙여버리는 사고에서 발견함. _protect_unfounded_
+    respacing()은 kiwi가 "근거 없이 새로 공백을 끼워 넣는 것"만 막고
+    있었고, "근거 없이 있던 공백을 지워버리는 것"은 전혀 막지 못하고
+    있었다 — 이 함수가 그 반대 방향을 담당한다.
+
+    두 토큰 사이에 공백이 정확히 하나 있던 단순한 경우만 다루고(다른
+    요인이 섞인 복잡한 경우는 판단을 보류), 합친 형태가 사전에 실제로
+    등재되어 있을 때만(word_exists) kiwi의 판단을 신뢰해 그대로 둔다.
+
+    두 토큰 사이 "간격"만 위치 기반으로 확인한다(표면형을 이어붙여
+    비교하지 않는다) — '합니다'처럼 어간(하)과 다음 형태소(ᆸ니다)가 받침
+    하나를 공유해 표면형과 실제 글자가 어긋나는 kiwi 특성(제41항 관련
+    로직에서도 이미 확인됨) 때문에, 표면형 재구성 비교는 이런 경우를
+    엉뚱하게 걸러내 버린다."""
+    tokens = _kiwi.tokenize(text)
+    to_restore = []
+    for pos, insert_at in _removed_space_points(text, suggested):
+        before, after = _straddling_tokens(tokens, pos)
+        if before is None or after is None:
+            continue
+        if text[before.start + before.len : after.start] != " ":
+            continue
+        before_part = before.lemma if before.tag.startswith("V") else before.form
+        after_part = after.lemma if after.tag.startswith("V") else after.form
+        if not word_exists(before_part + after_part):
+            to_restore.append(insert_at)
+
+    for insert_at in sorted(to_restore, reverse=True):
+        suggested = suggested[:insert_at] + " " + suggested[insert_at:]
+    return suggested
+
+
 def _straddling_tokens(tokens, pos: int):
     """원문 상의 한 지점(pos) 바로 앞/뒤에 붙어 있는 토큰을 찾는다."""
     before = after = None
@@ -739,6 +791,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
 
     suggested = _normalize_aux_verb_spacing(text, suggested)
     suggested = _protect_unfounded_respacing(text, suggested)
+    suggested = _protect_unfounded_joining(text, suggested)
 
     if suggested != text:
         return FlagItem(

@@ -15,6 +15,7 @@
 """
 
 from subtitle_corrector.engine import (
+    check_spacing,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_compound_spacing,
@@ -170,3 +171,19 @@ class TestLoanwordFix:
         """'집'(house)처럼 이미 정식 등재된 고유어는 kornorms의 무관한
         외래어 항목과 우연히 겹쳐도 절대 건드리면 안 된다 (실사용 버그)."""
         assert correct_loanwords("나는 집에 간다") == ("나는 집에 간다", [], [], [])
+
+
+class TestCheckSpacingJoiningProtection:
+    """kiwi.space()가 원문에 있던 공백을 근거 없이 지워버리는(단어를 붙여
+    버리는) 것을 막는 _protect_unfounded_joining() 회귀 테스트.
+
+    '-려고 하다'(의도를 나타내는 본동사 구성)는 제47항 보조 용언 붙임
+    허용 대상이 전혀 아니라 항상 띄어 써야 하는데, kiwi가 통계적으로
+    붙여 쓴 형태("그만하려고합니다")를 제안해 실사용 중 발견됨."""
+
+    def test_haryeogo_hada_not_joined(self):
+        assert check_spacing(0, "그만하려고 합니다") is None
+
+    def test_haryeogo_hada_not_joined_with_other_verbs(self):
+        assert check_spacing(0, "나는 가려고 합니다") is None
+        assert check_spacing(0, "먹으려고 해요") is None
