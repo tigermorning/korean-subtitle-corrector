@@ -507,32 +507,34 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             if text[gap_start:gap_end] == "":
                 edits.add((gap_start, gap_end))
 
-        # 패턴 2: 관형사형(ETM) + 의존명사(만/듯/척/체/법/양/성/직 등, NNB) +
-        # 하다/싶다(XSA, XSV 또는 VX). 의존명사 앞뒤 두 간격 모두 원칙은
-        # 띄어쓰기이므로(제42항 의존명사 + 제47항 보조용언), 둘 다 정리한다.
-        # 한쪽만 띄우면("아는척 한다") kiwi가 남은 절반을 다른 품사로
-        # 재분석해(하다=XSV -> VV) 오히려 새로운 오탐 플래그를 만들어낸다.
+        # 패턴 2: 관형사형(ETM) + 의존명사(만/듯/척/체/법/양/성/직/뻔 등, NNB) +
+        # 하다/싶다(XSA, XSV 또는 VX). 세 가지를 구분해야 한다.
+        #
+        # (a) "그럴듯하다"처럼 전체가 그 자체로 하나의 독립된 표제어로
+        #     등재된 경우("그럴-듯하다", 품사: 형용사 — 생산적인 보조
+        #     형용사 "듯-하다"와는 별개의 고유 단어) - 완전히 그대로 둔다.
+        # (b) 나머지 일반적인 경우, 관형사형+의존명사 사이(예: "할"+"만")는
+        #     제42항에 따라 항상 띄어 쓴다.
+        # (c) 의존명사+하다/싶다 사이(예: "만"+"하다")는 표준국어대사전에
+        #     "만-하다"(보조 형용사), "척-하다"(보조 동사), "법-하다"(보조
+        #     형용사) 등 그 자체가 하나의 단어로 등재되어 있어(_AUX_NNB_FORMS
+        #     9개 전부 확인함) 항상 붙여 쓴다 — 이 간격은 절대 건드리지
+        #     않는다. 예전에는 "kiwi가 한쪽만 띄우면 나머지를 다른 품사로
+        #     재분석해 오탐이 생긴다"는 이유로 양쪽 다 띄웠는데, 이는
+        #     "할 만 하다"처럼 사전에 없는 형태로 잘못 쪼개는 결과였다.
         if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
-            # 패턴 1과 같은 원칙: "그럴듯하다"처럼 관형사형+의존명사+하다가
-            # 통째로 사전에 등재된 경우, 원칙(띄어쓰기)보다 사전 등재가
-            # 우선이므로 억지로 쪼개지 않는다.
-            # "그렇"+"ㄹ"처럼 어간과 관형사형 어미가 받침 하나를 공유해
-            # start 위치가 겹치는 경우(제41항 관련 로직에서도 이미 확인된
-            # kiwi 특성) prev(어미)만으로는 어간 시작 지점을 놓치므로, 그
-            # 앞 토큰(진짜 어간)까지 거슬러 올라가 실제 시작 위치를 찾는다.
             lead_word_start = prev.start
             if i >= 2 and tokens[i - 2].start + tokens[i - 2].len > prev.start:
-                lead_word_start = tokens[i - 2].start
+                lead_word_start = tokens[i - 2].start  # 그렇+ㄹ 같은 받침 공유 보정
             nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
             candidate = text[lead_word_start : cur.start + cur.len] + nxt_citation
             if word_exists(candidate):
-                continue
+                continue  # (a) 통째로 하나의 표제어 -> 그대로 둔다
             lead_start, lead_end = prev.start + prev.len, cur.start
             if text[lead_start:lead_end] == "":
-                edits.add((lead_start, lead_end))
-            gap_start, gap_end = cur.start + cur.len, nxt.start
-            if text[gap_start:gap_end] == "":
-                edits.add((gap_start, gap_end))
+                edits.add((lead_start, lead_end))  # (b)
+            # (c) 의존명사+하다/싶다 사이는 절대 건드리지 않음 — 아래 트레일링
+            # 간격에 대한 edit을 의도적으로 추가하지 않는다.
 
     corrected = text
     for gap_start, gap_end in sorted(edits, key=lambda e: e[0], reverse=True):

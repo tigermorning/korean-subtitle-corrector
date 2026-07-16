@@ -15,6 +15,8 @@ from functools import lru_cache
 import requests
 from dotenv import load_dotenv
 
+from subtitle_corrector.gananda_precedents import check_precedent
+
 load_dotenv()
 
 STDICT_API_KEY = os.getenv("STDICT_API_KEY")
@@ -87,7 +89,11 @@ def word_exists(query: str) -> bool:
     비표준 표기 여부까지) 확인한다 — 검색 API가 "스노우"로 조회해도 "스노우
     체인", "스노우맨"처럼 그 단어가 포함된 여러 단어(구)를 함께 돌려주기
     때문에, 총 검색 건수(`total`)만 보면 실제로는 등재되지 않은 단어까지
-    "존재함"으로 오판하게 된다."""
+    "존재함"으로 오판하게 된다.
+
+    두 사전 어디에도 없는 경우, gananda_precedents(온라인가나다 판례 축적본)에
+    이 표현에 대한 확인된 판례가 있는지도 마지막으로 확인한다 — 실시간 사전
+    데이터가 항상 우선이고, 판례는 사전에 아무 답이 없을 때만 보조로 쓴다."""
     stdict_result = search_stdict(query)
     if int(stdict_result.get("channel", {}).get("total", 0)) > 0:
         return True
@@ -96,6 +102,9 @@ def word_exists(query: str) -> bool:
         headword = (item.get("word") or "").replace("-", "").replace("^", "")
         if headword == query and _opendict_item_is_standard(item):
             return True
+    precedent = check_precedent(query)
+    if precedent is not None:
+        return precedent
     return False
 
 
