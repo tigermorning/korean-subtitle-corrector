@@ -499,7 +499,8 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             # 알아보다, 찾아보다), "원칙은 띄어쓰기"보다 사전 등재가 우선이므로
             # 억지로 띄우지 않는다 — correct_compound_spacing()이 명사 합성어를
             # 사전으로 확인하는 것과 같은 원칙이다.
-            candidate = text[prev.start : cur.start + cur.len] + nxt.lemma
+            nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
+            candidate = text[prev.start : cur.start + cur.len] + nxt_citation
             if word_exists(candidate):
                 continue
             gap_start, gap_end = cur.start + cur.len, nxt.start
@@ -512,6 +513,20 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
         # 한쪽만 띄우면("아는척 한다") kiwi가 남은 절반을 다른 품사로
         # 재분석해(하다=XSV -> VV) 오히려 새로운 오탐 플래그를 만들어낸다.
         if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
+            # 패턴 1과 같은 원칙: "그럴듯하다"처럼 관형사형+의존명사+하다가
+            # 통째로 사전에 등재된 경우, 원칙(띄어쓰기)보다 사전 등재가
+            # 우선이므로 억지로 쪼개지 않는다.
+            # "그렇"+"ㄹ"처럼 어간과 관형사형 어미가 받침 하나를 공유해
+            # start 위치가 겹치는 경우(제41항 관련 로직에서도 이미 확인된
+            # kiwi 특성) prev(어미)만으로는 어간 시작 지점을 놓치므로, 그
+            # 앞 토큰(진짜 어간)까지 거슬러 올라가 실제 시작 위치를 찾는다.
+            lead_word_start = prev.start
+            if i >= 2 and tokens[i - 2].start + tokens[i - 2].len > prev.start:
+                lead_word_start = tokens[i - 2].start
+            nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
+            candidate = text[lead_word_start : cur.start + cur.len] + nxt_citation
+            if word_exists(candidate):
+                continue
             lead_start, lead_end = prev.start + prev.len, cur.start
             if text[lead_start:lead_end] == "":
                 edits.add((lead_start, lead_end))
