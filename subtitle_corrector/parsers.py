@@ -54,3 +54,16 @@ def parse_plain_text(path: Path) -> list[SubtitleEntry]:
 
 def write_plain_text(entries: list[SubtitleEntry], path: Path) -> None:
     Path(path).write_text("\n".join(e.text for e in entries) + "\n", encoding="utf-8")
+
+
+def parse_docx(path: Path) -> list[SubtitleEntry]:
+    """Word 문서(.docx)의 문단을 한 줄씩 SubtitleEntry로 만든다.
+
+    서식(볼드체 등)까지 그대로 보존하는 건 이 도구의 범위를 넘어선다 —
+    parse_plain_text와 동일하게 문단의 순수 텍스트만 다루고, 교정 결과도
+    일반 텍스트로 돌려준다(write_plain_text 재사용). 표 안의 텍스트는
+    다루지 않는다(본문 문단만)."""
+    from docx import Document
+
+    doc = Document(str(path))
+    return [SubtitleEntry(index=i, start="", end="", text=p.text) for i, p in enumerate(doc.paragraphs)]

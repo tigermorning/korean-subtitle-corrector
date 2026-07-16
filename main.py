@@ -7,25 +7,44 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-from subtitle_corrector.engine import apply_report_fixes, correct_entries
-from subtitle_corrector.parsers import parse_plain_text, parse_srt, write_plain_text, write_srt
+from subtitle_corrector.engine import apply_report_fixes, correct_entries, register_custom_words
+from subtitle_corrector.parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 from subtitle_corrector.report import read_report, write_report
 
 app = typer.Typer()
 
 
+def _read_word_list(path: Path | None) -> list[str]:
+    if not path:
+        return []
+    return [line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+
+
 @app.command()
 def correct(
-    input_file: Path = typer.Argument(..., help="입력 파일 경로 (.srt 자막 또는 .txt 일반 텍스트)"),
-    output: Path = typer.Option(None, help="출력 파일 경로 (입력과 같은 형식)"),
+    input_file: Path = typer.Argument(..., help="입력 파일 경로 (.srt 자막, .docx 문서, .txt 일반 텍스트)"),
+    output: Path = typer.Option(None, help="출력 파일 경로 (.srt는 자막 형식 유지, 그 외는 .txt)"),
     report: Path = typer.Option(None, help="플래그 리포트 파일 경로"),
+    names: Path = typer.Option(None, help="고유명사 목록 파일 (한 줄에 하나씩) - kiwi가 절대 잘못 쪼개지 않게 함"),
+    dishes: Path = typer.Option(None, help="요리/음료 이름 목록 파일 (한 줄에 하나씩) - 항상 붙여 쓰도록 등록"),
 ):
-    """자막(.srt) 또는 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
-    is_srt = input_file.suffix.lower() == ".srt"
-    entries = parse_srt(input_file) if is_srt else parse_plain_text(input_file)
+    """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
+    register_custom_words(_read_word_list(names), tag="NNP")
+    register_custom_words(_read_word_list(dishes), tag="NNG")
+
+    ext = input_file.suffix.lower()
+    is_srt = ext == ".srt"
+    if is_srt:
+        entries = parse_srt(input_file)
+    elif ext == ".docx":
+        entries = parse_docx(input_file)
+    else:
+        entries = parse_plain_text(input_file)
     corrected_entries, flags, applied_log = correct_entries(entries)
 
-    suffix = input_file.suffix or ".txt"
+    # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
+    # 텍스트와 동일하게 결과를 순수 텍스트(.txt)로 돌려준다.
+    suffix = ".srt" if is_srt else ".txt"
     output = output or input_file.with_name(input_file.stem + "_corrected" + suffix)
     report_path = report or input_file.with_name(input_file.stem + "_report.csv")
 

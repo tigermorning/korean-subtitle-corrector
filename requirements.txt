@@ -11,6 +11,7 @@ mdurl==0.1.2
 numpy==2.5.1
 Pygments==2.20.0
 python-dotenv==1.2.2
+python-docx==1.2.0
 python-multipart>=0.0.9
 requests==2.34.2
 rich==15.0.0

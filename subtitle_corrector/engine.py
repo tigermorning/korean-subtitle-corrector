@@ -33,12 +33,28 @@
 온라인가나다 아카이브 검색(2단계)은 아직 없다.
 """
 
+import difflib
+import re
+
 from kiwipiepy import Kiwi
 
 from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
 from .dictionary import compound_status, loanword_fix, usage_examples, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
+
+# 자막의 "[이름/상황]" 같은 브래킷 표기는 실제 문장이 아니라 화자·상황을
+# 표시하는 관례적 메타 표기라, 한글 맞춤법이 다루는 대상이 아니다. 이
+# 안의 내용(예: "작게", "스피커")은 맞춤법·띄어쓰기 검사 대상에서 뺀다.
+_BRACKET_TAG_RE = re.compile(r"\[[^\]]*\]")
+
+
+def _bracket_spans(text: str) -> list[tuple[int, int]]:
+    return [(m.start(), m.end()) for m in _BRACKET_TAG_RE.finditer(text)]
+
+
+def _inside_any_span(pos: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
 
 # NNP(고유명사)는 여기서 제외한다. 사람 이름 같은 고유명사는 표준국어대사전에
 # 등재돼 있지 않은 게 정상이라, 포함시키면 "지민", "민준" 같은 멀쩡한 이름을
@@ -81,8 +97,30 @@ _AMBIGUOUS_FOLLOW_TAGS = {"VX", "NNB"}
 _kiwi = Kiwi()
 
 
+def register_custom_words(words: list[str], tag: str = "NNP") -> None:
+    """번역가가 이 파일에 나오는 고유명사·요리/음료 이름을 미리 알려주면,
+    kiwi가 이후 이 단어를 절대 잘못 쪼개지 않는다. kiwi는 모르는 단어를
+    통계적으로 추측해서 쪼개다가("연실"->"연 실", "탄두리치킨"->"탄두 리
+    치킨") 실제로 사고를 내는데, 사전에 근거가 없는 단어(주로 사람 이름
+    같은 고유명사)는 이 방법이 유일하게 확실한 해법이다.
+
+    인명 등 고유명사는 tag="NNP", 붙여 쓰는 요리/음료 이름은 tag="NNG"로
+    등록한다. 같은 프로세스 내에서는 계속 유지되는 전역 상태이지만, 이미
+    맞는 단어를 하나 더 알아듣게 하는 것뿐이라 다른 파일 처리에 영향을
+    주지 않는다."""
+    for word in words:
+        word = word.strip()
+        if word:
+            _kiwi.add_user_word(word, tag)
+
+
 def _content_lemmas(text: str) -> list[str]:
-    return [t.lemma for t in _kiwi.tokenize(text) if t.tag in _SPELLING_CHECK_TAGS]
+    brackets = _bracket_spans(text)
+    return [
+        t.lemma
+        for t in _kiwi.tokenize(text)
+        if t.tag in _SPELLING_CHECK_TAGS and not _inside_any_span(t.start, brackets)
+    ]
 
 
 def _mechanical_respace(text: str) -> str:
@@ -433,12 +471,21 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
 
 
 def check_spelling(index: int, text: str) -> FlagItem | None:
+    """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
+    있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,
+    번역가 교육자료가 권장하는 실제 검증 방법(국립국어원 용례, 발음기호
+    사전, 한글라이즈)으로 직접 확인하라고 안내만 한다."""
     unknown = [w for w in _content_lemmas(text) if not word_exists(w)]
     if unknown:
         return FlagItem(
             line_index=index,
             original_text=text,
-            reason=f"사전에 없는 단어: {', '.join(unknown)}",
+            reason=(
+                f"사전에 없는 단어: {', '.join(unknown)} — 외국어 음차·고유명사일 수 있음. "
+                "국립국어원 용례, 발음기호(Longman/Collins 등), 한글라이즈(hangulize.org)로 "
+                "직접 확인 필요. 반복 등장하는 이름·요리명이면 위쪽의 고유명사/요리명 목록에 "
+                "추가하면 이후 잘못 쪼개지지 않습니다."
+            ),
         )
     return None
 
@@ -497,6 +544,76 @@ def check_purified_terms(index: int, text: str) -> FlagItem | None:
     return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
+def _inserted_space_ranges(original: str, suggested: str) -> list[tuple[int, int, int]]:
+    """kiwi.space()가 원문에 없던 공백을 새로 끼워 넣은 지점들을 찾는다.
+
+    반환값: (원문 상의 삽입 지점, suggested 상의 삽입 시작, suggested 상의
+    삽입 끝) 목록. 원문에 이미 있던 공백을 다른 자리로 옮기는 경우는 다루지
+    않는다 — 우리가 막으려는 건 "원래 붙어 있던 걸 근거 없이 갈라놓는 것"
+    뿐이고, 이미 애매한 기존 공백 배치는 그대로 사람 확인으로 넘긴다."""
+    matcher = difflib.SequenceMatcher(a=original, b=suggested, autojunk=False)
+    points = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "insert" and i1 == i2 and suggested[j1:j2] and suggested[j1:j2].strip() == "":
+            points.append((i1, j1, j2))
+    return points
+
+
+def _straddling_tokens(tokens, pos: int):
+    """원문 상의 한 지점(pos) 바로 앞/뒤에 붙어 있는 토큰을 찾는다."""
+    before = after = None
+    for t in tokens:
+        if t.start + t.len <= pos:
+            before = t
+        if after is None and t.start >= pos:
+            after = t
+    return before, after
+
+
+def _protect_unfounded_respacing(text: str, suggested: str) -> str:
+    """kiwi.space()가 사전에도 없고 어문 규정에도 근거가 없는 채로 공백을
+    새로 끼워 넣자고 제안하는 경우를 되돌린다. 세 가지를 막는다:
+
+    1. 고유명사(NNP) 토큰 경계를 갈라놓는 것 (예: '연실' -> '연 실') —
+       kiwi가 모르는 이름일 뿐, 원래 하나의 토큰으로 붙어 있던 걸 갈라야
+       한다는 근거가 없다.
+    2. 표준국어대사전/우리말샘에 이미 붙여 쓴 형태로 등재된 경우 (예:
+       '한잔하다', '탄두리치킨') — 사전이 kiwi의 통계적 추정보다 권위
+       있는 근거다. correct_compound_spacing()의 명사 합성어 전용 처리를
+       모든 품사 조합으로 일반화한 버전이다.
+    3. '/' 바로 뒤, 또는 '[이름/상황]' 형태의 자막 브래킷 표기 안 — 이건
+       실제 문장이 아니라 관례적 메타 표기라 한글 맞춤법이 다루는 대상이
+       아니다. "'/' 뒤에 띄어 쓴다"는 규정 자체가 존재하지 않는다.
+    """
+    brackets = _bracket_spans(text)
+    tokens = None
+    to_remove = []  # suggested 상에서 지울 (j1, j2) 목록
+    for i1, j1, j2 in _inserted_space_ranges(text, suggested):
+        if _inside_any_span(i1, brackets) or (i1 > 0 and text[i1 - 1] == "/"):
+            to_remove.append((j1, j2))
+            continue
+        if tokens is None:
+            tokens = _kiwi.tokenize(text)
+        before, after = _straddling_tokens(tokens, i1)
+        if before is None or after is None:
+            continue
+        if before.tag == "NNP" or after.tag == "NNP":
+            to_remove.append((j1, j2))
+            continue
+        # 용언(동사/형용사) 토큰은 표면형이 어간뿐이라(예: '하다가'의 '하'),
+        # 사전 기본형(lemma)으로 합쳐야 '한잔하다' 같은 등재된 복합동사를
+        # 알아볼 수 있다. '한잔'+'하'로는 사전에 없지만 '한잔'+'하다'는 있음.
+        before_part = before.lemma if before.tag.startswith("V") else before.form
+        after_part = after.lemma if after.tag.startswith("V") else after.form
+        joined = before_part + after_part
+        if text[before.start : after.start + after.len] == before.form + after.form and word_exists(joined):
+            to_remove.append((j1, j2))
+
+    for j1, j2 in sorted(to_remove, key=lambda r: r[0], reverse=True):
+        suggested = suggested[:j1] + suggested[j2:]
+    return suggested
+
+
 def check_spacing(index: int, text: str) -> FlagItem | None:
     """띄어쓰기 제안은 신뢰도를 알 수 없으므로 절대 자동 적용하지 않고
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
@@ -517,6 +634,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
             suggested = _force_span(suggested, combined, spaced)
 
     suggested = _normalize_aux_verb_spacing(text, suggested)
+    suggested = _protect_unfounded_respacing(text, suggested)
 
     if suggested != text:
         return FlagItem(
