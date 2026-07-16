@@ -104,14 +104,34 @@ def register_custom_words(words: list[str], tag: str = "NNP") -> None:
     치킨") 실제로 사고를 내는데, 사전에 근거가 없는 단어(주로 사람 이름
     같은 고유명사)는 이 방법이 유일하게 확실한 해법이다.
 
-    인명 등 고유명사는 tag="NNP", 붙여 쓰는 요리/음료 이름은 tag="NNG"로
-    등록한다. 같은 프로세스 내에서는 계속 유지되는 전역 상태이지만, 이미
-    맞는 단어를 하나 더 알아듣게 하는 것뿐이라 다른 파일 처리에 영향을
-    주지 않는다."""
+    인명·요리/음료 이름 모두 tag="NNP"(고유명사)로 등록해도 무방하다 —
+    이 프로젝트에서 이 태그는 "kiwi야, 이 단어는 절대 쪼개지 마"라는
+    표시로만 쓰이고, 다른 로직에 미치는 영향(맞춤법 검사 제외 등)도 둘 다
+    바라는 방향과 같다. 같은 프로세스 내에서는 계속 유지되는 전역 상태
+    이지만, 이미 맞는 단어를 하나 더 알아듣게 하는 것뿐이라 다른 파일
+    처리에 영향을 주지 않는다."""
     for word in words:
         word = word.strip()
         if word:
             _kiwi.add_user_word(word, tag)
+
+
+def detect_recurring_unknown_words(entries: list, min_count: int = 3) -> list[str]:
+    """전체 문서에서 사전에 없지만 여러 번 반복되는 명사를 찾는다.
+
+    오타는 문서 전체에서 우연히 같은 형태로 여러 번 반복될 가능성이 낮은
+    반면, 캐릭터 이름이나 요리명은 같은 문서 안에서 계속 똑같이 쓰인다.
+    이 빈도 차이를 이용해, 번역가가 목록을 따로 적지 않아도 자동으로
+    "이건 아마 고유명사다"라고 짐작하는 것이다. register_custom_words()로
+    등록해서 실제 쪼개짐을 막는 것과 한 쌍으로 쓴다."""
+    from collections import Counter
+
+    counts = Counter()
+    for e in entries:
+        for t in _kiwi.tokenize(e.text):
+            if t.tag in ("NNG", "NNP") and not word_exists(t.form):
+                counts[t.form] += 1
+    return [word for word, count in counts.items() if count >= min_count]
 
 
 def _content_lemmas(text: str) -> list[str]:
@@ -149,6 +169,10 @@ def _mechanical_respace(text: str) -> str:
             continue  # 겹치는 형태소(예: '해'=하+어) - 실제 간격이 없어 건드릴 수 없음
         if "\n" in text[gap_start:gap_end]:
             continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
+        if t2.form == "요" and t2.len == 1 and gap_start == gap_end:
+            continue  # 존대 보조사 "요"(이거요, 빨리요 등)를 kiwi가 가끔 관형사(MM) 등으로
+            # 잘못 태깅하는데, 원문에서 이미 붙어 있었다면 태그가 무엇이든 그대로 둔다 —
+            # 진짜 관형사 "요"(요 녀석)라면 애초에 앞말과 띄어 쓰여 있었을 것이기 때문이다.
         if t2.tag in _ATTACH_TAGS:
             desired_gap = ""  # 조사/어미/접미사/서술격조사는 무조건 붙임
         elif (
@@ -312,13 +336,36 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
 def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
     """mapping의 각 (원문, 정답) 쌍을 text에 적용한다. 긴 표현부터 먼저
     치환해서, 짧은 표현이 긴 표현의 일부일 때 잘못 겹쳐 치환되는 사고를
-    막는다 (예: '벙어리장갑'을 '벙어리'보다 먼저 처리)."""
+    막는다 (예: '벙어리장갑'을 '벙어리'보다 먼저 처리).
+
+    또한 kiwi 토큰 경계와 정확히 일치하는 위치만 교체한다 — 그렇지 않으면
+    "재판장님"(재판장+님)처럼 전혀 무관한 긴 단어 안에 짧은 표현("장님")이
+    우연히 부분 문자열로 들어있는 경우까지 잘못 건드려 "재판시각장애인" 같은
+    사고가 생긴다. 단순 글자 일치가 아니라 실제로 그 형태소 그대로 등장한
+    경우에만 교정을 적용한다."""
     corrected = text
     applied = []
     for wrong, right in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
-        if wrong in corrected:
-            corrected = corrected.replace(wrong, right)
-            applied.append(f"{wrong} -> {right}")
+        if wrong not in corrected:
+            continue
+        tokens = _kiwi.tokenize(corrected)
+        token_starts = {t.start for t in tokens}
+        token_ends = {t.start + t.len for t in tokens}
+        matches = []
+        search_from = 0
+        while True:
+            idx = corrected.find(wrong, search_from)
+            if idx == -1:
+                break
+            end = idx + len(wrong)
+            if idx in token_starts and end in token_ends:
+                matches.append(idx)
+            search_from = idx + 1
+        if not matches:
+            continue
+        for idx in sorted(matches, reverse=True):
+            corrected = corrected[:idx] + right + corrected[idx + len(wrong) :]
+        applied.append(f"{wrong} -> {right}")
     return corrected, applied
 
 
@@ -446,6 +493,15 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             stem_len = (cur.start + cur.len) - prev.start
             if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
                 continue  # 항상 띄움 예외 -> 이미 붙어 있을 수 없음
+            # 본용언-어/아 부분은 실제 표면 텍스트(축약형 그대로, 예: "여쭤")를
+            # 쓰고 보조용언은 사전 기본형을 붙여 "여쭤보다" 같은 후보를 만든다.
+            # 이게 사전에 이미 붙여 쓴 한 단어로 등재되어 있다면(예: 여쭤보다,
+            # 알아보다, 찾아보다), "원칙은 띄어쓰기"보다 사전 등재가 우선이므로
+            # 억지로 띄우지 않는다 — correct_compound_spacing()이 명사 합성어를
+            # 사전으로 확인하는 것과 같은 원칙이다.
+            candidate = text[prev.start : cur.start + cur.len] + nxt.lemma
+            if word_exists(candidate):
+                continue
             gap_start, gap_end = cur.start + cur.len, nxt.start
             if text[gap_start:gap_end] == "":
                 edits.add((gap_start, gap_end))
@@ -570,10 +626,27 @@ def _straddling_tokens(tokens, pos: int):
     return before, after
 
 
+def _token_containing(tokens, pos: int):
+    """pos가 토큰 경계가 아니라 어떤 토큰의 내부에 있으면 그 토큰을 찾는다.
+
+    kiwi.tokenize()와 kiwi.space()는 서로 다른 내부 모델이라 가끔 어긋난다
+    — tokenize()는 '연실'을 고유명사 토큰 하나로 보는데 space()는 그
+    토큰 한가운데에 공백을 넣자고 제안하는 식이다("연실"->"연 실"). 이건
+    kiwi 스스로도 이 단어를 확신하지 못한다는 신호이므로, 근거 확인 없이
+    바로 되돌려야 한다."""
+    for t in tokens:
+        if t.start < pos < t.start + t.len:
+            return t
+    return None
+
+
 def _protect_unfounded_respacing(text: str, suggested: str) -> str:
     """kiwi.space()가 사전에도 없고 어문 규정에도 근거가 없는 채로 공백을
-    새로 끼워 넣자고 제안하는 경우를 되돌린다. 세 가지를 막는다:
+    새로 끼워 넣자고 제안하는 경우를 되돌린다. 네 가지를 막는다:
 
+    0. kiwi 자신의 tokenize()가 이미 하나의 형태소로 본 토큰 내부에 공백을
+       넣는 것 — tokenize()와 space()가 서로 다른 모델이라 어긋난 경우고,
+       kiwi 스스로도 확신이 없다는 신호이므로 근거 확인 없이 되돌린다.
     1. 고유명사(NNP) 토큰 경계를 갈라놓는 것 (예: '연실' -> '연 실') —
        kiwi가 모르는 이름일 뿐, 원래 하나의 토큰으로 붙어 있던 걸 갈라야
        한다는 근거가 없다.
@@ -594,6 +667,9 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
             continue
         if tokens is None:
             tokens = _kiwi.tokenize(text)
+        if _token_containing(tokens, i1) is not None:
+            to_remove.append((j1, j2))
+            continue
         before, after = _straddling_tokens(tokens, i1)
         if before is None or after is None:
             continue
@@ -653,10 +729,20 @@ def correct_entries(
 
     반환값: (자동 교정 반영된 entries, 플래그 목록, 확인 불필요 자동 교정 로그)
     나머지 검사(맞춤법/띄어쓰기)는 자동 교정이 끝난 텍스트를 기준으로 수행한다.
+
+    본격적인 처리 전에, 문서 전체에서 반복 등장하는 미등록 단어(주로
+    고유명사)를 자동으로 감지해 kiwi에 등록한다(register_custom_words
+    참고) — 사용자가 이름 목록을 따로 적지 않아도 이 자동 감지만으로
+    대부분의 고유명사 오분석이 해결된다.
     """
     corrected_entries = []
     flags = []
     applied_log = []
+
+    auto_detected = detect_recurring_unknown_words(entries)
+    if auto_detected:
+        register_custom_words(auto_detected, tag="NNP")
+        applied_log.append(f"[자동 감지] 반복 등장하는 고유명사로 인식해 등록: {', '.join(auto_detected)}")
 
     for e in entries:
         corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(e.text)

@@ -25,12 +25,12 @@ def correct(
     input_file: Path = typer.Argument(..., help="입력 파일 경로 (.srt 자막, .docx 문서, .txt 일반 텍스트)"),
     output: Path = typer.Option(None, help="출력 파일 경로 (.srt는 자막 형식 유지, 그 외는 .txt)"),
     report: Path = typer.Option(None, help="플래그 리포트 파일 경로"),
-    names: Path = typer.Option(None, help="고유명사 목록 파일 (한 줄에 하나씩) - kiwi가 절대 잘못 쪼개지 않게 함"),
-    dishes: Path = typer.Option(None, help="요리/음료 이름 목록 파일 (한 줄에 하나씩) - 항상 붙여 쓰도록 등록"),
+    names: Path = typer.Option(
+        None, help="고유명사·요리/음료 이름 목록 파일 (한 줄에 하나씩) - kiwi가 절대 잘못 쪼개지 않게 함. 3번 이상 반복되는 단어는 적지 않아도 자동 감지됨"
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
-    register_custom_words(_read_word_list(dishes), tag="NNG")
 
     ext = input_file.suffix.lower()
     is_srt = ext == ".srt"

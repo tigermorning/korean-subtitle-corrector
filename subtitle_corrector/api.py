@@ -26,7 +26,7 @@ def _split_words(raw: str) -> list[str]:
 
 
 @app.post("/api/correct")
-def correct_subtitle(file: UploadFile, names: str = Form(""), dishes: str = Form("")):
+def correct_subtitle(file: UploadFile, names: str = Form("")):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
     # 요청(health check 포함)도 응답을 못 받는다. sync def로 두면 FastAPI가
@@ -37,8 +37,9 @@ def correct_subtitle(file: UploadFile, names: str = Form(""), dishes: str = Form
 
     # 번역가가 이 파일에 나오는 고유명사·요리/음료 이름을 미리 알려주면,
     # kiwi가 이후 이 단어를 절대 잘못 쪼개지 않는다(engine.register_custom_words).
+    # 문서에서 3번 이상 반복되는 단어는 correct_entries()가 자동으로 감지해
+    # 등록하므로, 이 입력은 한두 번만 등장하는 이름을 위한 보조 수단이다.
     register_custom_words(_split_words(names), tag="NNP")
-    register_custom_words(_split_words(dishes), tag="NNG")
 
     # 교정 엔진 자체는 자막 전용이 아니라 한국어 텍스트 한 줄을 다루는
     # 범용 엔진이다(engine.correct_entries). .srt는 타임코드 구조를 보존해야
