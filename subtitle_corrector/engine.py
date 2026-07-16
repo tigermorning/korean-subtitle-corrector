@@ -517,24 +517,35 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
         #     제42항에 따라 항상 띄어 쓴다.
         # (c) 의존명사+하다/싶다 사이(예: "만"+"하다")는 표준국어대사전에
         #     "만-하다"(보조 형용사), "척-하다"(보조 동사), "법-하다"(보조
-        #     형용사) 등 그 자체가 하나의 단어로 등재되어 있어(_AUX_NNB_FORMS
-        #     9개 전부 확인함) 항상 붙여 쓴다 — 이 간격은 절대 건드리지
-        #     않는다. 예전에는 "kiwi가 한쪽만 띄우면 나머지를 다른 품사로
-        #     재분석해 오탐이 생긴다"는 이유로 양쪽 다 띄웠는데, 이는
-        #     "할 만 하다"처럼 사전에 없는 형태로 잘못 쪼개는 결과였다.
+        #     형용사)처럼 그 자체가 하나의 단어로 등재되어 있으면 항상
+        #     붙여 쓴다. 예전에는 이 9개 의존명사 전부를 수동으로 한 번
+        #     확인한 뒤 "항상 참"이라고 가정하고 하드코딩했는데, 이는
+        #     실시간 사전 조회 원칙(§5)에 어긋난다 — "할만하다"처럼 특정
+        #     본용언이 붙은 전체 표면형은 사전에 없어도(word_exists가
+        #     0을 반환해도), "만하다"만 떼어 조회하면 등재된 걸 확인할
+        #     수 있는데도 원래는 이 후자 조회를 하지 않아 놓쳤다. 이제
+        #     매번 그 자리에서 바로 이 바른 형태(의존명사+하다/싶다
+        #     단독)로 실시간 조회해 확인하고, 아니라면(예: "만싶다"처럼
+        #     실제로 없는 조합) 억지로 붙이지 않고 그대로 둔다(사람 확인
+        #     영역으로 남김 — 애매하면 자동 수정하지 않는다는 원칙).
         if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
             lead_word_start = prev.start
             if i >= 2 and tokens[i - 2].start + tokens[i - 2].len > prev.start:
                 lead_word_start = tokens[i - 2].start  # 그렇+ㄹ 같은 받침 공유 보정
             nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
-            candidate = text[lead_word_start : cur.start + cur.len] + nxt_citation
-            if word_exists(candidate):
-                continue  # (a) 통째로 하나의 표제어 -> 그대로 둔다
+            whole_candidate = text[lead_word_start : cur.start + cur.len] + nxt_citation
+            if word_exists(whole_candidate):
+                continue  # (a) 전체가 통째로 하나의 표제어 -> 그대로 둔다
             lead_start, lead_end = prev.start + prev.len, cur.start
             if text[lead_start:lead_end] == "":
                 edits.add((lead_start, lead_end))  # (b)
-            # (c) 의존명사+하다/싶다 사이는 절대 건드리지 않음 — 아래 트레일링
-            # 간격에 대한 edit을 의도적으로 추가하지 않는다.
+            if not word_exists(cur.form + nxt_citation):
+                # 의존명사+하다/싶다 단독 조합조차 사전에 없는 예외적
+                # 경우 -> 붙여 쓴다고 단정하지 않고 그대로 둔다.
+                edits.discard((lead_start, lead_end))
+            # (c) 사전에 등재된 경우, 의존명사+하다/싶다 사이는 건드리지
+            # 않는다(위에서 (b) 간격만 edits에 추가했고, 트레일링 간격은
+            # 애초에 추가한 적이 없다).
 
     corrected = text
     for gap_start, gap_end in sorted(edits, key=lambda e: e[0], reverse=True):
