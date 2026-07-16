@@ -152,6 +152,13 @@
 - **비밀값**: `STDICT_API_KEY`/`OPENDICT_API_KEY`/`KORNORMS_API_KEY`(기존)+`SUPABASE_URL`/`SUPABASE_SERVICE_KEY`(신규), 전부 `.env`(로컬)/Render 환경변수(배포)로만 존재. `.env.example` 참고.
 - **배포**: Render(무료 웹서비스)에 FastAPI 그대로 배포. 계정 생성·대시보드 설정은 사용자가 직접 해야 해서(AI가 대신 로그인 불가) `DEPLOY.md`에 단계별로 정리해둠 — **이 세션에서는 로컬 테스트(스텁 저장소로 엔진 연동 검증)까지만 완료, 실제 Supabase 프로젝트 생성/Render 배포는 아직 안 됨.**
 - **테스트**: `examples/sample.srt`로 FastAPI 라우트(200/404, 파일 형식 검증)와 엔진 연동을 확인함(`store.save_report`/`get_report`를 스텁으로 교체해 실제 Supabase 계정 없이 검증). 실제 Supabase 연동은 사용자가 계정을 만든 뒤 `DEPLOY.md` 2단계(로컬 테스트)로 재확인 필요.
+- **실제 Supabase 연동 확인 완료 (2026-07-16)**: 사용자가 Supabase 프로젝트를 만들고 `.env`에 키를 넣은 뒤, 로컬 uvicorn 서버로 실제 저장/재조회까지 확인함. Render 배포는 아직 안 함.
+- **실제 긴 SDH 자막(336줄)으로 검증하며 발견한 버그 4건, 전부 수정 완료 (2026-07-16)**: `examples/sample.srt`(전부 한 줄짜리 대사)로는 안 걸리던 버그들이 줄바꿈+방언+구어체가 섞인 실제 드라마 자막에서 한꺼번에 드러남.
+  1. `/api/correct`가 `async def`라 교정 중(사전 API 순차 호출)에는 이벤트 루프 전체가 막혀 다른 요청도 응답 못 받았음 -> `sync def`로 변경, FastAPI가 자동으로 스레드풀 실행.
+  2. 우리말샘 서버가 느릴 때(`requests.exceptions.ReadTimeout`) 처리되지 않은 예외로 요청 전체가 500으로 죽었음 -> `search_stdict`/`search_opendict`/`search_kornorms`에서 `requests.RequestException`을 "찾지 못함"과 동일하게 처리(`usage_examples()`의 기존 원칙과 동일). 같은 단어 반복 조회를 없애는 `@lru_cache`도 추가.
+  3. **`_mechanical_respace()`가 두 줄 자막을 한 줄로 합쳐버림** — "어절 완결 지점은 항상 공백"이라는 규칙을 적용할 때 원래 간격이 줄바꿈이어도 그냥 공백으로 덮어씀. 336줄 중 54곳에서 발생 확인, 간격에 `"\n"`이 있으면 건드리지 않도록 수정 후 재검증 -> 0건.
+  4. `.txt` 일반 텍스트 지원 추가(`parsers.parse_plain_text`/`write_plain_text`) — 교정 엔진 자체는 자막 전용이 아니라 한국어 텍스트 한 줄을 다루는 범용 엔진이므로, `.srt`(타임코드 보존)와 `.txt`(줄 구성만 보존) 둘 다 같은 엔진을 재사용. CLI(`main.py`)/웹 API 모두 적용.
+  - **이 세션에서 발견했지만 아직 안 고친 것 (다음 작업 후보)**: (a) 고유명사(예: "연실")를 kiwi가 몰라서 "연 실"로 잘못 쪼개자고 `check_spacing()`이 계속 제안함 — 맞춤법 검사에서는 이미 NNP를 제외했지만 띄어쓰기 검사에서는 아직 제외 안 함. (b) `[이름/상황]`(SDH 브래킷 태그) 표기를 `kiwi.space()`가 일반 문장처럼 분석해 "/" 뒤에 공백을 넣자고 계속 제안함. (c) "작게"(작다의 활용형)처럼 문맥이 고립된 브래킷 안에서는 kiwi가 이상하게 태깅해 `check_spelling()`이 "사전에 없는 단어"로 오탐. (d) `_mechanical_respace()`/`correct_aux_verb_spacing()`이 "뭐라는"->"뭐라 는", "준다잖아"->"준다 잖아"처럼 일부 어미를 실제로 잘못 쪼개서 **자동 적용**함(플래그가 아니라 결과물 자체가 틀림 — 우선순위 높음). (a)~(c)는 비파괴적(리포트 노이즈)이라 우선순위 낮음, (d)는 파괴적이라 우선순위 높음.
 
 ## 12. TBD (추후 결정 필요)
 
