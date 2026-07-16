@@ -1,7 +1,16 @@
-"""국립국어원 표준국어대사전 / 우리말샘 오픈API 연동"""
+"""국립국어원 표준국어대사전 / 우리말샘 오픈API 연동.
+
+조회 함수들에 @lru_cache를 달아 같은 단어를 반복 조회하지 않게 한다(자막에는
+"그리고", "저는" 같은 흔한 단어가 반복되므로 실제 API 호출 수가 크게 줄어든다).
+이건 §5의 "국립국어원 API에 최대한 의존" 원칙과 충돌하지 않는다 — 매번 최신
+데이터를 받아오는 대신 잠깐(서버 프로세스가 살아있는 동안) 같은 답을 재사용
+하는 것뿐이고, 로컬에 사전을 통째로 복제해 규정 개정 추적 부담을 떠안는
+것과는 다르다. 서버를 재시작하면 캐시도 비워진다.
+"""
 
 import difflib
 import os
+from functools import lru_cache
 
 import requests
 from dotenv import load_dotenv
@@ -22,24 +31,36 @@ def _empty_channel() -> dict:
     return {"channel": {"total": 0, "item": []}}
 
 
+@lru_cache(maxsize=4096)
 def search_stdict(query: str) -> dict:
     if not STDICT_API_KEY:
         raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
     params = {"key": STDICT_API_KEY, "q": query, "req_type": "json"}
-    response = requests.get(STDICT_URL, params=params, timeout=10)
-    response.raise_for_status()
+    try:
+        response = requests.get(STDICT_URL, params=params, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        # 국립국어원 서버가 느리거나 응답을 안 주는 경우, "찾지 못함"과 똑같이
+        # 처리한다 — 이 함수의 판단 결과가 불확실하다는 뜻이므로, 호출부는
+        # 이미 "등재 안 됨/판단 근거 불충분"일 때와 같은 경로(확인 플래그)로
+        # 자연스럽게 넘어간다. usage_examples()의 기존 처리 방식과 동일한 원칙.
+        return _empty_channel()
     # 검색 결과가 없으면 API가 200 상태코드에 빈 본문을 돌려준다.
     if not response.text.strip():
         return _empty_channel()
     return response.json()
 
 
+@lru_cache(maxsize=4096)
 def search_opendict(query: str) -> dict:
     if not OPENDICT_API_KEY:
         raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
     params = {"key": OPENDICT_API_KEY, "q": query, "req_type": "json"}
-    response = requests.get(OPENDICT_URL, params=params, timeout=10)
-    response.raise_for_status()
+    try:
+        response = requests.get(OPENDICT_URL, params=params, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        return _empty_channel()
     if not response.text.strip():
         return _empty_channel()
     return response.json()
@@ -159,6 +180,7 @@ def usage_examples(word: str, limit: int = 2) -> list[str]:
     return []
 
 
+@lru_cache(maxsize=4096)
 def search_kornorms(keyword: str) -> list[dict]:
     """외래어·로마자 표기 용례를 조회한다 (한국어 어문 규범 Open API).
 
@@ -176,9 +198,15 @@ def search_kornorms(keyword: str) -> list[dict]:
         "searchEquals": "equal",
         "resultType": "json",
     }
-    response = requests.get(KORNORMS_URL, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(KORNORMS_URL, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        # search_stdict/search_opendict와 같은 원칙: 조회 실패는 "등재된
+        # 표기 없음"과 동일하게 처리해 loanword_fix()가 자동 반영 없이
+        # 넘어가게 한다(원문 그대로 유지, 크래시 대신 안전하게 무처리).
+        return []
     return data.get("response", {}).get("items", []) or []
 
 

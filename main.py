@@ -8,7 +8,7 @@ if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8")
 
 from subtitle_corrector.engine import apply_report_fixes, correct_entries
-from subtitle_corrector.parsers import parse_srt, write_srt
+from subtitle_corrector.parsers import parse_plain_text, parse_srt, write_plain_text, write_srt
 from subtitle_corrector.report import read_report, write_report
 
 app = typer.Typer()
@@ -16,18 +16,23 @@ app = typer.Typer()
 
 @app.command()
 def correct(
-    input_file: Path = typer.Argument(..., help="입력 SRT 파일 경로"),
-    output: Path = typer.Option(None, help="출력 SRT 파일 경로"),
+    input_file: Path = typer.Argument(..., help="입력 파일 경로 (.srt 자막 또는 .txt 일반 텍스트)"),
+    output: Path = typer.Option(None, help="출력 파일 경로 (입력과 같은 형식)"),
     report: Path = typer.Option(None, help="플래그 리포트 파일 경로"),
 ):
-    """자막 파일을 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
-    entries = parse_srt(input_file)
+    """자막(.srt) 또는 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
+    is_srt = input_file.suffix.lower() == ".srt"
+    entries = parse_srt(input_file) if is_srt else parse_plain_text(input_file)
     corrected_entries, flags, applied_log = correct_entries(entries)
 
-    output = output or input_file.with_name(input_file.stem + "_corrected.srt")
+    suffix = input_file.suffix or ".txt"
+    output = output or input_file.with_name(input_file.stem + "_corrected" + suffix)
     report_path = report or input_file.with_name(input_file.stem + "_report.csv")
 
-    write_srt(corrected_entries, output)
+    if is_srt:
+        write_srt(corrected_entries, output)
+    else:
+        write_plain_text(corrected_entries, output)
     write_report(flags, report_path)
 
     typer.echo(f"교정된 자막: {output}")

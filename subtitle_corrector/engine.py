@@ -109,6 +109,8 @@ def _mechanical_respace(text: str) -> str:
         gap_end = t2.start
         if gap_end < gap_start:
             continue  # 겹치는 형태소(예: '해'=하+어) - 실제 간격이 없어 건드릴 수 없음
+        if "\n" in text[gap_start:gap_end]:
+            continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
         if t2.tag in _ATTACH_TAGS:
             desired_gap = ""  # 조사/어미/접미사/서술격조사는 무조건 붙임
         elif (
