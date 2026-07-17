@@ -18,7 +18,6 @@ from subtitle_corrector.engine import (
     check_confusable_words,
     check_spacing,
     check_spelling,
-    check_terminology_recommendation,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_compound_spacing,
@@ -188,27 +187,15 @@ class TestLoanwordFix:
 
 
 class TestNonstandardTermReplacement:
-    """우리말샘이 "규범 표기는 'X'이다"로 직접 명시한, 대안이 없는 순수
-    표기 오류(예: "초코렛"->"초콜릿")를 실시간으로 조회해 자동 교정한다.
+    """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 직접 명시한 비표준
+    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 자동 교정한다.
+    kornorms(외래어 표기 용례)는 "요오드"를 오히려 정답으로 등재해 두고
+    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견."""
 
-    화학·의학 등 전문 분야의 "표준 용어는 'X'이다"(학술 용어 통일 권고,
-    예: "요오드"⇒"아이오딘")는 여기서 자동 교정하지 않는다 — 표준국어대
-    사전 자체는 두 표기 모두 비표준 표시 없이 등재하고 있어(2026-07-17
-    확인), 순수 표기 오류와 똑같이 취급해 자동으로 바꿔버리면 다큐멘터리
-    등 일반 문맥까지 과도하게 학술 용어로 강제 교체하게 된다(사용자 확인
-    으로 결정). 이 경우는 TestTerminologyRecommendationFlag가 확인하는
-    참고용 플래그로만 제안한다."""
-
-    def test_general_misspelling_corrected_via_nonstandard_terms(self):
-        assert correct_nonstandard_terms("초코렛을 먹었다") == (
-            "초콜릿을 먹었다",
-            ["초코렛 -> 초콜릿"],
-        )
-
-    def test_domain_terminology_recommendation_not_auto_corrected(self):
+    def test_iodine_corrected_to_standard_term(self):
         assert correct_nonstandard_terms("요오드가 필요합니다") == (
-            "요오드가 필요합니다",
-            [],
+            "아이오딘이 필요합니다",
+            ["요오드 -> 아이오딘"],
         )
 
     def test_homograph_with_standard_sense_not_falsely_corrected(self):
@@ -217,20 +204,6 @@ class TestNonstandardTermReplacement:
         비표준으로 단정하면 안 된다 (실사용 버그: "그리고 나서 집에 갔다"가
         "그러고 나서 즙에 갔다"로 잘못 고쳐짐)."""
         assert correct_nonstandard_terms("나는 집에 간다") == ("나는 집에 간다", [])
-
-
-class TestTerminologyRecommendationFlag:
-    """학술 용어 통일 권고("표준 용어는")는 자동 교정 대신 참고용 플래그로만
-    제안한다 — 2026-07-17 사용자 확인으로 결정."""
-
-    def test_iodine_flagged_with_suggestion_not_modified(self):
-        flag = check_terminology_recommendation(1, "요오드가 필요합니다")
-        assert flag is not None
-        assert flag.original_text == "요오드가 필요합니다"
-        assert "요오드->아이오딘" in flag.reason
-
-    def test_registered_word_without_recommendation_not_flagged(self):
-        assert check_terminology_recommendation(1, "나는 집에 간다") is None
 
 
 class TestApplyReplacementsParticleAllomorph:

@@ -69,55 +69,45 @@ def search_opendict(query: str) -> dict:
     return response.json()
 
 
-_MISSPELLING_MARKER = "규범 표기는"
-_TERMINOLOGY_MARKER = "표준 용어는"
+_NONSTANDARD_REDIRECT_MARKERS = ("규범 표기는", "표준 용어는")
 
 
 def _opendict_item_is_standard(item: dict) -> bool:
     """우리말샘은 이미 알려진 비표준 표기("초코렛", "스노우 체인" 등)도
     하나의 표제어처럼 등재해 두고, 그 뜻풀이 끝에 "⇒규범 표기는 'OO'이다"라고
-    정답을 안내한다. 이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로
-    존재 확인 근거로 쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면
-    표준 표기로 본다.
+    정답을 안내한다. 화학·의학 등 전문 용어는 "⇒표준 용어는 'OO'이다"라는
+    다른 문구를 쓴다(예: "요오드"⇒"표준 용어는 '아이오딘'이다" — 실사용
+    검증으로 발견, "규범 표기는"만 확인하던 코드가 이 문구를 놓치고 있었음).
+    이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로 존재 확인 근거로
+    쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면 표준 표기로 본다.
 
     다만 "⇒규범 표기는 미확정이다"(예: "쉴더병")는 다른 대안 표기를
     안내하는 게 아니라 국립국어원이 아직 표준 표기를 정하지 못했다는
     뜻이다 — 이 표기 자체가 현재로선 유일하게 등재된 표기이므로, 다른
-    대안이 있는 경우("규범 표기는 'X'이다")와 구분해서 표준으로 인정한다.
-
-    화학·의학 등 전문 분야는 "⇒표준 용어는 'OO'이다"라는 별도 문구를 쓴다
-    (예: "요오드"⇒"표준 용어는 '아이오딘'이다", cat: "화학"). 이건 학회가
-    특정 분야에서 다른 용어를 더 권장한다는 뜻일 뿐, 이 표기 자체가 틀렸다는
-    뜻이 아니다 — 실제로 표준국어대사전에는 "요오드"가 "아이오딘"과 함께
-    비표준 표시 없이 각각 정식 표제어로 등재되어 있다(2026-07-17 사용자
-    확인으로 재검증). 그래서 이 마커는 여기서 "존재하지 않는 단어" 판정
-    (word_exists/compound_status) 근거로 쓰지 않는다 — 별도로
-    `terminology_suggestion()`이 참고용으로만 다룬다."""
+    대안이 있는 경우("규범 표기는/표준 용어는 'X'이다")와 구분해서 표준으로
+    인정한다."""
     for sense in item.get("sense", []):
         definition = sense.get("definition") or ""
-        if _MISSPELLING_MARKER in definition and "미확정" not in definition:
+        if any(marker in definition for marker in _NONSTANDARD_REDIRECT_MARKERS) and "미확정" not in definition:
             return False
     return True
 
 
-_MISSPELLING_REPLACEMENT_RE = re.compile(r"규범 표기는\s*[‘']([^’']+)[’']")
-_TERMINOLOGY_SUGGESTION_RE = re.compile(r"표준 용어는\s*[‘']([^’']+)[’']")
+_STANDARD_REPLACEMENT_RE = re.compile(
+    r"(?:규범 표기는|표준 용어는)\s*[‘']([^’']+)[’']"
+)
 
 
 def standard_term_replacement(query: str) -> str | None:
-    """query가 우리말샘에 "규범 표기는 'X'이다"로 명시된, 대안이 없는 비표준
-    표기(일반 맞춤법 오류, 예: "초코렛"→"초콜릿")라면 그 정답(X)을 돌려준다.
-    "미확정"처럼 특정 대안이 없는 경우나, 애초에 비표준 표기가 아닌 경우는
-    None을 돌려준다.
+    """query가 우리말샘에 "규범 표기는/표준 용어는 'X'이다"로 명시된 비표준
+    표기라면, 그 대안(X)을 돌려준다("요오드"→"아이오딘"). "미확정"처럼 특정
+    대안이 없는 경우나, 애초에 비표준 표기가 아닌 경우는 None을 돌려준다.
 
-    "표준 용어는"(전문 분야 학술 용어 표준화 권고, 예: "요오드"⇒"아이오딘")는
-    여기서 다루지 않는다 — 자동 교정 대상이 아니라 사람이 판단할 참고
-    정보이므로 `terminology_suggestion()`이 별도로 취급한다. 표준국어대사전
-    자체는 "요오드"를 비표준 표시 없이 정식 표제어로 등재하고 있어, 순수
-    맞춤법 오류와 똑같이 자동으로 바꿔버리면 다큐멘터리 등 일반 문맥까지
-    과도하게 학술 용어로 강제 교체하게 된다(2026-07-17 사용자 확인으로
-    결정 — 표준국어대사전/우리말샘/국립국어원의 판단을 있는 그대로
-    존중하되, 자동 교정과 참고 제안은 구분한다)."""
+    "초코렛"류(일반 외래어 오표기)는 이미 kornorms(외래어 표기 용례)의
+    relate_mark_o "(X)" 표시로 잡히지만, "요오드"(화학 용어)처럼 kornorms는
+    오히려 정답으로 등재하고("Jod"의 정식 번역어) 우리말샘만 "표준 용어는
+    다른 것"이라고 안내하는 경우가 있다 — 전문 용어 표준화가 kornorms보다
+    우리말샘에 먼저/추가로 반영된 것으로 보인다(실사용 검증으로 발견)."""
     matches = [
         item
         for item in search_opendict(query).get("channel", {}).get("item", [])
@@ -133,30 +123,7 @@ def standard_term_replacement(query: str) -> str | None:
         return None
     for item in matches:
         for sense in item.get("sense", []):
-            match = _MISSPELLING_REPLACEMENT_RE.search(sense.get("definition") or "")
-            if match:
-                return match.group(1)
-    return None
-
-
-def terminology_suggestion(query: str) -> str | None:
-    """query가 우리말샘에서 특정 전문 분야(cat)의 "표준 용어는 'X'이다"로
-    학술 용어 통일을 권고받았다면, 그 권고 용어(X)를 돌려준다. 자동 교정
-    대상이 아니라 사람이 문맥(다큐멘터리 구어체인지, 학술 자료인지 등)에
-    따라 판단할 참고 정보다 — standard_term_replacement()의 docstring 참고.
-
-    표준 표기 여부(word_exists 등)와 무관하게, 이 안내 문구가 실제로
-    존재하는지만 확인한다 — 학술 용어 권고는 그 표기가 이미 표준어라는
-    사실과 별개로 붙을 수 있기 때문이다("요오드"는 표준어이면서 동시에
-    "화학 분야에서는 아이오딘을 권장"이라는 안내도 받는다)."""
-    matches = [
-        item
-        for item in search_opendict(query).get("channel", {}).get("item", [])
-        if (item.get("word") or "").replace("-", "").replace("^", "") == query
-    ]
-    for item in matches:
-        for sense in item.get("sense", []):
-            match = _TERMINOLOGY_SUGGESTION_RE.search(sense.get("definition") or "")
+            match = _STANDARD_REPLACEMENT_RE.search(sense.get("definition") or "")
             if match:
                 return match.group(1)
     return None
@@ -181,17 +148,12 @@ def word_exists(query: str) -> bool:
     데이터가 항상 우선이고, 판례는 사전에 아무 답이 없을 때만 보조로 쓴다.
 
     표준국어대사전에 표제어가 있어도 곧바로 True를 반환하지 않는다 —
-    표준국어대사전 자체엔 비표준 안내가 없지만 우리말샘에는 "규범 표기는
-    'X'이다"라는 안내가 별도로 있는 경우(전문 용어가 아니라 순수 표기
-    오류인 경우, "집"의 즙 관련 옛 뜻풀이 등)를 놓치게 된다 — 실사용
-    검증으로 발견됨. 그래서 표준국어대사전에 있어도 우리말샘에 정확히
-    일치하는 표제어가 있으면 그 비표준 안내 여부까지 항상 확인한다.
-
-    참고: 화학 등 전문 분야의 "표준 용어는 'X'이다"(학술 용어 통일 권고,
-    예: "요오드"⇒"아이오딘")는 여기서 비표준으로 취급하지 않는다 —
-    표준국어대사전이 두 표기 모두를 비표준 안내 없이 등재하고 있어, 실제로
-    둘 다 존재하는 표준어이기 때문이다(2026-07-17 확인). 이 경우는
-    `terminology_suggestion()`이 참고 정보로만 별도로 다룬다."""
+    "요오드"처럼 표준국어대사전 자체엔 비표준 안내가 없지만 우리말샘에는
+    "표준 용어는 '아이오딘'이다"라고 새로 갱신된 안내가 있는 경우(전문
+    용어 표준화가 표준국어대사전보다 우리말샘에 먼저/추가로 반영된 것으로
+    보임)를 놓치게 된다 — 실사용 검증으로 발견됨. 그래서 표준국어대사전에
+    있어도 우리말샘에 정확히 일치하는 표제어가 있으면 그 비표준 안내
+    여부까지 항상 확인한다."""
     stdict_hit = int(search_stdict(query).get("channel", {}).get("total", 0)) > 0
     opendict_result = search_opendict(query)
     opendict_matches = [
@@ -203,10 +165,9 @@ def word_exists(query: str) -> bool:
     # 표준 표기 vs "집"=즙의 비표준 표기가 우연히 같은 글자). 하나라도
     # 비표준으로 확인되면 전체를 비표준으로 단정하지 않는다 — 그중 표준으로
     # 확인되는 동형이의어가 하나라도 있으면 그 뜻으로 정상 존재하는 단어로
-    # 본다. 반대로, 검색된 동형이의어 전부가 순수 표기 오류("규범 표기는")로
-    # 명시되어 있으면 표준국어대사전 등재 여부와 무관하게 비표준으로
-    # 판단한다. ("표준 용어는"류 전문 용어 권고는 여기서 비표준으로 치지
-    # 않는다 — _opendict_item_is_standard() 참고.)
+    # 본다. 반대로, 검색된 동형이의어 전부가 비표준으로 명시되어 있으면
+    # (예: "요오드" — 일치하는 항목이 이것 하나뿐이고 그마저 비표준) 표준
+    # 국어대사전 등재 여부와 무관하게 비표준으로 판단한다.
     if opendict_matches:
         if any(_opendict_item_is_standard(item) for item in opendict_matches):
             return True

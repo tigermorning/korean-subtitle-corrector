@@ -44,7 +44,6 @@ from .dictionary import (
     loanword_fix,
     search_kornorms,
     standard_term_replacement,
-    terminology_suggestion,
     usage_examples,
     word_exists,
 )
@@ -477,21 +476,15 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
 
 
 def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
-    """우리말샘이 "규범 표기는 'X'이다"로 이미 명시해 둔, 대안이 없는 순수
-    표기 오류(예: "초코렛"->"초콜릿")를 자동 교정한다.
+    """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 이미 명시해 둔 비표준
+    표기(예: "요오드"->"아이오딘")를 자동 교정한다.
 
     correct_always_wrong()의 ALWAYS_WRONG(정적 목록)이나 correct_loanwords()의
-    kornorms(외래어 표기 용례)와는 다른 세 번째 원천이다 — 매번 실시간으로
-    우리말샘을 조회하므로 정적 목록과 달리 국립국어원이 표기를 바꿔도 코드
-    수정이 필요 없다.
-
-    화학·의학 등 전문 분야의 "표준 용어는 'X'이다"(학술 용어 통일 권고,
-    예: "요오드"⇒"아이오딘")는 여기서 다루지 않는다 — standard_term_replacement()
-    docstring 참고. 표준국어대사전 자체는 이런 단어를 비표준 표시 없이
-    정식 표제어로 등재하고 있어, 순수 표기 오류처럼 조용히 자동 교정하면
-    다큐멘터리 등 일반 문맥까지 과도하게 학술 용어로 강제 교체하게 된다.
-    이런 경우는 check_terminology_recommendation()이 참고용 플래그로만
-    제안한다(2026-07-17 사용자 확인으로 결정).
+    kornorms(외래어 표기 용례)와는 다른 세 번째 원천이다 — "요오드"는
+    kornorms엔 오히려 정답으로("Jod"의 정식 번역어) 등재되어 있어
+    correct_loanwords()로는 못 잡고, 우리말샘 자체의 표준화 안내에서만
+    확인된다(실사용 검증으로 발견). 매번 실시간으로 우리말샘을 조회하므로
+    정적 목록과 달리 국립국어원이 표준 용어를 바꿔도 코드 수정이 필요 없다.
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
@@ -850,35 +843,6 @@ def check_purified_terms(index: int, text: str) -> FlagItem | None:
     note = _usage_note(matched + [PURIFIED_TERMS[word] for word in matched])
     if note:
         reason += f" | 우리말샘 용례) {note}"
-    return FlagItem(line_index=index, original_text=text, reason=reason)
-
-
-def check_terminology_recommendation(index: int, text: str) -> FlagItem | None:
-    """화학·의학 등 전문 분야에서 우리말샘이 "표준 용어는 'X'이다"로 학술
-    용어 통일을 권고한 단어(예: "요오드"⇒"아이오딘")가 있으면 참고용으로만
-    플래그한다 — 절대 자동 교정하지 않는다.
-
-    correct_nonstandard_terms()가 다루는 "규범 표기는"(대안이 없는 순수
-    표기 오류)와 달리, 이런 단어는 표준국어대사전 자체에서 비표준 표시
-    없이 정식 표제어로 등재되어 있다 — 학회의 학술 용어 통일 권고일 뿐
-    현재 일반 언어생활에서 여전히 유효한 표준어이므로, 다큐멘터리·구어체
-    등 자막의 문맥에 따라 사람이 판단해야 한다(2026-07-17 사용자 확인으로
-    결정)."""
-    matched = []
-    for t in _kiwi.tokenize(text):
-        if t.tag not in ("NNG", "NNP"):
-            continue
-        suggestion = terminology_suggestion(t.form)
-        if suggestion and (t.form, suggestion) not in matched:
-            matched.append((t.form, suggestion))
-    if not matched:
-        return None
-    suggestions = ", ".join(f"{word}->{term}" for word, term in matched)
-    reason = (
-        f"전문 분야 학술 용어 통일 권고 확인 필요: {suggestions} "
-        "(표준국어대사전에는 둘 다 표준어로 등재되어 있음 — 일반 구어체 "
-        "문맥이면 원문 유지, 학술/전문 문맥이면 권고 용어로 교체 고려)"
-    )
     return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
@@ -1249,7 +1213,6 @@ def correct_entries(
                 check_spelling(e.index, corrected_text),
                 check_confusable_words(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
-                check_terminology_recommendation(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f
