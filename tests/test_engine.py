@@ -35,6 +35,16 @@ class TestAuxVerbSpacingPattern1:
     def test_yeojjuboda_already_registered_untouched(self):
         assert correct_aux_verb_spacing("여쭤보다") == ("여쭤보다", [])
 
+    def test_irregular_verb_stem_still_detected(self):
+        """kiwi가 불규칙 활용 어간(잇다의 '잇')을 'VV'가 아니라 'VV-I'로
+        태깅해, 정확히 일치("==")로만 비교하던 코드가 이런 보조용언 구성을
+        아예 놓치던 버그. 사전에 없는 '이어가다'는 원칙대로 띄어 써야 한다."""
+        text = "안트베르펜 공격을 이어가도록"
+        assert correct_aux_verb_spacing(text) == (
+            "안트베르펜 공격을 이어 가도록",
+            [f"{text} -> 안트베르펜 공격을 이어 가도록"],
+        )
+
 
 class TestAuxVerbSpacingPattern2:
     """관형사형+의존명사(만/척/법/듯/뻔/성/직/체/양)+하다/싶다.

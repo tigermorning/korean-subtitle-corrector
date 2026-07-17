@@ -416,9 +416,12 @@ def _aux_verb_pattern_spans(s: str) -> list[str]:
     for i in range(1, len(tokens) - 1):
         prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
 
-        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX)
+        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX). kiwi는 불규칙
+        # 활용 어간(잇다의 "잇" 등)을 "VV"가 아니라 "VV-I"처럼 하위분류
+        # 접미사를 붙여 태깅하므로, 정확히 일치("==")가 아니라 접두사
+        # 일치(startswith)로 확인해야 이런 불규칙 동사를 놓치지 않는다.
         if (
-            prev.tag in ("VV", "VA")
+            (prev.tag.startswith("VV") or prev.tag.startswith("VA"))
             and cur.tag == "EC"
             and nxt.tag == "VX"
             and cur.form in _AUX_EC_FORMS
@@ -482,9 +485,12 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
     for i in range(1, len(tokens) - 1):
         prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
 
-        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX)
+        # 패턴 1: 본용언(VV/VA) + -아/어(EC) + 보조용언(VX). kiwi는 불규칙
+        # 활용 어간(잇다의 "잇" 등)을 "VV"가 아니라 "VV-I"처럼 하위분류
+        # 접미사를 붙여 태깅하므로, 정확히 일치("==")가 아니라 접두사
+        # 일치(startswith)로 확인해야 이런 불규칙 동사를 놓치지 않는다.
         if (
-            prev.tag in ("VV", "VA")
+            (prev.tag.startswith("VV") or prev.tag.startswith("VA"))
             and cur.tag == "EC"
             and nxt.tag == "VX"
             and cur.form in _AUX_EC_FORMS
@@ -623,7 +629,7 @@ _MACHIDA_OBJECTS = {
     "일", "과정", "절차", "수업", "훈련", "전개", "임무", "공연", "회의",
     "여행", "작업", "촬영", "방송", "학업", "근무", "경기", "시합", "대회",
     "행사", "공사", "수술", "발표", "강의", "일정", "여정", "준비", "정리",
-    "식사", "복무", "생활", "임기", "계약",
+    "식사", "복무", "생활", "임기", "계약", "설치", "공격", "작전",
 }
 _MAJIDA_OBJECTS = {
     "정답", "답", "문제", "수수께끼", "비", "눈", "우박", "주사", "침",
@@ -647,8 +653,12 @@ def _machida_majida_resolved(tokens, i: int) -> bool:
 
 
 def check_confusable_words(index: int, text: str) -> FlagItem | None:
-    """한글 맞춤법 제57항의 동음이의어 혼동 쌍(가름/갈음, 반드시/반듯이 등)이
-    등장하면 항상 확인 플래그한다. 의미가 완전히 다른 별개의 단어라 어느 쪽이
+    """한글 맞춤법 제57항의 혼동 쌍(가름/갈음, 반드시/반듯이 등 — 소리는
+    비슷하거나 같지만 표기·뜻이 다른 말)이 등장하면 항상 확인 플래그한다.
+    (참고: 이 쌍들을 코드/사용자 안내문에서는 "동음이의어"라고 부르지 않는다
+    — 표기 자체가 다른 경우가 많아 엄밀히는 "동음이의어"[표기·발음이 모두
+    같은 서로 다른 단어]와는 다른 개념이라, "소리가 비슷해 헷갈리는 말"로
+    표현한다.) 의미가 완전히 다른 별개의 단어라 어느 쪽이
     맞는지는 문맥을 봐야 알 수 있으므로, check_spelling과 달리 절대 자동
     교정하지 않는다. 다만 "마치다/맞히다"는 목적어로 의미가 명확히 갈리는
     경우가 대부분이라 예외적으로 그런 경우만 플래그를 건너뛴다(위 설명 참고)."""
@@ -666,7 +676,7 @@ def check_confusable_words(index: int, text: str) -> FlagItem | None:
     if not matched:
         return None
     pairs_desc = ", ".join("/".join(pair) for pair in matched)
-    reason = f"자주 헷갈리는 동음이의어 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)"
+    reason = f"한글 맞춤법 제57항: 소리가 비슷해 혼동하기 쉬운 말 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)"
     note = _usage_note([word for pair in matched for word in pair])
     if note:
         reason += f" | 우리말샘 용례) {note}"
