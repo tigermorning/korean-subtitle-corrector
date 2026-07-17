@@ -10,6 +10,7 @@
 
 import difflib
 import os
+import re
 from functools import lru_cache
 
 import requests
@@ -68,22 +69,64 @@ def search_opendict(query: str) -> dict:
     return response.json()
 
 
+_NONSTANDARD_REDIRECT_MARKERS = ("규범 표기는", "표준 용어는")
+
+
 def _opendict_item_is_standard(item: dict) -> bool:
     """우리말샘은 이미 알려진 비표준 표기("초코렛", "스노우 체인" 등)도
     하나의 표제어처럼 등재해 두고, 그 뜻풀이 끝에 "⇒규범 표기는 'OO'이다"라고
-    정답을 안내한다. 이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로
-    존재 확인 근거로 쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면
-    표준 표기로 본다.
+    정답을 안내한다. 화학·의학 등 전문 용어는 "⇒표준 용어는 'OO'이다"라는
+    다른 문구를 쓴다(예: "요오드"⇒"표준 용어는 '아이오딘'이다" — 실사용
+    검증으로 발견, "규범 표기는"만 확인하던 코드가 이 문구를 놓치고 있었음).
+    이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로 존재 확인 근거로
+    쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면 표준 표기로 본다.
 
     다만 "⇒규범 표기는 미확정이다"(예: "쉴더병")는 다른 대안 표기를
     안내하는 게 아니라 국립국어원이 아직 표준 표기를 정하지 못했다는
     뜻이다 — 이 표기 자체가 현재로선 유일하게 등재된 표기이므로, 다른
-    대안이 있는 경우("규범 표기는 'X'이다")와 구분해서 표준으로 인정한다."""
+    대안이 있는 경우("규범 표기는/표준 용어는 'X'이다")와 구분해서 표준으로
+    인정한다."""
     for sense in item.get("sense", []):
         definition = sense.get("definition") or ""
-        if "규범 표기는" in definition and "미확정" not in definition:
+        if any(marker in definition for marker in _NONSTANDARD_REDIRECT_MARKERS) and "미확정" not in definition:
             return False
     return True
+
+
+_STANDARD_REPLACEMENT_RE = re.compile(
+    r"(?:규범 표기는|표준 용어는)\s*[‘']([^’']+)[’']"
+)
+
+
+def standard_term_replacement(query: str) -> str | None:
+    """query가 우리말샘에 "규범 표기는/표준 용어는 'X'이다"로 명시된 비표준
+    표기라면, 그 대안(X)을 돌려준다("요오드"→"아이오딘"). "미확정"처럼 특정
+    대안이 없는 경우나, 애초에 비표준 표기가 아닌 경우는 None을 돌려준다.
+
+    "초코렛"류(일반 외래어 오표기)는 이미 kornorms(외래어 표기 용례)의
+    relate_mark_o "(X)" 표시로 잡히지만, "요오드"(화학 용어)처럼 kornorms는
+    오히려 정답으로 등재하고("Jod"의 정식 번역어) 우리말샘만 "표준 용어는
+    다른 것"이라고 안내하는 경우가 있다 — 전문 용어 표준화가 kornorms보다
+    우리말샘에 먼저/추가로 반영된 것으로 보인다(실사용 검증으로 발견)."""
+    matches = [
+        item
+        for item in search_opendict(query).get("channel", {}).get("item", [])
+        if (item.get("word") or "").replace("-", "").replace("^", "") == query
+    ]
+    if not matches:
+        return None
+    # "집"처럼 같은 표제어 아래 표준 동형이의어(집=거처)와 비표준 동형이의어
+    # (집=즙의 옛 표기)가 우연히 같이 있을 수 있다 — 표준으로 쓰이는 동형이의어가
+    # 하나라도 있으면, 이 표기 자체를 신조어/오표기로 단정하지 않는다
+    # (word_exists()와 동일한 안전장치, 실사용 검증으로 발견).
+    if any(_opendict_item_is_standard(item) for item in matches):
+        return None
+    for item in matches:
+        for sense in item.get("sense", []):
+            match = _STANDARD_REPLACEMENT_RE.search(sense.get("definition") or "")
+            if match:
+                return match.group(1)
+    return None
 
 
 def word_exists(query: str) -> bool:
@@ -102,15 +145,35 @@ def word_exists(query: str) -> bool:
 
     두 사전 어디에도 없는 경우, gananda_precedents(온라인가나다 판례 축적본)에
     이 표현에 대한 확인된 판례가 있는지도 마지막으로 확인한다 — 실시간 사전
-    데이터가 항상 우선이고, 판례는 사전에 아무 답이 없을 때만 보조로 쓴다."""
-    stdict_result = search_stdict(query)
-    if int(stdict_result.get("channel", {}).get("total", 0)) > 0:
-        return True
+    데이터가 항상 우선이고, 판례는 사전에 아무 답이 없을 때만 보조로 쓴다.
+
+    표준국어대사전에 표제어가 있어도 곧바로 True를 반환하지 않는다 —
+    "요오드"처럼 표준국어대사전 자체엔 비표준 안내가 없지만 우리말샘에는
+    "표준 용어는 '아이오딘'이다"라고 새로 갱신된 안내가 있는 경우(전문
+    용어 표준화가 표준국어대사전보다 우리말샘에 먼저/추가로 반영된 것으로
+    보임)를 놓치게 된다 — 실사용 검증으로 발견됨. 그래서 표준국어대사전에
+    있어도 우리말샘에 정확히 일치하는 표제어가 있으면 그 비표준 안내
+    여부까지 항상 확인한다."""
+    stdict_hit = int(search_stdict(query).get("channel", {}).get("total", 0)) > 0
     opendict_result = search_opendict(query)
-    for item in opendict_result.get("channel", {}).get("item", []):
-        headword = (item.get("word") or "").replace("-", "").replace("^", "")
-        if headword == query and _opendict_item_is_standard(item):
+    opendict_matches = [
+        item
+        for item in opendict_result.get("channel", {}).get("item", [])
+        if (item.get("word") or "").replace("-", "").replace("^", "") == query
+    ]
+    # "집"처럼 같은 표제어 아래 여러 동형이의어가 있을 수 있다("집"=거처인
+    # 표준 표기 vs "집"=즙의 비표준 표기가 우연히 같은 글자). 하나라도
+    # 비표준으로 확인되면 전체를 비표준으로 단정하지 않는다 — 그중 표준으로
+    # 확인되는 동형이의어가 하나라도 있으면 그 뜻으로 정상 존재하는 단어로
+    # 본다. 반대로, 검색된 동형이의어 전부가 비표준으로 명시되어 있으면
+    # (예: "요오드" — 일치하는 항목이 이것 하나뿐이고 그마저 비표준) 표준
+    # 국어대사전 등재 여부와 무관하게 비표준으로 판단한다.
+    if opendict_matches:
+        if any(_opendict_item_is_standard(item) for item in opendict_matches):
             return True
+        return False
+    if stdict_hit:
+        return True
     precedent = check_precedent(query)
     if precedent is not None:
         return precedent

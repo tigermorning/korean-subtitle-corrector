@@ -23,6 +23,7 @@ from subtitle_corrector.engine import (
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_loanwords,
+    correct_nonstandard_terms,
     correct_particle_spacing,
 )
 
@@ -183,6 +184,49 @@ class TestLoanwordFix:
         """'집'(house)처럼 이미 정식 등재된 고유어는 kornorms의 무관한
         외래어 항목과 우연히 겹쳐도 절대 건드리면 안 된다 (실사용 버그)."""
         assert correct_loanwords("나는 집에 간다") == ("나는 집에 간다", [], [], [])
+
+
+class TestNonstandardTermReplacement:
+    """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 직접 명시한 비표준
+    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 자동 교정한다.
+    kornorms(외래어 표기 용례)는 "요오드"를 오히려 정답으로 등재해 두고
+    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견."""
+
+    def test_iodine_corrected_to_standard_term(self):
+        assert correct_nonstandard_terms("요오드가 필요합니다") == (
+            "아이오딘이 필요합니다",
+            ["요오드 -> 아이오딘"],
+        )
+
+    def test_homograph_with_standard_sense_not_falsely_corrected(self):
+        """"집"은 "즙"의 비표준 표기라는 동형이의어도 있지만, "집"(거처)
+        자체는 완전히 표준이다 — 동형이의어 중 하나라도 표준이면 전체를
+        비표준으로 단정하면 안 된다 (실사용 버그: "그리고 나서 집에 갔다"가
+        "그러고 나서 즙에 갔다"로 잘못 고쳐짐)."""
+        assert correct_nonstandard_terms("나는 집에 간다") == ("나는 집에 간다", [])
+
+
+class TestApplyReplacementsParticleAllomorph:
+    """단어를 치환한 뒤 바로 뒤에 오는 조사(이/가, 은/는, 을/를, 과/와)가
+    새 단어의 받침 유무와 안 맞으면 맞는 형태로 함께 바꾼다. "벙어리"(받침
+    없음)->"언어장애인"(받침 있음)처럼 받침이 바뀌는 치환에서 조사를 안
+    바꾸면 "언어장애인가" 같은 비문이 생기던 실사용 버그."""
+
+    def test_particle_adjusted_when_batchim_changes(self):
+        assert correct_discriminatory_terms("벙어리가 있다") == (
+            "언어장애인이 있다",
+            ["벙어리 -> 언어장애인"],
+        )
+        assert correct_discriminatory_terms("벙어리는 있다") == (
+            "언어장애인은 있다",
+            ["벙어리 -> 언어장애인"],
+        )
+
+    def test_particle_unchanged_when_batchim_already_matches(self):
+        assert correct_discriminatory_terms("장님이 걸어간다") == (
+            "시각장애인이 걸어간다",
+            ["장님 -> 시각장애인"],
+        )
 
 
 class TestCheckSpacingJoiningProtection:

@@ -39,7 +39,14 @@ import re
 from kiwipiepy import Kiwi
 
 from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
-from .dictionary import compound_status, loanword_fix, search_kornorms, usage_examples, word_exists
+from .dictionary import (
+    compound_status,
+    loanword_fix,
+    search_kornorms,
+    standard_term_replacement,
+    usage_examples,
+    word_exists,
+)
 from .parsers import SubtitleEntry
 from .report import FlagItem
 
@@ -380,6 +387,41 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     return corrected, list(reversed(applied))
 
 
+# 받침 유무에 따라 형태가 바뀌는 조사 짝: (받침 있을 때 형태, 받침 없을
+# 때 형태). "으로/로"는 ㄹ받침 예외("물로"이지 "물으로"가 아님)가 있어
+# 일반화하기 까다로워 제외한다 — 확신 없는 부분은 건드리지 않는다는 원칙.
+_PARTICLE_ALLOMORPH_GROUPS = [("이", "가"), ("은", "는"), ("을", "를"), ("과", "와")]
+_PARTICLE_TO_GROUP = {form: group for group in _PARTICLE_ALLOMORPH_GROUPS for form in group}
+
+
+def _has_batchim(syllable: str) -> bool:
+    """한글 음절 하나에 받침이 있는지 확인한다(유니코드 완성형 한글은
+    코드포인트 = 0xAC00 + (초성*21+중성)*28+종성 공식을 따르므로, 그 값을
+    28로 나눈 나머지가 0이면 받침이 없다는 뜻)."""
+    if not syllable:
+        return False
+    code = ord(syllable[-1])
+    if not (0xAC00 <= code <= 0xD7A3):
+        return False
+    return (code - 0xAC00) % 28 != 0
+
+
+def _matching_particle_allomorph(replacement: str, tail: str) -> tuple[str | None, int]:
+    """단어를 치환한 뒤(예: "벙어리"->"언어장애인"), 바로 뒤에 오는 조사가
+    새 단어의 받침 유무와 안 맞으면("언어장애인가"는 틀림, "언어장애인이"가
+    맞음) 맞는 형태로 바꿔 돌려준다.
+
+    반환값: (바꿀 조사 또는 None, 원문에서 지워야 할 길이). 조사가 아니거나
+    이미 맞는 형태면 (None, 0)을 돌려줘 원문 그대로 둔다."""
+    if not tail or tail[0] not in _PARTICLE_TO_GROUP:
+        return None, 0
+    with_batchim, without_batchim = _PARTICLE_TO_GROUP[tail[0]]
+    desired = with_batchim if _has_batchim(replacement) else without_batchim
+    if tail[0] == desired:
+        return None, 0
+    return desired, 1
+
+
 def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
     """mapping의 각 (원문, 정답) 쌍을 text에 적용한다. 긴 표현부터 먼저
     치환해서, 짧은 표현이 긴 표현의 일부일 때 잘못 겹쳐 치환되는 사고를
@@ -411,7 +453,13 @@ def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
         if not matches:
             continue
         for idx in sorted(matches, reverse=True):
-            corrected = corrected[:idx] + right + corrected[idx + len(wrong) :]
+            end = idx + len(wrong)
+            tail = corrected[end:]
+            new_particle, old_len = _matching_particle_allomorph(right, tail)
+            if new_particle is not None:
+                corrected = corrected[:idx] + right + new_particle + corrected[end + old_len :]
+            else:
+                corrected = corrected[:idx] + right + tail
         applied.append(f"{wrong} -> {right}")
     return corrected, applied
 
@@ -425,6 +473,31 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
     return _apply_replacements(text, ALWAYS_WRONG)
+
+
+def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
+    """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 이미 명시해 둔 비표준
+    표기(예: "요오드"->"아이오딘")를 자동 교정한다.
+
+    correct_always_wrong()의 ALWAYS_WRONG(정적 목록)이나 correct_loanwords()의
+    kornorms(외래어 표기 용례)와는 다른 세 번째 원천이다 — "요오드"는
+    kornorms엔 오히려 정답으로("Jod"의 정식 번역어) 등재되어 있어
+    correct_loanwords()로는 못 잡고, 우리말샘 자체의 표준화 안내에서만
+    확인된다(실사용 검증으로 발견). 매번 실시간으로 우리말샘을 조회하므로
+    정적 목록과 달리 국립국어원이 표준 용어를 바꿔도 코드 수정이 필요 없다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    """
+    replacements = {}
+    for t in _kiwi.tokenize(text):
+        if t.tag not in ("NNG", "NNP"):
+            continue
+        replacement = standard_term_replacement(t.form)
+        if replacement:
+            replacements[t.form] = replacement
+    if not replacements:
+        return text, []
+    return _apply_replacements(text, replacements)
 
 
 def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
@@ -1089,6 +1162,7 @@ def correct_entries(
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+        corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
         applied_log.extend(
             f"[{e.index}] {fix}"
@@ -1097,6 +1171,7 @@ def correct_entries(
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
+            + nonstandard_fixes
             + discriminatory_fixes
         )
 
