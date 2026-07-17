@@ -623,6 +623,23 @@ def _is_productive_demonym_compound(word: str) -> bool:
     return False
 
 
+def _is_action_noun(noun_lemma: str) -> bool:
+    """명사가 동작성(행위·작용을 나타내는 성질)인지 확인한다 — "명사+하다"가
+    사전에 등재되어 있으면 그 행위 자체를 가리키는 동사가 성립한다는
+    뜻이므로 동작성 명사로 본다(번역가 교육자료 "동사/접사 구분법" 참고).
+
+    이 판단은 "받다"가 그 명사 뒤에서 접사로 항상 붙어 써야 하는지
+    확인하는 데 쓰인다 — "호출받다", "사랑받다", "상처받다"처럼 동작성
+    명사+받다 조합 자체는 개별 표제어로 사전에 등재되어 있지 않은 경우가
+    많아(교육자료의 예시 단어들도 그렇다) 사전 등재 여부만으로는 판단할
+    수 없다. 반면 구체적 사물 명사(상, 만점, 선물 등)+받다는 "받다"가
+    독립된 동사("받다"='건네받다')로 띄어 써야 하는데, 이런 사물 명사는
+    보통 "하다"를 붙일 수 없다("*상하다"는 무관한 동형이의어 — '상처
+    나다/부패하다'라는 뜻).
+    """
+    return word_exists(noun_lemma + "하다")
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
     있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,
@@ -807,6 +824,8 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
         if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
             to_restore.append(insert_at)  # 금지 구성 확정 -> 사전 등재 여부와 무관하게 항상 띄어씀
             continue
+        if before.tag == "NNG" and after.lemma == "받다" and _is_action_noun(before.form):
+            continue  # 동작성 명사+받다(접사) -> "호출받다"처럼 사전 미등재라도 항상 붙여씀
         before_part = before.lemma if before.tag.startswith("V") else before.form
         after_part = after.lemma if after.tag.startswith("V") else after.form
         if not word_exists(before_part + after_part):
@@ -944,6 +963,9 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
             continue  # "80%" 같은 숫자+기호 표기 관례 (사전 등재 여부와 무관)
         if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
             continue  # 금지 구성 확정 -> 이 공백 삽입은 정답이므로 되돌리지 않는다
+        if before.tag == "NNG" and after.lemma == "받다" and _is_action_noun(before.form):
+            to_remove.append((j1, j2))
+            continue  # 동작성 명사+받다(접사) -> "호출받다"처럼 사전 미등재라도 항상 붙여씀
         if after.form == "요" and after.len == 1:
             to_remove.append((j1, j2))
             continue  # 존대 보조사 "요" — _mechanical_respace()와 같은 이유로 항상 보호한다

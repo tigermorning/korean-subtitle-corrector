@@ -305,6 +305,23 @@ class TestCheckSpacingNumberSymbol:
         assert check_spacing(0, "80% 완료됐다") is None
 
 
+class TestActionNounPlusBatdaSuffix:
+    """번역가 교육자료(동사/접사 구분법): 동작성 명사(호출, 사랑, 상처 등)
+    뒤의 "받다"는 접사로 항상 붙여 쓰지만, 구체적 사물 명사(상, 만점 등)
+    뒤의 "받다"는 독립된 동사로 띄어 쓴다. "동작성 명사+받다" 조합은
+    개별 표제어로 사전에 등재되어 있지 않은 경우가 많아(예: 호출받다,
+    사랑받다), "명사+하다"가 사전에 등재되어 있는지로 동작성을 판단한다."""
+
+    def test_action_noun_plus_batda_stays_joined(self):
+        assert check_spacing(0, "그는 호출받았다") is None
+        assert check_spacing(0, "그는 사랑받는다") is None
+        assert check_spacing(0, "상처받았다") is None
+
+    def test_concrete_object_noun_plus_batda_unaffected(self):
+        assert check_spacing(0, "상을 받았다") is None
+        assert check_spacing(0, "만점을 받았다") is None
+
+
 class TestCompoundSpacingDurationMarkerException:
     """숫자+시간단위(년/월/일 등) 뒤에 오는 "전"은 "~하기 전"이 아니라
     "며칠 전"의 뜻이라, 뒤에 오는 명사와 절대 하나의 단어가 될 수 없다.
