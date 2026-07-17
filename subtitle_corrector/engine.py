@@ -296,6 +296,16 @@ _COMPOUND_LEAD_TAGS = {"NNG", "NNP", "MM"}  # 명사/고유명사/관형사(예:
 # 추가한다.
 _MM_NOUN_COMPOUND_ALLOWLIST = {"그때", "그날", "이날", "그곳", "이곳", "저곳"}
 
+# 시간 단위 의존명사(년/월/일/시간/분/초/주/개월 등, 숫자 뒤에 붙는 것들).
+# "7년 전 일이에요"처럼 숫자+시간단위 뒤에 오는 "전"은 "~하기 전(以前)"의
+# "전"이 아니라 "며칠 전"처럼 "지금부터 그만큼 전"이라는 뜻으로, 뒤에 오는
+# 명사와 절대 하나의 단어가 될 수 없다("전일"[全日/前日]이 사전에 등재된
+# 별개의 단어라 뒤 명사와 우연히 합쳐지는 사고가 남, §21). 반대로 이런
+# 시간 표현이 앞에 없는 "전일"은 kiwi 자신도 이미 하나의 토큰으로 본다 —
+# 즉 이 경우만 명사+명사 합성 후보에서 제외하면 된다(사전 등재 여부와
+# 무관하게, 문맥상 애초에 합성 후보가 될 수 없는 경우이므로).
+_DURATION_UNIT_NNB = {"년", "월", "일", "시간", "분", "초", "주", "개월", "주일", "달"}
+
 
 def _compound_candidate_spans(text: str) -> list[tuple[int, int, int]]:
     """사전상 합성어일 가능성이 있는 인접 구간 후보를 찾는다 (아직 사전
@@ -317,11 +327,14 @@ def _compound_candidate_spans(text: str) -> list[tuple[int, int, int]]:
     def gap_ok(end_pos: int, start_pos: int) -> bool:
         return text[end_pos:start_pos] in ("", " ")
 
-    for t1, t2 in zip(tokens, tokens[1:]):
+    for i in range(len(tokens) - 1):
+        t1, t2 = tokens[i], tokens[i + 1]
         if t1.tag not in _COMPOUND_LEAD_TAGS or t2.tag not in ("NNG", "NNP"):
             continue
         if t1.tag == "MM" and t1.lemma + t2.lemma not in _MM_NOUN_COMPOUND_ALLOWLIST:
             continue
+        if t1.lemma == "전" and i >= 1 and tokens[i - 1].tag == "NNB" and tokens[i - 1].lemma in _DURATION_UNIT_NNB:
+            continue  # "7년 전 일"의 "전" -> "~전(前)에"의 뜻, 뒤 명사와 합성 후보가 될 수 없음
         boundary = t1.start + t1.len
         if not gap_ok(boundary, t2.start):
             continue

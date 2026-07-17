@@ -305,6 +305,17 @@ class TestCheckSpacingNumberSymbol:
         assert check_spacing(0, "80% 완료됐다") is None
 
 
+class TestCompoundSpacingDurationMarkerException:
+    """숫자+시간단위(년/월/일 등) 뒤에 오는 "전"은 "~하기 전"이 아니라
+    "며칠 전"의 뜻이라, 뒤에 오는 명사와 절대 하나의 단어가 될 수 없다.
+    "전일"(全日/前日)이 별개로 사전에 등재되어 있어 우연히 충돌하는
+    사고("7년 전 일" -> "7년 전일")를 막는다."""
+
+    def test_duration_marker_before_jeon_not_joined(self):
+        assert correct_compound_spacing("7년 전 일이에요") == ("7년 전 일이에요", [])
+        assert correct_compound_spacing("3일 전 사건") == ("3일 전 사건", [])
+
+
 class TestCompoundSpacingMMAllowlist:
     """관형사(그/이/저/두/세 등)+명사 조합은 사전이 '합성어'로 확인해 줘도
     원문 의도와 무관한 우연의 동형이의어일 위험이 크다("두 강"이 "두강"
