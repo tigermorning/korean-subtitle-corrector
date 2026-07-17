@@ -42,6 +42,7 @@ from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS,
 from .dictionary import (
     compound_status,
     loanword_fix,
+    registered_ending,
     search_kornorms,
     standard_term_replacement,
     usage_examples,
@@ -945,6 +946,36 @@ def _token_containing(tokens, pos: int):
     return None
 
 
+def _tokenization_unstable_near(tokens, before, after) -> bool:
+    """before/after 주변에 길이가 0인 토큰(완전히 생략된 형태소)이 있는지
+    확인한다 — kiwi 자신도 이 구간의 형태소 경계를 확신하지 못한다는 신호다.
+
+    "없다잖나"("없다"+"고"+"하"(길이 0, "하다"가 통째로 생략됨)+"지"+"않"+
+    "나")처럼 압축된 구어체 표현을 kiwi가 내부적으로 재구성하다가, 실제
+    발화에는 아예 없는 형태소를 길이 0으로 끼워 넣는 경우가 있다. 이런
+    경우 `_straddling_tokens()`(위치 기반 검색)조차 엉뚱한 토큰을 짚어올
+    수 있어(길이 0인 토큰과 실제 토큰이 같은 위치를 다투다 하나만 우연히
+    골라짐), 사전 조회로 검증할 신뢰할 만한 후보 자체를 만들 수 없다 —
+    "kiwi는 참고일 뿐, 사전 표제어가 기준"이라는 원칙에 따라, 이런
+    자기모순적 구간은 kiwi의 공백 제안을 아예 신뢰하지 않고 원문 그대로
+    보존한다.
+
+    단순 위치 겹침(overlap)은 신호로 쓰지 않는다 — "됩니다"(되+ㅂ니다)처럼
+    어간과 어미가 받침 하나를 공유해 위치가 겹치는 것은 지극히 정상적인
+    활용이라, 겹침 자체를 "불안정"으로 보면 정상적인 활용까지 오탐하게
+    된다(실사용 버그로 확인됨 — "그러면 안됩니다"의 정당한 "안 됩니다"
+    분리 제안이 막혀버림). 길이 0(형태소 자체가 완전히 생략됨)만 이례적인
+    신호로 취급한다."""
+    idx_before = _token_index(tokens, before)
+    idx_after = _token_index(tokens, after)
+    window = []
+    if idx_before is not None:
+        window.extend(tokens[max(0, idx_before - 1) : idx_before + 1])
+    if idx_after is not None:
+        window.extend(tokens[idx_after : idx_after + 2])
+    return any(t.len == 0 for t in window)
+
+
 # "안"(부정 부사)+"되다"는 뜻이 갈리는 두 가지 서로 다른 구성이다 —
 # "안되다"(형용사, 하나의 단어: 상황이 좋지 않다, 예: "공부가 안된다")와
 # "안 되다"(부정 부사 "안"+동사 "되다": 허용·가능하지 않다, 예: "~하면
@@ -1036,6 +1067,9 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
         before, after = _straddling_tokens(tokens, i1)
         if before is None or after is None:
             continue
+        if _tokenization_unstable_near(tokens, before, after):
+            to_remove.append((j1, j2))
+            continue  # kiwi 자신도 이 구간의 형태소 경계를 확신하지 못함 -> 원문 보존
         if before.tag == "NNP" or after.tag == "NNP":
             to_remove.append((j1, j2))
             continue
@@ -1056,12 +1090,16 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
             to_remove.append((j1, j2))
             continue  # 존대 보조사 "요" — _mechanical_respace()와 같은 이유로 항상 보호한다
             # (kiwi가 관형사 등으로 잘못 태깅해도, 원문에 이미 붙어 있었다면 그대로 둔다)
-        if after.tag == "EF":
+        if after.tag in _ATTACH_TAGS or registered_ending(after.form):
             to_remove.append((j1, j2))
-            continue  # 종결어미(EF)는 항상 앞말에 붙는다(_mechanical_respace()의 _ATTACH_TAGS와
-            # 같은 원칙) — "같잖아요"("같"+"지"+"않"+"어요"가 "잖"이라는 축약된 한 글자로
-            # 압축되는 kiwi 특성 때문에 tokenize()와 space()가 서로 다른 경계를 봄)처럼
-            # 앞 형태소가 축약되어 있어도 종결어미 자체를 갈라놓을 근거는 없다.
+            continue  # 조사·어미(EF뿐 아니라 EC 등 _ATTACH_TAGS 전체)는 제41항에 따라
+            # 항상 앞말에 붙는다(_mechanical_respace()와 같은 원칙) — "같잖아요"
+            # ("같"+"지"+"않"+"어요"가 "잖"이라는 축약된 한 글자로 압축되는 kiwi
+            # 특성 때문에 tokenize()와 space()가 서로 다른 경계를 봄)처럼 앞
+            # 형태소가 축약되어 있어도 갈라놓을 근거는 없다. kiwi가 태그를 다르게
+            # 매길 가능성에 대비해, "-form"이 사전에 등재된 어미·접사 표제어인지도
+            # 함께 확인한다(registered_ending — kiwi 태그가 아니라 사전 표제어
+            # 자체를 최종 근거로 삼는다).
         # 용언(동사/형용사) 토큰은 표면형이 어간뿐이라(예: '하다가'의 '하'),
         # 사전 기본형(lemma)으로 합쳐야 '한잔하다' 같은 등재된 복합동사를
         # 알아볼 수 있다. '한잔'+'하'로는 사전에 없지만 '한잔'+'하다'는 있음.

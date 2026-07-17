@@ -343,6 +343,24 @@ class TestCheckSpacingSentenceEndingProtection:
     def test_gatjanayo_not_split(self):
         assert check_spacing(0, "모범생 같잖아요") is None
 
+    def test_eopdajanna_deep_elision_not_split(self):
+        """"없다잖나"("없다"+"고"+"하"(길이 0, 완전히 생략됨)+"지"+"않"+"나")는
+        "잖"보다도 더 깊이 압축된 구어체 표현("없다고 하지 않나") — kiwi가
+        길이 0인 유령 형태소까지 만들어내며 "시간이 없다 잖 나"로 잘못 세
+        토막을 내던, 이전엔 못 고치던 버그. after.tag가 EC/EF 어디에도
+        깔끔하게 걸리지 않는 사례라 _ATTACH_TAGS 확장만으로는 못 잡고,
+        길이 0 토큰 근처를 아예 신뢰하지 않는 별도 보호(_tokenization_unstable_near)가
+        필요했다."""
+        assert check_spacing(0, "시간이 없다잖나") is None
+
+    def test_andoenda_conditional_split_still_flagged(self):
+        """길이 0 토큰과 무관하게, "됩니다"(되+ㅂ니다)처럼 어간과 어미가
+        받침 하나를 공유해 위치가 겹치는 정상적인 활용까지 "불안정"으로
+        오판해서는 안 된다 — 그러면 원래부터 정당했던 "안 됩니다" 분리
+        제안(§20 `_andoeda_forces_split`)까지 막혀버리는 회귀가 실제로
+        발생했었다."""
+        assert check_spacing(0, "그러면 안됩니다").suggested_fix == "그러면 안 됩니다"
+
 
 class TestCheckSpacingNumberSymbol:
     def test_percent_not_split(self):

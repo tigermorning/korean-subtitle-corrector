@@ -261,6 +261,28 @@ def usage_examples(word: str, limit: int = 2) -> list[str]:
     return []
 
 
+def registered_ending(candidate: str) -> str | None:
+    """candidate가 표준국어대사전/우리말샘에 "-candidate" 형태(어간·선어말
+    어미 등에 붙는 접미형 표제어 — 어미·조사·접사가 공통으로 쓰는 표기
+    관례)로 정확히 등재되어 있으면 그 표제어(하이픈 포함)를 돌려준다.
+
+    kiwi는 "있잖아"("있"+"지"+"않"+"아"), "없다잖나"("없다"+"고"+"하"+"지"
+    +"않"+"나")처럼 압축된 구어체 표현을 내부적으로 여러 형태소로 억지로
+    분해하다가, 그 형태소들의 위치가 서로 겹치거나 길이가 0인 등 스스로도
+    확신 없는 재구성을 만들어낸다(사용자 지적: "kiwi는 참고일 뿐, 사전의
+    표제어와 용례를 기준으로 해야 한다"). 이런 압축형 자체가 이미 사전에
+    하나의 표제어로 등재되어 있는 경우(예: "-잖다", "-잖아", "-거든",
+    "-ㄹ걸")는, kiwi의 내부 형태소 분해 결과와 무관하게 그 표제어 등재
+    사실 자체를 근거로 삼아 "이 뒤에는 공백을 넣지 않는다"고 판단할 수
+    있다."""
+    for search in (search_stdict, search_opendict):
+        result = search(candidate)
+        for item in result.get("channel", {}).get("item", []):
+            if (item.get("word") or "") == f"-{candidate}":
+                return item["word"]
+    return None
+
+
 @lru_cache(maxsize=4096)
 def search_kornorms(keyword: str) -> list[dict]:
     """외래어·로마자 표기 용례를 조회한다 (한국어 어문 규범 Open API).
