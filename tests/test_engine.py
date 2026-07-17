@@ -253,6 +253,58 @@ class TestAndoedaContextDisambiguation:
         assert check_spacing(0, "공부가 안 된다") is None
 
 
+class TestCheckSpacingCompoundVerbStemLookback:
+    """_protect_unfounded_respacing()의 사전 등재 확인이 연결어미(EC) 하나만
+    보고 후보를 재구성하다가, 그 앞의 어간까지 봐야 하는 3형태소 복합동사
+    ('기다'+'어'+'다니다'='기어다니다', '데리'+'어다'+'주다'='데려다주다')를
+    놓치던 버그. 어간이 EC와 받침/음절을 공유해 위치가 겹치는 경우까지
+    포함해서 잡아야 한다."""
+
+    def test_gieodanida_not_split(self):
+        assert check_spacing(0, "벌레가 기어다닌다") is None
+
+    def test_ddeonabonaeda_not_split(self):
+        assert check_spacing(0, "엄마를 떠나보냈다") is None
+
+    def test_deryeodajuda_not_split_even_with_overlap(self):
+        assert check_spacing(0, "집에 데려다줬다") is None
+
+
+class TestParticleSpacingPrefixParticleHomograph:
+    """"과"(조사 "~와/과" vs 한자어 접두사 "과-[過]": 과증식/과체중 등)처럼
+    조사와 형태가 같은 접두사가 있을 때, 뒤 단어와 합쳐 사전에 등재된
+    단어가 되면 조사로 보고 앞말에 붙이지 않는다."""
+
+    def test_gwa_prefix_not_attached_to_preceding_noun(self):
+        assert correct_particle_spacing("좌심실 과증식 상태") == ("좌심실 과증식 상태", [])
+
+    def test_normal_gwa_particle_still_works(self):
+        assert correct_particle_spacing("나와 과일") == ("나와 과일", [])
+
+
+class TestCheckSpacingSentenceEndingProtection:
+    """종결어미(EF)는 항상 앞말에 붙는다 — kiwi가 축약형("잖아요"="지"+"않"+
+    "아요")을 tokenize()/space()에서 서로 다르게 분석해 "말했잖아 요",
+    "같잖 아요"처럼 잘못 갈라놓던 버그."""
+
+    def test_malhaessjanayo_not_split(self):
+        assert check_spacing(0, "말했잖아요") is None
+
+    def test_geunyangyo_not_split(self):
+        assert check_spacing(0, "그냥요") is None
+
+    def test_saramdeuleunyo_not_split(self):
+        assert check_spacing(0, "사람들은요") is None
+
+    def test_gatjanayo_not_split(self):
+        assert check_spacing(0, "모범생 같잖아요") is None
+
+
+class TestCheckSpacingNumberSymbol:
+    def test_percent_not_split(self):
+        assert check_spacing(0, "80% 완료됐다") is None
+
+
 class TestCompoundSpacingMMAllowlist:
     """관형사(그/이/저/두/세 등)+명사 조합은 사전이 '합성어'로 확인해 줘도
     원문 의도와 무관한 우연의 동형이의어일 위험이 크다("두 강"이 "두강"

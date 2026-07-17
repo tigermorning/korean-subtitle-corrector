@@ -73,8 +73,17 @@ def _opendict_item_is_standard(item: dict) -> bool:
     하나의 표제어처럼 등재해 두고, 그 뜻풀이 끝에 "⇒규범 표기는 'OO'이다"라고
     정답을 안내한다. 이런 항목은 "표제어가 존재는 하지만 틀린 표기"이므로
     존재 확인 근거로 쓰면 안 된다 — 하나라도 이 안내가 없는 뜻풀이가 있으면
-    표준 표기로 본다."""
-    return any("규범 표기는" not in (sense.get("definition") or "") for sense in item.get("sense", []))
+    표준 표기로 본다.
+
+    다만 "⇒규범 표기는 미확정이다"(예: "쉴더병")는 다른 대안 표기를
+    안내하는 게 아니라 국립국어원이 아직 표준 표기를 정하지 못했다는
+    뜻이다 — 이 표기 자체가 현재로선 유일하게 등재된 표기이므로, 다른
+    대안이 있는 경우("규범 표기는 'X'이다")와 구분해서 표준으로 인정한다."""
+    for sense in item.get("sense", []):
+        definition = sense.get("definition") or ""
+        if "규범 표기는" in definition and "미확정" not in definition:
+            return False
+    return True
 
 
 def word_exists(query: str) -> bool:

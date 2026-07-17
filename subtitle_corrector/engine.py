@@ -39,7 +39,7 @@ import re
 from kiwipiepy import Kiwi
 
 from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
-from .dictionary import compound_status, loanword_fix, usage_examples, word_exists
+from .dictionary import compound_status, loanword_fix, search_kornorms, usage_examples, word_exists
 from .parsers import SubtitleEntry
 from .report import FlagItem
 
@@ -161,8 +161,27 @@ def _mechanical_respace(text: str) -> str:
     원문에서 찾아 필요할 때만 교체하는 방식으로 이 문제를 피한다.
     """
     tokens = _kiwi.tokenize(text)
+
+    # "과"(조사 "~와/과" vs 한자어 접두사 "과-[過]": 과증식, 과체중 등)처럼
+    # 조사와 형태가 같은 접두사가 있다 — 뒤 단어와 합쳐 사전에 등재된 단어가
+    # 되고 그 사이 간격이 이미 붙어 있으면, 조사가 아니라 다음 단어에 붙는
+    # 접두사로 본다. 이 토큰은 (a) 앞말에 강제로 붙이지도 않고(조사가
+    # 아니므로), (b) 자신이 조사로서 어절을 완결짓지도 않는다(뒤에 오는
+    # 단어의 일부이므로) — 애매하면 그대로 둔다는 원칙에 따라 이 지점
+    # 전체를 건드리지 않는다.
+    ambiguous_prefix_indices = set()
+    for i, t in enumerate(tokens[:-2]):
+        nxt, nxt2 = tokens[i + 1], tokens[i + 2]
+        if (
+            nxt.tag in ("JC", "JX", "JKS", "JKO", "JKG")
+            and nxt2.start == nxt.start + nxt.len
+            and word_exists(nxt.form + nxt2.lemma)
+        ):
+            ambiguous_prefix_indices.add(i + 1)
+
     edits = []  # (gap_start, gap_end, desired_gap)
-    for t1, t2 in zip(tokens, tokens[1:]):
+    for i in range(len(tokens) - 1):
+        t1, t2 = tokens[i], tokens[i + 1]
         gap_start = t1.start + t1.len
         gap_end = t2.start
         if gap_end < gap_start:
@@ -173,6 +192,8 @@ def _mechanical_respace(text: str) -> str:
             continue  # 존대 보조사 "요"(이거요, 빨리요 등)를 kiwi가 가끔 관형사(MM) 등으로
             # 잘못 태깅하는데, 원문에서 이미 붙어 있었다면 태그가 무엇이든 그대로 둔다 —
             # 진짜 관형사 "요"(요 녀석)라면 애초에 앞말과 띄어 쓰여 있었을 것이기 때문이다.
+        if (i + 1) in ambiguous_prefix_indices or i in ambiguous_prefix_indices:
+            continue
         if t2.tag in _ATTACH_TAGS:
             desired_gap = ""  # 조사/어미/접미사/서술격조사는 무조건 붙임
         elif (
@@ -595,7 +616,9 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
     번역가 교육자료가 권장하는 실제 검증 방법(국립국어원 용례, 발음기호
     사전, 한글라이즈)으로 직접 확인하라고 안내만 한다."""
     unknown = [
-        w for w in _content_lemmas(text) if not word_exists(w) and not _is_productive_demonym_compound(w)
+        w
+        for w in _content_lemmas(text)
+        if not word_exists(w) and not _is_productive_demonym_compound(w) and not search_kornorms(w)
     ]
     if unknown:
         return FlagItem(
@@ -854,6 +877,11 @@ def _andoeda_forces_split(tokens, after) -> bool:
 # 포함하면 정당한 오류까지 숨겨버리게 된다.
 _TERM_COMPOUND_TAGS = {"NNG", "NNP", "SN", "SL", "XPN", "NR"}
 
+# 숫자(SN) 바로 뒤에 붙는 기호(SW, %/$/# 등)는 항상 붙여 쓴다 — 이건
+# 사전 등재 여부를 따질 대상이 아니라 순수 표기 관례("80%"를 "80 %"로
+# 쓰지 않음)라, 별도로 항상 보호한다.
+_NUMBER_SYMBOL_TAGS = {"SN", "SW"}
+
 
 def _protect_unfounded_respacing(text: str, suggested: str) -> str:
     """kiwi.space()가 사전에도 없고 어문 규정에도 근거가 없는 채로 공백을
@@ -898,8 +926,21 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
         if before.tag in _TERM_COMPOUND_TAGS and after.tag in _TERM_COMPOUND_TAGS:
             to_remove.append((j1, j2))
             continue
+        if before.tag in _NUMBER_SYMBOL_TAGS and after.tag in _NUMBER_SYMBOL_TAGS:
+            to_remove.append((j1, j2))
+            continue  # "80%" 같은 숫자+기호 표기 관례 (사전 등재 여부와 무관)
         if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
             continue  # 금지 구성 확정 -> 이 공백 삽입은 정답이므로 되돌리지 않는다
+        if after.form == "요" and after.len == 1:
+            to_remove.append((j1, j2))
+            continue  # 존대 보조사 "요" — _mechanical_respace()와 같은 이유로 항상 보호한다
+            # (kiwi가 관형사 등으로 잘못 태깅해도, 원문에 이미 붙어 있었다면 그대로 둔다)
+        if after.tag == "EF":
+            to_remove.append((j1, j2))
+            continue  # 종결어미(EF)는 항상 앞말에 붙는다(_mechanical_respace()의 _ATTACH_TAGS와
+            # 같은 원칙) — "같잖아요"("같"+"지"+"않"+"어요"가 "잖"이라는 축약된 한 글자로
+            # 압축되는 kiwi 특성 때문에 tokenize()와 space()가 서로 다른 경계를 봄)처럼
+            # 앞 형태소가 축약되어 있어도 종결어미 자체를 갈라놓을 근거는 없다.
         # 용언(동사/형용사) 토큰은 표면형이 어간뿐이라(예: '하다가'의 '하'),
         # 사전 기본형(lemma)으로 합쳐야 '한잔하다' 같은 등재된 복합동사를
         # 알아볼 수 있다. '한잔'+'하'로는 사전에 없지만 '한잔'+'하다'는 있음.
@@ -910,7 +951,26 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
         # 대신 두 토큰이 실제로 빈틈없이 맞닿아 있는지만 위치로 확인한다.
         if before.start + before.len != after.start:
             continue
-        before_part = before.lemma if before.tag.startswith("V") else before.form
+        # before가 연결어미(EC)이고 그 앞에 어간이 바로 붙어 있으면(예:
+        # '기어다니다'의 '기'+'어', '데려다주다'의 '데리'+'어다'), EC 하나만
+        #으로는 사전 표제어와 비교할 수 없다 — 어간까지 포함한 실제 표면형
+        # ('기어', '데려다')을 써야 correct_aux_verb_spacing() 패턴 1과 같은
+        # 방식으로 후보를 만들 수 있다. lemma가 아니라 표면형을 쓰는 이유는
+        # '기다'+'어'='기어'처럼 축약된 실제 표기를 그대로 보존해야 하기
+        # 때문이다(어간 lemma를 쓰면 '기다다니다'처럼 없는 말이 된다).
+        before_part = before.form
+        if before.tag == "EC":
+            # 어간과 어미가 받침/음절을 공유해 위치가 살짝 겹치는 경우
+            # ('데리'+'어다'='데려다'처럼 어간의 끝과 EC의 시작 위치가
+            # 정확히 맞닿지 않는 경우도 있음)까지 잡기 위해, 토큰 목록
+            # 상의 순서(바로 이전 토큰)로 어간을 찾는다 — 위치 비교
+            # (_straddling_tokens)는 겹치는 경우 엉뚱한 토큰을 찾아온다.
+            before_idx = _token_index(tokens, before)
+            stem = tokens[before_idx - 1] if before_idx and before_idx >= 1 else None
+            if stem is not None and stem.tag.startswith("V") and stem.start < before.start:
+                before_part = text[stem.start : before.start + before.len]
+        elif before.tag.startswith("V"):
+            before_part = before.lemma
         after_part = after.lemma if after.tag.startswith("V") else after.form
         if word_exists(before_part + after_part):
             to_remove.append((j1, j2))
