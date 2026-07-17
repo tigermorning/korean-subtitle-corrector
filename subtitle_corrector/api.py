@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
@@ -72,12 +73,21 @@ def correct_subtitle(file: UploadFile, names: str = Form("")):
             original_text = "\n".join(e.text for e in entries) + "\n"
         else:
             original_text = raw.decode("utf-8-sig")
-    report_id = store.save_report(
-        original_srt=original_text,
-        corrected_srt=corrected_text,
-        flags=flags,
-        applied_log=applied_log,
-    )
+    # 저장(Supabase)이 실패해도 이미 완료된 교정 결과 자체는 그대로 돌려준다 —
+    # 저장 실패와 교정 실패는 서로 다른 문제다. 저장 실패는 흔히 일시적이거나
+    # (무료 티어 슬립/네트워크 지연) 설정 문제이지 교정 로직의 결함이 아닌데,
+    # 여기서 예외를 그대로 던지면 이미 성공한 교정 결과까지 통째로 사라지고
+    # 사용자는 그냥 "서버 오류"만 보게 된다. 저장 실패는 "공유 링크를 만들지
+    # 못했다"는 사실만 알려주고, 나머지 결과는 정상적으로 응답한다.
+    try:
+        report_id = store.save_report(
+            original_srt=original_text,
+            corrected_srt=corrected_text,
+            flags=flags,
+            applied_log=applied_log,
+        )
+    except (RuntimeError, requests.RequestException):
+        report_id = None
     return {
         "id": report_id,
         "original_srt": original_text,

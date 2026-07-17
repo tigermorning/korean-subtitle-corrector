@@ -111,10 +111,14 @@ function renderResult(data) {
     </tr>`).join('') || '<tr><td colspan="4" style="color:#999">없음</td></tr>';
   document.getElementById('flagCount').textContent = (data.flags || []).length;
 
-  const shareUrl = `${location.origin}${location.pathname}?id=${data.id}`;
-  document.getElementById('shareBox').innerHTML =
-    `✅ 저장됨. 이 결과를 다시 보려면: <br><code>${shareUrl}</code>`;
-  history.replaceState(null, '', `?id=${data.id}`);
+  const shareBox = document.getElementById('shareBox');
+  if (data.id) {
+    const shareUrl = `${location.origin}${location.pathname}?id=${data.id}`;
+    shareBox.innerHTML = `✅ 저장됨. 이 결과를 다시 보려면: <br><code>${shareUrl}</code>`;
+    history.replaceState(null, '', `?id=${data.id}`);
+  } else {
+    shareBox.innerHTML = '⚠️ 결과 저장에 실패해 공유 링크를 만들지 못했습니다. 아래 교정 결과는 정상이니 필요하면 지금 복사해두세요.';
+  }
 }
 
 function escapeHtml(s) {
