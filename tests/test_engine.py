@@ -15,7 +15,6 @@
 """
 
 from subtitle_corrector.engine import (
-    check_confusable_words,
     check_spacing,
     check_spelling,
     correct_always_wrong,
@@ -428,25 +427,3 @@ class TestCheckSpellingProductiveDemonymCompound:
 
     def test_country_plus_gun_not_flagged(self):
         assert check_spelling(0, "미군과 영국군") is None
-
-
-class TestMachidaMajidaObjectDisambiguation:
-    """'마치다'(끝내다)/'맞히다'(맞게 하다)는 제57항 공식 혼동 쌍이지만,
-    목적어(를/을 앞의 명사)만 봐도 의미가 명확히 갈리는 경우가 대부분이라
-    그런 경우엔 예외적으로 플래그를 생략한다."""
-
-    def test_activity_object_with_machida_not_flagged(self):
-        assert check_confusable_words(0, "아르덴 전투 지역에 전개를 마칩니다") is None
-        assert check_confusable_words(0, "수업을 마쳤다") is None
-
-    def test_answer_object_with_majida_not_flagged(self):
-        assert check_confusable_words(0, "정답을 맞혔다") is None
-
-    def test_mismatched_object_still_flagged(self):
-        """목적어가 반대쪽 부류인데 다른 동사가 쓰이면(실제 오류 가능성이
-        높은 경우) 여전히 플래그한다 — 자동 교정은 하지 않는다."""
-        assert check_confusable_words(0, "정답을 마쳤다") is not None
-        assert check_confusable_words(0, "수업을 맞혔다") is not None
-
-    def test_unrelated_pair_unaffected(self):
-        assert check_confusable_words(0, "고개를 반듯이 들어라") is not None

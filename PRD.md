@@ -351,6 +351,24 @@
 - **구현**: `store.save_report()` 호출을 `try/except (RuntimeError, requests.RequestException)`로 감싸 실패 시 `report_id = None`으로 처리 — 교정 결과(`corrected_srt`/`flags`/`applied_log`)는 그대로 응답한다. 프론트(`static/index.html`)도 `data.id`가 없으면 공유 링크 대신 "저장에 실패해 공유 링크를 만들지 못했다"는 안내만 보여주고, 교정 결과 자체는 정상적으로 렌더링하도록 수정.
 - **검증**: `store.save_report`를 `RuntimeError`(환경변수 누락)와 `requests.exceptions.Timeout`(네트워크 지연) 양쪽으로 모의 실패시켜, 두 경우 모두 `id=None`이면서도 `corrected_srt`/`flags`(4건)/`applied_log`(6건)는 정상 반환됨을 직접 확인. 정상 경로(저장 성공)도 회귀 없이 그대로 동작함을 재확인.
 
+## 25. 네이티브 의존성 / 보안 / SQL 종합 검토 (2026-07-17)
+
+사용자 요청으로 세 가지 관점에서 재검토함. 이번엔 독립적인 security-reviewer 에이전트를 추가로 붙여 교차 검증했다(같은 세션에서 직접 고친 코드를 스스로 승인하지 않는다는 원칙).
+
+- **네이티브 의존성**: `kiwipiepy`/`kiwipiepy_model`(C++ 형태소 분석기), `numpy`, `python-docx`가 끌어오는 `lxml` — 전부 컴파일된 바이너리(wheel)다. `requirements.txt` 대부분은 `==`로 정확히 고정돼 있는데 `fastapi`/`python-multipart`/`uvicorn[standard]` 세 개만 `>=`로 열려 있고, `uvicorn[standard]`가 끌어오는 `uvloop`/`httptools`(둘 다 네이티브)는 버전 고정이 아예 없음 — Render가 배포마다 `pip install`을 새로 하므로 로컬 테스트 버전과 실제 배포 버전이 달라질 수 있음(백로그, 아직 안 고침). `pip-audit`는 현재 고정 버전 기준으로 알려진 취약점 없음을 확인(에이전트가 직접 실행).
+- **보안**: 독립 에이전트가 이전 세션의 자체 점검 결과(비밀키 환경변수 처리, RLS, XSS 이스케이프, 저장 실패 격리 등)를 전부 재검증해 확인함. 새로 발견한 것은 MEDIUM 1건뿐: **`/api/correct`가 인증도 업로드 크기 제한도 없어서, 큰 파일 하나가 교정 엔진의 토큰 단위 실시간 사전 API 호출(표준국어대사전/우리말샘/kornorms)을 통해 공유 API 키 쿼터 자체를 고갈시킬 수 있음** — 단순 메모리 DoS보다 "핵심 기능 전체가 막힌다"는 점에서 실질적. 나머지(PostgREST `eq.{report_id}` 조합, `.docx` XXE, 경로 조작, 위험 함수 사용 여부)는 전부 안전함을 재확인.
+  - **구현(수정 완료)**: `api.py`에 `_MAX_UPLOAD_BYTES = 1_000_000`(1MB) 도입, `file.file.read(_MAX_UPLOAD_BYTES + 1)`로 읽어 초과 시 413 에러로 즉시 거절. 정상 크기 업로드는 회귀 없이 그대로 동작(직접 모의 테스트로 확인 — 초과 파일은 413, 정상 파일은 기존과 동일하게 flags 4건/applied_log 6건).
+- **SQL 쿼리**: 애플리케이션 코드는 직접 SQL을 실행하지 않는다 — `store.py`가 Supabase REST API(PostgREST)를 HTTP로 호출할 뿐이고, 실제 SQL은 `supabase_schema.sql`(Supabase SQL Editor에서 한 번 수동 실행) 하나뿐이다. `store.py`의 `f"eq.{report_id}"` 조합은 `requests`가 값 전체를 퍼센트 인코딩하므로 실제로는 주입 불가능함을 확인(에이전트 교차 검증). 스키마 자체(RLS 설정)는 정상이나, 컬럼명 `original_srt`/`corrected_srt`가 여전히 자막 전용 이름으로 남아있어 §24 이전에 정리한 "더 이상 자막 전용 아님" 프레이밍과 안 맞음 — 보안 문제는 아니고 리네이밍 후보(백로그).
+
+## 26. 한글 맞춤법 제57항(소리 혼동 쌍) 검사 전체 제거 (2026-07-17)
+
+사용자가 "마치다/맞히다" 플래그를 다시 보고 재지적: "이 교정기는 말하기와 무관한 텍스트 교정기인데, 소리가 비슷해 헷갈리는 건 발음 차이로 인한 혼동이니 무의미한 교정이다."
+
+- **기존 결정과의 관계**: §21에서 이미 "느리다/늘이다/늘리다", "주리다/줄이다" 두 쌍만 "의미가 뚜렷이 달라 혼동될 일이 없다"는 개별 판단으로 제외한 적이 있음. 이번엔 그 논리를 제57항 전체로 확장하자는 요청이라, "반드시/반듯이", "시키다/식히다"처럼 실제 타이핑 과정에서도 흔히 오타로 나는 쌍들은 성격이 다르지 않냐고 먼저 반문함(듣고 헷갈리는 것과 별개로 쓰다가도 흔히 틀리는 쌍이라는 근거).
+- **사용자 최종 판단**: "오타, 즉 타이핑은 따로 설명할 필요가 없고, 느리다/늘리다/늘이다 역시 개념상 혼동될 일이 없기 때문에 따로 설명할 필요가 없다" — 소리 혼동이든 단순 타이핑 실수든 이 도구가 별도로 설명(플래그)할 필요가 없다는 결론. 이에 따라 제57항 검사 자체를 전부 제거하기로 확정.
+- **구현**: `common_errors.py`의 `CONFUSABLE_PAIRS`(20개 쌍) 삭제, `engine.py`의 `check_confusable_words()`와 그 전용 헬퍼(`_CONFUSABLE_LOOKUP`, `_MACHIDA_OBJECTS`/`_MAJIDA_OBJECTS`/`_MACHIDA_MAJIDA_PAIR`/`_machida_majida_resolved()` — "마치다/맞히다" 목적어 기반 예외 처리 전용) 전부 삭제, `correct_entries()`의 플래그 목록에서도 제거. 죽은 코드를 남기지 않고 완전히 삭제함(관련 원칙: 확실히 안 쓰는 코드는 흔적 없이 지운다).
+- **검증**: 관련 테스트(`TestMachidaMajidaObjectDisambiguation` 4건) 삭제, `test_integration.py`의 전체 파이프라인 기대값도 갱신(entry 8 "고개를 반듯이 들어라"가 더 이상 플래그되지 않음 — `flag_line_indices`를 `{4,8,9,10}`에서 `{4,9,10}`으로 수정). 전체 58개 테스트 통과.
+
 ## 16. TBD (추후 결정 필요)
 
 - 개발 일정 / 목표 기간

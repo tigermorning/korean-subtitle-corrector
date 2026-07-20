@@ -38,7 +38,7 @@ import re
 
 from kiwipiepy import Kiwi
 
-from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
+from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS, PURIFIED_TERMS
 from .dictionary import (
     compound_status,
     loanword_fix,
@@ -70,7 +70,6 @@ def _inside_any_span(pos: int, spans: list[tuple[int, int]]) -> bool:
 # 이상하게 바꾼다는 지적과 같은 종류의 문제).
 _SPELLING_CHECK_TAGS = {"NNG", "VV", "VA"}
 _LOANWORD_TAGS = {"NNG", "NNP"}
-_CONFUSABLE_LOOKUP = {word: pair for pair in CONFUSABLE_PAIRS for word in pair}
 
 # 조사(J*)·어미(E*)·파생접미사(XS*)·서술격 조사 '이다'(VCP): 한글 맞춤법
 # 제41항에 따라 앞말에 무조건 붙여 쓰는 형태소. "이 태그가 다음 토큰이면
@@ -765,73 +764,6 @@ def _usage_note(words: list[str]) -> str:
     return " / ".join(notes)
 
 
-# "마치다"(어떤 일·과정이 끝나다)/"맞히다"(정답·목표를 맞게 하다)는
-# 제57항 공식 혼동 쌍이지만(실제로 발음이 같음: [마치다]), 대부분의 실제
-# 문장은 목적어(를/을 앞의 명사)만 봐도 의미가 명확히 갈린다 — "전개를
-# 마치다"에서 "맞히다"일 가능성은 애초에 없다. 두 뜻풀이(표준국어대사전)에
-# 나오는 전형적 목적어 부류를 근거로 삼아, 목적어가 한쪽 부류에만 속하고
-# 실제 쓰인 동사도 그 부류와 일치하면 플래그하지 않는다. 목적어가 둘 다
-# 아니거나 두 부류 모두에 걸치는 애매한 경우는 지금처럼 계속 플래그한다 —
-# 자동 교정은 하지 않는다(다른 확정 오류처럼 하나의 정답만 있는 게 아니라
-# 목적어 목록 기반 추정이므로, "애매하면 자동 수정 안 함" 원칙 유지).
-_MACHIDA_OBJECTS = {
-    "일", "과정", "절차", "수업", "훈련", "전개", "임무", "공연", "회의",
-    "여행", "작업", "촬영", "방송", "학업", "근무", "경기", "시합", "대회",
-    "행사", "공사", "수술", "발표", "강의", "일정", "여정", "준비", "정리",
-    "식사", "복무", "생활", "임기", "계약", "설치", "공격", "작전",
-}
-_MAJIDA_OBJECTS = {
-    "정답", "답", "문제", "수수께끼", "비", "눈", "우박", "주사", "침",
-    "화살", "과녁", "표적", "총알", "퀴즈",
-}
-_MACHIDA_MAJIDA_PAIR = ("마치다", "맞히다")
-
-
-def _machida_majida_resolved(tokens, i: int) -> bool:
-    """tokens[i]가 '마치다'/'맞히다'일 때, 바로 앞 목적어로 의미가 이미
-    명확히 갈리는지 확인한다. 명확하면 True(플래그 불필요)."""
-    if i < 2 or tokens[i - 1].tag != "JKO":
-        return False
-    obj_lemma = tokens[i - 2].lemma
-    verb_lemma = tokens[i].lemma
-    if obj_lemma in _MACHIDA_OBJECTS and obj_lemma not in _MAJIDA_OBJECTS:
-        return verb_lemma == "마치다"
-    if obj_lemma in _MAJIDA_OBJECTS and obj_lemma not in _MACHIDA_OBJECTS:
-        return verb_lemma == "맞히다"
-    return False
-
-
-def check_confusable_words(index: int, text: str) -> FlagItem | None:
-    """한글 맞춤법 제57항의 혼동 쌍(가름/갈음, 반드시/반듯이 등 — 소리는
-    비슷하거나 같지만 표기·뜻이 다른 말)이 등장하면 항상 확인 플래그한다.
-    (참고: 이 쌍들을 코드/사용자 안내문에서는 "동음이의어"라고 부르지 않는다
-    — 표기 자체가 다른 경우가 많아 엄밀히는 "동음이의어"[표기·발음이 모두
-    같은 서로 다른 단어]와는 다른 개념이라, "소리가 비슷해 헷갈리는 말"로
-    표현한다.) 의미가 완전히 다른 별개의 단어라 어느 쪽이
-    맞는지는 문맥을 봐야 알 수 있으므로, check_spelling과 달리 절대 자동
-    교정하지 않는다. 다만 "마치다/맞히다"는 목적어로 의미가 명확히 갈리는
-    경우가 대부분이라 예외적으로 그런 경우만 플래그를 건너뛴다(위 설명 참고)."""
-    tokens = _kiwi.tokenize(text)
-    matched = []
-    for i, t in enumerate(tokens):
-        for candidate in (t.form, t.lemma):
-            pair = _CONFUSABLE_LOOKUP.get(candidate)
-            if not pair:
-                continue
-            if pair == _MACHIDA_MAJIDA_PAIR and _machida_majida_resolved(tokens, i):
-                continue
-            if pair not in matched:
-                matched.append(pair)
-    if not matched:
-        return None
-    pairs_desc = ", ".join("/".join(pair) for pair in matched)
-    reason = f"한글 맞춤법 제57항: 소리가 비슷해 혼동하기 쉬운 말 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)"
-    note = _usage_note([word for pair in matched for word in pair])
-    if note:
-        reason += f" | 우리말샘 용례) {note}"
-    return FlagItem(line_index=index, original_text=text, reason=reason)
-
-
 def check_purified_terms(index: int, text: str) -> FlagItem | None:
     """일반 순화어(예: 반팔->반소매)가 등장하면 확인 플래그한다. 차별적
     표현과 달리 관례적 표현이 여전히 널리 쓰이는 경우가 있어(예: 유모차는
@@ -1249,7 +1181,6 @@ def correct_entries(
             f
             for f in (
                 check_spelling(e.index, corrected_text),
-                check_confusable_words(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
