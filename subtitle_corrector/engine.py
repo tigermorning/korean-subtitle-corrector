@@ -230,6 +230,15 @@ def _mechanical_respace(text: str) -> str:
             if t1.tag == "EC" and gap_start == gap_end:
                 continue
             desired_gap = " "  # 어절이 완결된 지점 -> 새 어절은 항상 띄어씀
+        elif (
+            t1.tag == "MAJ"
+            and gap_start == gap_end
+            and t2.tag not in _ATTACH_TAGS
+        ):
+            # 연결부사("그래서", "그런데", "하지만" 등)는 항상 새 어절의 시작이므로
+            # 뒤에 공백이 있어야 한다. 조사(J*) 뒤에는 붙는 경우("그런데도")가 있어
+            # _ATTACH_TAGS인 경우는 건드리지 않는다(보조사 "도"는 앞말에 붙임).
+            desired_gap = " "
         else:
             continue  # 애매한 지점(내용어·합성어 후보·보조용언·의존명사 등): 원문 간격 유지
         if text[gap_start:gap_end] != desired_gap:

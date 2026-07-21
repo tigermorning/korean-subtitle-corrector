@@ -601,3 +601,32 @@ class TestExistingProtectionPreserved:
     def test_gatayo_protected(self):
         """'같아요'의 붙여쓰기가 보존되어야 한다."""
         assert correct_particle_spacing("같아요") == ("같아요", [])
+
+
+class TestMajSpacingAutoFix:
+    """연결부사(MAJ) 뒤에 오는 내용어와의 경계 자동 교정 테스트. 연결부사
+    ("그래서", "그런데", "하지만" 등)는 항상 새 어절의 시작이므로 뒤에 공백이
+    있어야 한다. 단, 보조사(JX) 등 조사는 앞말에 붙이므로 연결부사+조사는
+    교정하지 않는다."""
+
+    def test_maj_plus_vv_spacing(self):
+        """'그래서먹었다' → '그래서 먹었다' (연결부사+동사)"""
+        assert correct_particle_spacing("그래서먹었다") == (
+            "그래서 먹었다",
+            ["그래서먹었다 -> 그래서 먹었다"],
+        )
+
+    def test_maj_plus_nng_spacing(self):
+        """'그런데비가' → '그런데 비가' (연결부사+명사)"""
+        assert correct_particle_spacing("그런데비가") == (
+            "그런데 비가",
+            ["그런데비가 -> 그런데 비가"],
+        )
+
+    def test_maj_plus_jx_no_split(self):
+        """'그런데도'는 보조사 "도"가 앞말에 붙어야 하므로 변경 없음."""
+        assert correct_particle_spacing("그런데도") == ("그런데도", [])
+
+    def test_maj_plus_jx_no_split_geuraeseodo(self):
+        """'그래서도'는 보조사 "도"가 앞말에 붙어야 하므로 변경 없음."""
+        assert correct_particle_spacing("그래서도") == ("그래서도", [])
