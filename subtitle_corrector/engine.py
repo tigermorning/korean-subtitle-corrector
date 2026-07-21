@@ -193,6 +193,16 @@ def _mechanical_respace(text: str) -> str:
         gap_end = t2.start
         if gap_end < gap_start:
             continue  # 겹치는 형태소(예: '해'=하+어) - 실제 간격이 없어 건드릴 수 없음
+        if t1.len == 0 or t2.len == 0:
+            continue  # 길이 0인 생략된 형태소(예: '없다잖나'의 '하', '되겠냐니'의
+            # '하'="되겠냐고 하니"의 줄어든 '고 하'가 kiwi 내부적으로 길이 0으로
+            # 분석됨)와 맞닿은 지점은 실제 글자 사이의 경계가 아니라 kiwi가
+            # 추정한 유령 형태소의 경계다. 이 경계에 강제로 공백을 넣으면 실제로는
+            # 앞뒤로 붙어 있는 두 "보이는" 글자 사이를 갈라놓는 결과가 된다(예:
+            # EC '냐'+길이 0 '하'+EC '니'="냐니"인데 EC 뒤는 항상 새 어절이라는
+            # 규칙을 길이 0 토큰에도 그대로 적용해 "냐 니"로 잘못 갈라놓던 버그).
+            # _protect_unfounded_respacing()의 _tokenization_unstable_near()와
+            # 같은 이유로, 길이 0 토큰 근처는 아예 신뢰하지 않는다.
         if "\n" in text[gap_start:gap_end]:
             continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
         if t2.form == "요" and t2.len == 1 and gap_start == gap_end:

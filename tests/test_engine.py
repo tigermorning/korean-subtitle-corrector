@@ -151,6 +151,16 @@ class TestParticleSpacing:
         """존대 보조사 '요'를 kiwi가 관형사(MM)로 잘못 태깅해도 그대로 둔다."""
         assert correct_particle_spacing("때만요") == ("때만요", [])
 
+    def test_nyani_quotative_ending_not_split(self):
+        """"-냐니"(-냐고 하니의 축약, 표준국어대사전 등재 어미)를 kiwi가
+        내부적으로 "냐"+길이 0인 생략된 "하"+"니"로 분석하는데, EC 뒤는
+        항상 새 어절이라는 규칙을 길이 0 토큰에도 그대로 적용해 "되겠냐니"를
+        "되겠냐 니"로 잘못 갈라놓던 실사용 버그(2026-07-21)."""
+        assert correct_particle_spacing("상대가 되겠냐니, 무슨 말이에요?") == (
+            "상대가 되겠냐니, 무슨 말이에요?",
+            [],
+        )
+
 
 class TestCompoundSpacing:
     """사전에 하나의 합성어(하이픈 표기)로 등재된 경우만 자동으로 붙인다."""
