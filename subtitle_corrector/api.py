@@ -20,6 +20,12 @@ app = FastAPI(title="한국어 자막 교정 API")
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 _ALLOWED_EXTENSIONS = {".srt", ".txt", ".docx"}
+# 인증도 업로드 크기 제한도 없으면, 큰 파일 하나가 교정 엔진의 토큰 단위
+# 실시간 사전 API 호출(표준국어대사전/우리말샘/kornorms)을 통해 공유 API 키
+# 쿼터 자체를 고갈시킬 수 있다(§25 보안 검토, 2026-07-17) — 단순 메모리 DoS
+# 보다 "핵심 기능 전체가 막힌다"는 점에서 더 실질적인 위험이라 크기 제한을
+# 둔다.
+_MAX_UPLOAD_BYTES = 1_000_000
 
 
 def _split_words(raw: str) -> list[str]:
@@ -46,7 +52,10 @@ def correct_subtitle(file: UploadFile, names: str = Form("")):
     # 범용 엔진이다(engine.correct_entries). .srt는 타임코드 구조를 보존해야
     # 하고, 일반 텍스트는 줄 구성만 보존하면 되므로 파일 형식에 따라
     # 파서/저장 함수만 갈아 끼운다 — 교정 로직 자체는 완전히 동일하다.
-    raw = file.file.read()
+    raw = file.file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"파일이 너무 큽니다. 최대 {_MAX_UPLOAD_BYTES // 1_000_000}MB까지 지원합니다.")
+
     with tempfile.TemporaryDirectory() as tmp:
         in_path = Path(tmp) / f"input{ext}"
         in_path.write_bytes(raw)

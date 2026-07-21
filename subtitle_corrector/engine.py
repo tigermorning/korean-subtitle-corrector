@@ -38,7 +38,7 @@ import re
 
 from kiwipiepy import Kiwi
 
-from .common_errors import ALWAYS_WRONG, CONFUSABLE_PAIRS, DISCRIMINATORY_TERMS, PURIFIED_TERMS
+from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS, PURIFIED_TERMS
 from .dictionary import (
     compound_status,
     loanword_fix,
@@ -70,7 +70,6 @@ def _inside_any_span(pos: int, spans: list[tuple[int, int]]) -> bool:
 # 이상하게 바꾼다는 지적과 같은 종류의 문제).
 _SPELLING_CHECK_TAGS = {"NNG", "VV", "VA"}
 _LOANWORD_TAGS = {"NNG", "NNP"}
-_CONFUSABLE_LOOKUP = {word: pair for pair in CONFUSABLE_PAIRS for word in pair}
 
 # 조사(J*)·어미(E*)·파생접미사(XS*)·서술격 조사 '이다'(VCP): 한글 맞춤법
 # 제41항에 따라 앞말에 무조건 붙여 쓰는 형태소. "이 태그가 다음 토큰이면
@@ -794,73 +793,6 @@ def _usage_note(words: list[str]) -> str:
     return " / ".join(notes)
 
 
-# "마치다"(어떤 일·과정이 끝나다)/"맞히다"(정답·목표를 맞게 하다)는
-# 제57항 공식 혼동 쌍이지만(실제로 발음이 같음: [마치다]), 대부분의 실제
-# 문장은 목적어(를/을 앞의 명사)만 봐도 의미가 명확히 갈린다 — "전개를
-# 마치다"에서 "맞히다"일 가능성은 애초에 없다. 두 뜻풀이(표준국어대사전)에
-# 나오는 전형적 목적어 부류를 근거로 삼아, 목적어가 한쪽 부류에만 속하고
-# 실제 쓰인 동사도 그 부류와 일치하면 플래그하지 않는다. 목적어가 둘 다
-# 아니거나 두 부류 모두에 걸치는 애매한 경우는 지금처럼 계속 플래그한다 —
-# 자동 교정은 하지 않는다(다른 확정 오류처럼 하나의 정답만 있는 게 아니라
-# 목적어 목록 기반 추정이므로, "애매하면 자동 수정 안 함" 원칙 유지).
-_MACHIDA_OBJECTS = {
-    "일", "과정", "절차", "수업", "훈련", "전개", "임무", "공연", "회의",
-    "여행", "작업", "촬영", "방송", "학업", "근무", "경기", "시합", "대회",
-    "행사", "공사", "수술", "발표", "강의", "일정", "여정", "준비", "정리",
-    "식사", "복무", "생활", "임기", "계약", "설치", "공격", "작전",
-}
-_MAJIDA_OBJECTS = {
-    "정답", "답", "문제", "수수께끼", "비", "눈", "우박", "주사", "침",
-    "화살", "과녁", "표적", "총알", "퀴즈",
-}
-_MACHIDA_MAJIDA_PAIR = ("마치다", "맞히다")
-
-
-def _machida_majida_resolved(tokens, i: int) -> bool:
-    """tokens[i]가 '마치다'/'맞히다'일 때, 바로 앞 목적어로 의미가 이미
-    명확히 갈리는지 확인한다. 명확하면 True(플래그 불필요)."""
-    if i < 2 or tokens[i - 1].tag != "JKO":
-        return False
-    obj_lemma = tokens[i - 2].lemma
-    verb_lemma = tokens[i].lemma
-    if obj_lemma in _MACHIDA_OBJECTS and obj_lemma not in _MAJIDA_OBJECTS:
-        return verb_lemma == "마치다"
-    if obj_lemma in _MAJIDA_OBJECTS and obj_lemma not in _MACHIDA_OBJECTS:
-        return verb_lemma == "맞히다"
-    return False
-
-
-def check_confusable_words(index: int, text: str) -> FlagItem | None:
-    """한글 맞춤법 제57항의 혼동 쌍(가름/갈음, 반드시/반듯이 등 — 소리는
-    비슷하거나 같지만 표기·뜻이 다른 말)이 등장하면 항상 확인 플래그한다.
-    (참고: 이 쌍들을 코드/사용자 안내문에서는 "동음이의어"라고 부르지 않는다
-    — 표기 자체가 다른 경우가 많아 엄밀히는 "동음이의어"[표기·발음이 모두
-    같은 서로 다른 단어]와는 다른 개념이라, "소리가 비슷해 헷갈리는 말"로
-    표현한다.) 의미가 완전히 다른 별개의 단어라 어느 쪽이
-    맞는지는 문맥을 봐야 알 수 있으므로, check_spelling과 달리 절대 자동
-    교정하지 않는다. 다만 "마치다/맞히다"는 목적어로 의미가 명확히 갈리는
-    경우가 대부분이라 예외적으로 그런 경우만 플래그를 건너뛴다(위 설명 참고)."""
-    tokens = _kiwi.tokenize(text)
-    matched = []
-    for i, t in enumerate(tokens):
-        for candidate in (t.form, t.lemma):
-            pair = _CONFUSABLE_LOOKUP.get(candidate)
-            if not pair:
-                continue
-            if pair == _MACHIDA_MAJIDA_PAIR and _machida_majida_resolved(tokens, i):
-                continue
-            if pair not in matched:
-                matched.append(pair)
-    if not matched:
-        return None
-    pairs_desc = ", ".join("/".join(pair) for pair in matched)
-    reason = f"한글 맞춤법 제57항: 소리가 비슷해 혼동하기 쉬운 말 확인 필요: {pairs_desc} (문맥에 맞는 단어인지 확인)"
-    note = _usage_note([word for pair in matched for word in pair])
-    if note:
-        reason += f" | 우리말샘 용례) {note}"
-    return FlagItem(line_index=index, original_text=text, reason=reason)
-
-
 def check_purified_terms(index: int, text: str) -> FlagItem | None:
     """일반 순화어(예: 반팔->반소매)가 등장하면 확인 플래그한다. 차별적
     표현과 달리 관례적 표현이 여전히 널리 쓰이는 경우가 있어(예: 유모차는
@@ -1015,15 +947,32 @@ def _tokenization_unstable_near(tokens, before, after) -> bool:
 
 
 # "안"(부정 부사)+"되다"는 뜻이 갈리는 두 가지 서로 다른 구성이다 —
-# "안되다"(형용사, 하나의 단어: 상황이 좋지 않다, 예: "공부가 안된다")와
-# "안 되다"(부정 부사 "안"+동사 "되다": 허용·가능하지 않다, 예: "~하면
-# 안 됩니다")는 사전 등재 여부만으로는 구분할 수 없다(§20 실사용 버그).
-# 다만 "-면"/"-거든"/"-아서는/-어서는" 같은 조건·전제 어미 바로 뒤에 오는
-# "안 되다"는 사실상 예외 없이 금지·불가 구성이므로, 이 경우만 확실한
-# 문법적 근거로 삼아 항상 띄어 쓰도록 강제한다. 그 외의 경우(예: "공부가
-# 안된다")는 이 신호가 없으므로 기존 사전 등재 판단(항상 붙임)을 그대로
-# 따른다 — 확신이 없는 나머지 경우까지 추정으로 판단하지 않는다.
+# "안되다"(형용사/동사, 하나의 단어: 상황이 좋지 않다·훌륭하게 되지 못하다
+# 등, 예: "공부가 안된다")와 "안 되다"(부정 부사 "안"+동사 "되다": 허용·
+# 가능하지 않다, 예: "~하면 안 됩니다")는 사전 등재 여부만으로는 구분할 수
+# 없다(§20 실사용 버그). 다만 "-면"/"-거든"/"-아서는/-어서는" 같은 조건·전제
+# 어미로 이어지는 절 안에 오는 "안 되다"는 사실상 예외 없이 금지·불가
+# 구성이므로, 이 경우만 확실한 문법적 근거로 삼아 항상 띄어 쓰도록 강제한다.
+# 그 외의 경우(예: "공부가 안된다")는 이 신호가 없으므로 기존 사전 등재
+# 판단(항상 붙임)을 그대로 따른다 — 확신이 없는 나머지 경우까지 추정으로
+# 판단하지 않는다.
 _CONDITIONAL_EC_FORMS = {"면", "거든", "다면", "라면"}
+
+# 2026-07-21 발견: "그렇게 하시면 결과가 안됩니다"처럼 조건 어미와 "안" 사이에
+# 주어 등 다른 어절이 끼면, 조건 어미가 "안" 바로 앞 토큰인지만 보는 인접
+# 검사가 신호를 놓친다. 그 사이에 오는 어절이 체언(+조사)·부사뿐이고 중간에
+# 용언 어간·다른 종결/연결 어미·문장부호가 없으면 여전히 같은 절 안이라고
+# 안전하게 볼 수 있으므로, 그 범위까지는 뒤로 훑어 조건 어미를 찾는다.
+# 용언 어간이나 다른 어미는 그 자체로 끝나는 형태소가 없어 walk가 그 어미
+# 토큰에서 먼저 멈추므로 별도로 막지 않아도 안전하다 — 처음 만나는 EC가
+# 조건형이 아니면 그 자리에서 탐색을 끝낸다(더 앞쪽의 조건 어미는 다른 절에
+# 속하므로 무시).
+_INTERVENING_TAGS = {
+    "NNG", "NNP", "NNB", "NR", "SN", "XSN",
+    "JKS", "JKC", "JKG", "JKO", "JKB", "JKV", "JKQ", "JX", "JC",
+    "MAG",
+}
+_MAX_CONDITIONAL_LOOKBACK = 5
 
 
 def _token_index(tokens, target) -> int | None:
@@ -1033,20 +982,33 @@ def _token_index(tokens, target) -> int | None:
     return None
 
 
+def _conditional_marker_before(tokens, start_idx: int):
+    """start_idx부터 뒤로 훑어, 같은 절 안에서 처음 만나는 어미(EC) 토큰을
+    돌려준다. 체언·조사·부사(_INTERVENING_TAGS)는 건너뛰고, 그 외 태그나
+    탐색 범위(_MAX_CONDITIONAL_LOOKBACK)를 넘으면 None을 돌려준다."""
+    i = start_idx
+    steps = 0
+    while i >= 0 and steps < _MAX_CONDITIONAL_LOOKBACK:
+        token = tokens[i]
+        if token.tag == "EC":
+            return token
+        if token.tag not in _INTERVENING_TAGS:
+            return None
+        i -= 1
+        steps += 1
+    return None
+
+
 def _andoeda_forces_split(tokens, after) -> bool:
-    """after가 '되다'(그 직전이 부정 부사 '안')일 때, 그 앞 문맥이 조건·전제
-    어미로 끝나는 금지 구성인지 확인한다."""
+    """after가 '되다'(그 직전이 부정 부사 '안')일 때, 그 앞 절이 조건·전제
+    어미로 이어지는 금지 구성인지 확인한다."""
     idx = _token_index(tokens, after)
     if idx is None or idx < 2:
         return False
     if tokens[idx - 1].form != "안" or tokens[idx - 1].tag != "MAG":
         return False
-    marker = tokens[idx - 2]
-    marker_idx = idx - 2
-    if marker.tag == "JX" and marker_idx - 1 >= 0:
-        # "-어서는/-아서는"처럼 어미(EC) 뒤에 보조사(는/도)가 덧붙는 경우
-        marker = tokens[marker_idx - 1]
-    if marker.tag != "EC":
+    marker = _conditional_marker_before(tokens, idx - 2)
+    if marker is None:
         return False
     return marker.form in _CONDITIONAL_EC_FORMS or marker.form.startswith(("어서", "아서"))
 
@@ -1287,7 +1249,6 @@ def correct_entries(
             f
             for f in (
                 check_spelling(e.index, corrected_text),
-                check_confusable_words(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
