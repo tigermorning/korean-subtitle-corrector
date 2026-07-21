@@ -501,3 +501,103 @@ class TestAndoedaSpacingProtection:
             "농사가 안돼",
             [],
         )
+
+    def test_andoeda_keep_together(self):
+        """'안됩니다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("안됩니다") == (
+            "안됩니다",
+            [],
+        )
+
+
+class TestParticleSpacingAutoFix:
+    """조사 띄어쓰기 자동 교정 테스트. 조사가 앞말과 띄어져 있는 경우
+    원칙대로 붙여쓰기로 교정되어야 한다 (한글 맞춤법 제41항)."""
+
+    def test_eun_spacing(self):
+        """'은' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("나는학생이다") == (
+            "나는 학생이다",
+            ["나는학생이다 -> 나는 학생이다"],
+        )
+
+    def test_eul_spacing(self):
+        """'을' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("밥을먹었다") == (
+            "밥을 먹었다",
+            ["밥을먹었다 -> 밥을 먹었다"],
+        )
+
+    def test_e_spacing(self):
+        """'에' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("서울에산다") == (
+            "서울에 산다",
+            ["서울에산다 -> 서울에 산다"],
+        )
+
+    def test_i_spacing(self):
+        """'이' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("가방이무겁다") == (
+            "가방이 무겁다",
+            ["가방이무겁다 -> 가방이 무겁다"],
+        )
+
+    def test_reul_spacing(self):
+        """'를' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("한국어를읽었다") == (
+            "한국어를 읽었다",
+            ["한국어를읽었다 -> 한국어를 읽었다"],
+        )
+
+
+class TestContractedExpressionProtection:
+    """축약된 표현 보호 테스트. EC+VV, EF+요 등이 축약되어 붙어 있는 경우
+    kiwi가 분리하더라도 원문의 붙여쓰기가 보존되어야 한다."""
+
+    def test_gatjanaeyo_not_split(self):
+        """'같잖아요'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("같잖아요") == (
+            "같잖아요",
+            [],
+        )
+
+    def test_halsu_itta_not_split(self):
+        """'할수있다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("할수있다") == (
+            "할수있다",
+            [],
+        )
+
+    def test_mokgo_sipda_not_split(self):
+        """'먹고싶다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("먹고싶다") == (
+            "먹고싶다",
+            [],
+        )
+
+
+class TestExistingProtectionPreserved:
+    """기존 보호 로직이 여전히 동작하는지 확인하는 테스트."""
+
+    def test_english_particle_spacing(self):
+        """영어 단어 뒤 조사 띄어쓰기가 교정되어야 한다."""
+        assert correct_particle_spacing(" Books를읽었다") == (
+            " Books를 읽었다",
+            [" Books를읽었다 ->  Books를 읽었다"],
+        )
+
+    def test_hanbeon_protected(self):
+        """'한번'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("한번") == ("한번", [])
+
+    def test_geuttae_protected(self):
+        """'그때'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("그때") == ("그때", [])
+
+    def test_geureoldeuthada_protected(self):
+        """'그럴듯하다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("그럴듯하다") == ("그럴듯하다", [])
+
+    def test_gatayo_protected(self):
+        """'같아요'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("같아요") == ("같아요", [])
