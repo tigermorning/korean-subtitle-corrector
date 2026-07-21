@@ -15,6 +15,7 @@
 """
 
 from subtitle_corrector.engine import (
+    check_nonstandard_terms,
     check_spacing,
     check_spelling,
     correct_always_wrong,
@@ -22,7 +23,6 @@ from subtitle_corrector.engine import (
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_loanwords,
-    correct_nonstandard_terms,
     correct_particle_spacing,
 )
 
@@ -187,22 +187,38 @@ class TestLoanwordFix:
 
 class TestNonstandardTermReplacement:
     """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 직접 명시한 비표준
-    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 자동 교정한다.
+    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 확인 플래그한다.
     kornorms(외래어 표기 용례)는 "요오드"를 오히려 정답으로 등재해 두고
-    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견."""
+    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견.
 
-    def test_iodine_corrected_to_standard_term(self):
-        assert correct_nonstandard_terms("요오드가 필요합니다") == (
-            "아이오딘이 필요합니다",
-            ["요오드 -> 아이오딘"],
-        )
+    처음엔 자동 교정했으나, "자이데코"(우리말샘 규범 표기: "자이더코")
+    실사용 사례에서 규범 표기 자체가 독립된 표제어가 아니라 자동 반영 뒤
+    check_spelling()이 그 결과를 다시 "사전에 없는 단어"로 중복 플래그하는
+    문제가 발견되어(2026-07-21), 순화어(check_purified_terms)와 같은 확인
+    플래그 방식으로 전환했다."""
 
-    def test_homograph_with_standard_sense_not_falsely_corrected(self):
+    def test_iodine_flagged_with_standard_term_suggestion(self):
+        flag = check_nonstandard_terms(0, "요오드가 필요합니다")
+        assert flag is not None
+        assert flag.suggested_fix == "아이오딘이 필요합니다"
+        assert "요오드->아이오딘" in flag.reason
+
+    def test_homograph_with_standard_sense_not_falsely_flagged(self):
         """"집"은 "즙"의 비표준 표기라는 동형이의어도 있지만, "집"(거처)
         자체는 완전히 표준이다 — 동형이의어 중 하나라도 표준이면 전체를
         비표준으로 단정하면 안 된다 (실사용 버그: "그리고 나서 집에 갔다"가
         "그러고 나서 즙에 갔다"로 잘못 고쳐짐)."""
-        assert correct_nonstandard_terms("나는 집에 간다") == ("나는 집에 간다", [])
+        assert check_nonstandard_terms(0, "나는 집에 간다") is None
+
+    def test_zydeco_not_double_flagged_by_check_spelling(self):
+        """"자이데코"(규범 표기: "자이더코")는 그 규범 표기 자체가 독립된
+        사전 표제어가 아니라, check_spelling()이 별도로 "사전에 없는 단어"로
+        중복 플래그하지 않아야 한다 — check_nonstandard_terms() 하나로만
+        확인 플래그가 나가야 한다."""
+        assert check_spelling(0, "이건 자이데코 스타일이에요") is None
+        flag = check_nonstandard_terms(0, "이건 자이데코 스타일이에요")
+        assert flag is not None
+        assert "자이데코->자이더코" in flag.reason
 
 
 class TestApplyReplacementsParticleAllomorph:

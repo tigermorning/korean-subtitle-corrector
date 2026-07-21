@@ -475,9 +475,9 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
     return _apply_replacements(text, ALWAYS_WRONG)
 
 
-def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
+def check_nonstandard_terms(index: int, text: str) -> FlagItem | None:
     """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 이미 명시해 둔 비표준
-    표기(예: "요오드"->"아이오딘")를 자동 교정한다.
+    표기(예: "요오드"->"아이오딘")를 확인 플래그한다.
 
     correct_always_wrong()의 ALWAYS_WRONG(정적 목록)이나 correct_loanwords()의
     kornorms(외래어 표기 용례)와는 다른 세 번째 원천이다 — "요오드"는
@@ -486,7 +486,17 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     확인된다(실사용 검증으로 발견). 매번 실시간으로 우리말샘을 조회하므로
     정적 목록과 달리 국립국어원이 표준 용어를 바꿔도 코드 수정이 필요 없다.
 
-    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    처음엔 초코렛->콜릿류 kornorms 확정 오류와 같은 성격이라고 보고 자동
+    반영했으나, 실사용 검증(2026-07-21)으로 두 가지 문제가 드러나 확인
+    플래그로 전환했다: (1) "자이데코"(우리말샘 규범 표기: "자이더코")처럼
+    규범 표기 자체가 독립된 표제어로 등재되어 있지 않은 경우, 자동 반영한
+    뒤 check_spelling()이 그 결과("자이더코")를 다시 "사전에 없는 단어"로
+    중복 플래그하는 구조적 문제가 있었다. (2) 더 근본적으로, 외래어 장르명
+    같은 경우 국립국어원 규범 표기와 실제 관례가 갈릴 수 있어(순화어
+    유모차/유아차와 같은 성격) 문맥과 무관하게 항상 자동 반영해도 되는
+    "확정 오류"로 단정할 수 없다.
+
+    반환값: 확인 필요 항목이 있으면 FlagItem, 없으면 None
     """
     replacements = {}
     for t in _kiwi.tokenize(text):
@@ -496,8 +506,15 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
         if replacement:
             replacements[t.form] = replacement
     if not replacements:
-        return text, []
-    return _apply_replacements(text, replacements)
+        return None
+    suggested_fix, _ = _apply_replacements(text, replacements)
+    suggestions = ", ".join(f"{original}->{fix}" for original, fix in replacements.items())
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=f"국립국어원 규범 표기 확인 필요: {suggestions} (실제 관례가 더 널리 쓰일 수도 있음)",
+        suggested_fix=suggested_fix,
+    )
 
 
 def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
@@ -730,7 +747,10 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
     unknown = [
         w
         for w in _content_lemmas(text)
-        if not word_exists(w) and not _is_productive_demonym_compound(w) and not search_kornorms(w)
+        if not word_exists(w)
+        and not _is_productive_demonym_compound(w)
+        and not search_kornorms(w)
+        and not standard_term_replacement(w)
     ]
     if unknown:
         return FlagItem(
@@ -1132,7 +1152,6 @@ def correct_entries(
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
-        corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
         applied_log.extend(
             f"[{e.index}] {fix}"
@@ -1141,7 +1160,6 @@ def correct_entries(
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
-            + nonstandard_fixes
             + discriminatory_fixes
         )
 
@@ -1182,6 +1200,7 @@ def correct_entries(
             for f in (
                 check_spelling(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
+                check_nonstandard_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f
