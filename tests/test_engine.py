@@ -473,6 +473,15 @@ class TestZeroLengthTokenSpacing:
             [],
         )
 
+    def test_contracted_ec_vv_not_split(self):
+        """'있냐하면요'처럼 EC(연결어미)+VV(동사)가 축약되어 붙어 있는 경우,
+        원문의 붙여쓰기가 보존되어야 한다. _MANDATORY_BOUNDARY_TAGS에 EC가
+        포함되어 있어 어절 경계로 오인하고 공백을 삽입하는 버그 회귀 방지."""
+        assert correct_particle_spacing("여기 뭐라고 돼 있냐하면요") == (
+            "여기 뭐라고 돼 있냐하면요",
+            [],
+        )
+
 
 class TestAndoedaSpacingProtection:
     """'안 되다'(금지)와 '안되다'(상황이 안 됨)는 같은 형태인데 띄어쓰기가

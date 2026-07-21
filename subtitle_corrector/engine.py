@@ -220,6 +220,15 @@ def _mechanical_respace(text: str) -> str:
             and not t2.tag.startswith(_PUNCT_TAG_PREFIX)
             and t2.tag not in _AMBIGUOUS_FOLLOW_TAGS
         ):
+            # EC(연결어미) 뒤에 오는 내용어(VV/VA 등) 경계는 원칙적으로 띄어쓰기가
+            # 맞지만, 축약된 구어체 표현(예: "있냐하면요"="있느냐 하면요")에서는
+            # EC와 VV가 의도적으로 붙어 있다. 원문에서 이미 붙어 있으면(간격 0),
+            # 이 경계가 축약인지 진짜 어절 경계인지 문맥 없이는 구분할 수 없으므로
+            # 원문 간격을 보존한다 — "애매하면 자동 수정하지 않는다" 원칙.
+            # 단, 조사(J*)나 서술격조사(VCP) 등에는 이 예외를 적용하지 않는다
+            # (예: "오늘은날씨"→"오늘은 날씨"는 반드시 교정해야 함).
+            if t1.tag == "EC" and gap_start == gap_end:
+                continue
             desired_gap = " "  # 어절이 완결된 지점 -> 새 어절은 항상 띄어씀
         else:
             continue  # 애매한 지점(내용어·합성어 후보·보조용언·의존명사 등): 원문 간격 유지
