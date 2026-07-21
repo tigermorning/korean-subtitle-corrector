@@ -1,5 +1,5 @@
 # AIFFEL Campus Code Peer Review Templete
-- 코더 : 김서연
+- 코더 : 신서연
 - 리뷰어 : 최주희
 
 ---
