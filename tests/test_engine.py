@@ -450,3 +450,45 @@ class TestMachidaMajidaObjectDisambiguation:
 
     def test_unrelated_pair_unaffected(self):
         assert check_confusable_words(0, "고개를 반듯이 들어라") is not None
+
+
+class TestZeroLengthTokenSpacing:
+    """kiwi가 길이 0인 가상 토큰(예: 하/VV)을 삽입할 때, _mechanical_respace가
+    이 토큰의 태그를 근거로 원문에 없는 공백을 삽입하는 버그를 방지한다."""
+
+    def test_eopdagillae_not_split(self):
+        """'없다길래'는 kiwi가 없/VA + 다길래/EC로 토크나이징하더라도
+        원문의 붙여쓰기가 보존되어야 한다 (없+다+하(길이0)+길래 경계에서
+        EC→VV 판정으로 공백 삽입되는 버그 회귀 방지)."""
+        assert correct_particle_spacing("내 도움 필요 없다길래") == (
+            "내 도움 필요 없다길래",
+            [],
+        )
+
+    def test_ondaeseoyo_not_split(self):
+        """'온대서요'는 kiwi가 오/VV + ᆫ다고/EC + 하(길이0) + 어서/EC + 요/JX로
+        토크나이징할 때, EC→VV 경계에서 공백이 삽입되지 않아야 한다."""
+        assert correct_particle_spacing("갑자기 못 온대서요") == (
+            "갑자기 못 온대서요",
+            [],
+        )
+
+
+class TestAndoedaSpacingProtection:
+    """'안 되다'(금지)와 '안되다'(상황이 안 됨)는 같은 형태인데 띄어쓰기가
+    완전히 반대다. _mechanical_respace가 XSV(파생접미사) 태그를 근거로
+    '안 돼'의 공백을 제거하는 버그를 방지한다."""
+
+    def test_andwae_prohibition_keeps_space(self):
+        """'테드, 안 돼'(금지)의 띄어쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("테드, 안 돼") == (
+            "테드, 안 돼",
+            [],
+        )
+
+    def test_andoeda_compound_keeps_original(self):
+        """'농사가 안돼'(상황이 안 됨)의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("농사가 안돼") == (
+            "농사가 안돼",
+            [],
+        )

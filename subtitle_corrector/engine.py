@@ -194,6 +194,11 @@ def _mechanical_respace(text: str) -> str:
         gap_end = t2.start
         if gap_end < gap_start:
             continue  # 겹치는 형태소(예: '해'=하+어) - 실제 간격이 없어 건드릴 수 없음
+        if t2.len == 0:
+            continue  # kiwi가 삽입한 길이 0 가상 토큰(예: '없다길래'→없+다+하(길이0)+길래)
+            # — 실제 텍스트에 없는 형태소라 태그 판정에 근거가 없음. 이 토큰의
+            # 태그(예: VV)를 근거로 앞 형태소(EC)와의 경계에 공백을 삽입하면
+            # 원문을 왜곡한다(예: '없다길래'→'없다 길래' 오류).
         if "\n" in text[gap_start:gap_end]:
             continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
         if t2.form == "요" and t2.len == 1 and gap_start == gap_end:
@@ -204,6 +209,12 @@ def _mechanical_respace(text: str) -> str:
             continue
         if t2.tag in _ATTACH_TAGS:
             desired_gap = ""  # 조사/어미/접미사/서술격조사는 무조건 붙임
+            # "안 되다"(금지)와 "안되다"(상황이 안 됨)는 같은 형태인데 띄어쓰기가
+            # 완전히 반대다. kiwi가 "되"를 XSV(파생접미사)로 태깅하면 _ATTACH_TAGS
+            # 때문에 공백을 제거하는데, 이 경우 "안 되다"의 띄어쓰기를 파괴할 수 있다.
+            # "안되다"는 표준국어대사전 별도 표제어이므로, 원문의 띄어쓰기를 보존한다.
+            if t1.form == "안" and t1.tag == "MAG" and gap_start != gap_end:
+                continue
         elif (
             t1.tag in _MANDATORY_BOUNDARY_TAGS
             and not t2.tag.startswith(_PUNCT_TAG_PREFIX)
@@ -904,8 +915,17 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
             continue
         if text[before.start + before.len : after.start] != " ":
             continue
-        if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
-            to_restore.append(insert_at)  # 금지 구성 확정 -> 사전 등재 여부와 무관하게 항상 띄어씀
+        if before.form == "안" and after.lemma == "되다":
+            # "안 되다"(금지: ~면 안 돼)와 "안되다"(상황이 안 됨: 농사가 안돼)는
+            # 같은 형태인데 띄어쓰기가 완전히 반대다. kiwi.space()는 이 둘을
+            # 구분하지 못하고 불규칙하게 제안한다(농사가 안돼→안 돼, 테드, 안 돼→안돼).
+            # _andoeda_forces_split가 금지 구성(-면/-거든 등)을 확실히 잡으면
+            # 그 경우만 띄어쓰기를 강제하고, 나머지는 원문의 띄어쓰기를 보존해
+            # 사람이 최종 판단하게 한다 — "애매하면 자동 수정하지 않는다" 원칙.
+            if _andoeda_forces_split(tokens, after):
+                to_restore.append(insert_at)  # 금지 구성 확정 -> 항상 띄어씀
+            else:
+                to_restore.append(insert_at)  # 애매함 -> 원문 보존 (사람 확인)
             continue
         if before.tag == "NNG" and after.lemma == "받다" and (
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS
