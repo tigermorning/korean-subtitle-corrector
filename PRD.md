@@ -1,7 +1,5 @@
 <!-- lang-switcher:start -->
 <p align="center">
-  한국어
-  ·
   <a href="PRD.en.md">English</a>
   ·
   <a href="PRD.zh-CN.md">中文(简体)</a>

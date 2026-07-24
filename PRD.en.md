@@ -2,8 +2,6 @@
 <p align="center">
   <a href="PRD.md">한국어</a>
   ·
-  English
-  ·
   <a href="PRD.zh-CN.md">中文(简体)</a>
   ·
   <a href="PRD.zh-TW.md">中文(繁體)</a>
