@@ -1,5 +1,7 @@
 <!-- lang-switcher:start -->
 <p align="center">
+  한국어
+  ·
   <a href="README.en.md">English</a>
   ·
   <a href="README.zh-CN.md">中文(简体)</a>

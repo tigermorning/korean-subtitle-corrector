@@ -1,3 +1,21 @@
+<!-- lang-switcher:start -->
+<p align="center">
+  한국어
+  ·
+  <a href="PRD.en.md">English</a>
+  ·
+  <a href="PRD.zh-CN.md">中文(简体)</a>
+  ·
+  <a href="PRD.zh-TW.md">中文(繁體)</a>
+  ·
+  <a href="PRD.ja.md">日本語</a>
+  ·
+  <a href="PRD.es.md">Español</a>
+  ·
+  <a href="PRD.ar.md">العربية</a>
+</p>
+<!-- lang-switcher:end -->
+
 # 한국어 띄어쓰기·맞춤법 자동 교정 CLI 도구 — PRD (초안)
 
 ## 문서 구성 (2026-07-24 모듈화)
