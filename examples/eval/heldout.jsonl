@@ -1,6 +1,6 @@
 {"id": "g01", "category": "외래어", "input": "새 로보트를 샀다", "gold": "새 로봇을 샀다", "basis": "외래어표기법 robot→로봇 (표준국어대사전 표제어)", "verify": true}
 {"id": "g02", "category": "외래어", "input": "수퍼마켓에 갔다", "gold": "슈퍼마켓에 갔다", "basis": "외래어표기법 super→슈퍼 (표준국어대사전 표제어)", "verify": true}
-{"id": "g03", "category": "띄어쓰기-의존명사", "input": "이것도 먹을수있다", "gold": "이것도 먹을 수 있다", "basis": "의존명사 '수' 앞 띄어쓰기 (한글맞춤법 제42항)", "verify": false}
+{"id": "g03", "category": "띄어쓰기-의존명사", "input": "이것도 먹을수있다", "gold": "이것도 먹을수있다", "basis": "의존명사 '수' 띄어쓰기는 자동교정 대상 아님(제42항) — 텍스트 무변경 + 제안 플래그가 정상 동작. suggested_fix='이것도 먹을 수 있다'", "verify": false, "expect_flag": true}
 {"id": "g04", "category": "맞춤법", "input": "몇일 뒤에 보자", "gold": "며칠 뒤에 보자", "basis": "표준어 '며칠' (표준국어대사전; '몇일' 비표준)", "verify": true}
 {"id": "g05", "category": "맞춤법", "input": "그는 안절부절했다", "gold": "그는 안절부절못했다", "basis": "표준어 '안절부절못하다' (표준국어대사전)", "verify": true}
 {"id": "g06", "category": "차별어-순화", "input": "장애자 주차 구역이다", "gold": "장애인 주차 구역이다", "basis": "순화어 '장애인' (국립국어원 다듬은 말)", "verify": true}
