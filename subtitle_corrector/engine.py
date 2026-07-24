@@ -38,9 +38,10 @@ import re
 
 from kiwipiepy import Kiwi
 
-from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS, PURIFIED_TERMS
+from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from .dictionary import (
     compound_status,
+    get_purified_terms,
     loanword_fix,
     registered_ending,
     search_kornorms,
@@ -796,13 +797,18 @@ def _usage_note(words: list[str]) -> str:
 def check_purified_terms(index: int, text: str) -> FlagItem | None:
     """일반 순화어(예: 반팔->반소매)가 등장하면 확인 플래그한다. 차별적
     표현과 달리 관례적 표현이 여전히 널리 쓰이는 경우가 있어(예: 유모차는
-    공식 순화어 유아차보다 압도적으로 많이 쓰임) 자동으로 바꾸지 않는다."""
-    matched = [word for word in PURIFIED_TERMS if word in text]
+    공식 순화어 유아차보다 압도적으로 많이 쓰임) 자동으로 바꾸지 않는다.
+
+    온용어(K-term) API에서 "다듬은 말"을 동적으로 조회하고, 정적
+    목록(PURIFIED_TERMS)과 통합해 사용한다 — API가 실패하면 정적 목록만으로
+    동작한다."""
+    purified = get_purified_terms()
+    matched = [word for word in purified if word in text]
     if not matched:
         return None
-    suggestions = ", ".join(f"{word}->{PURIFIED_TERMS[word]}" for word in matched)
+    suggestions = ", ".join(f"{word}->{purified[word]}" for word in matched)
     reason = f"순화어 확인 필요: {suggestions} (관례적 표현이 더 적절할 수도 있음)"
-    note = _usage_note(matched + [PURIFIED_TERMS[word] for word in matched])
+    note = _usage_note(matched + [purified[word] for word in matched])
     if note:
         reason += f" | 우리말샘 용례) {note}"
     return FlagItem(line_index=index, original_text=text, reason=reason)

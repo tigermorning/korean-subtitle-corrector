@@ -1,4 +1,4 @@
-"""국립국어원 표준국어대사전 / 우리말샘 오픈API 연동.
+"""국립국어원 표준국어대사전 / 우리말샘 / 온용어 / 한국어기초사전 / 지역어 오픈API 연동.
 
 조회 함수들에 @lru_cache를 달아 같은 단어를 반복 조회하지 않게 한다(자막에는
 "그리고", "저는" 같은 흔한 단어가 반복되므로 실제 API 호출 수가 크게 줄어든다).
@@ -11,6 +11,7 @@
 import difflib
 import os
 import re
+import xml.etree.ElementTree as ET
 from functools import lru_cache
 
 import requests
@@ -23,11 +24,17 @@ load_dotenv()
 STDICT_API_KEY = os.getenv("STDICT_API_KEY")
 OPENDICT_API_KEY = os.getenv("OPENDICT_API_KEY")
 KORNORMS_API_KEY = os.getenv("KORNORMS_API_KEY")
+ONYONGEO_KEY = os.getenv("ONYONGEO_KEY")
+KRDICT_KEY = os.getenv("KRDICT_KEY")
+DIALECT_API_KEY = os.getenv("DIALECT_API_KEY")
 
 STDICT_URL = "https://stdict.korean.go.kr/api/search.do"
 OPENDICT_URL = "https://opendict.korean.go.kr/api/search"
 OPENDICT_VIEW_URL = "https://opendict.korean.go.kr/api/view"
 KORNORMS_URL = "https://korean.go.kr/kornorms/exampleReqList.do"
+ONYONGEO_URL = "https://kli.korean.go.kr/term/api/search.do"
+KRDICT_URL = "https://krdict.korean.go.kr/api/search"
+DIALECT_URL = "https://dialect.korean.go.kr/dialect/openAPI/data"
 
 
 def _empty_channel() -> dict:
@@ -368,3 +375,192 @@ def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:
         f"(그 외 {len(distinct_segments) - 1}개의 다른 표기가 등재되어 있음)"
     )
     return segment, True, context
+
+
+# ---------------------------------------------------------------------------
+# 온용어(K-term) API — "다듬은 말", "표준 전문용어" 등 조회
+# ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=4096)
+def search_onyongeo(query: str, glossary_type: str = "다듬은 말") -> list[dict]:
+    """온용어(K-term) API에서 query를 검색한다.
+
+    glossary_type으로 용어집 종류를 필터링할 수 있다:
+    - "다듬은 말": 일반 순화어 (기본값)
+    - "표준 전문용어": 전문 분야 표준 용어
+    - "다듬을 말": 추후 순화 예정인 표현
+    - "일치어": 동의어 관계의 표준 표기
+
+    반환값: [{"word": "표제어", "definition": "정의", "glossary": "용어집 이름",
+             "translation": "대역어", "use_ex": "사용 예시", ...}, ...]
+    """
+    if not ONYONGEO_KEY:
+        return []
+    params = {
+        "key": ONYONGEO_KEY,
+        "apiSearchWord": query,
+        "start": 1,
+        "num": 10,
+        "sort": "wt",
+    }
+    try:
+        response = requests.get(ONYONGEO_URL, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        return []
+    if not data:
+        return []
+    channel = data.get("channel", {})
+    # glossary_type 필터: 특정 용어집만 선택
+    results = []
+    for return_obj in channel.get("return_object", []):
+        if return_obj.get("returnCode") != 1:
+            continue
+        for item in return_obj.get("resultlist", []):
+            item_glossary = item.get("glossary", "")
+            if glossary_type and glossary_type not in item_glossary:
+                continue
+            results.append(item)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 한국어기초사전 API — 초급자 대상 사전 (뜻풀이·용례·발음)
+# ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=4096)
+def search_krdict(query: str) -> dict:
+    """한국어기초사전 API에서 query를 검색한다.
+
+    반환값: {"channel": {"total": int, "items": [{"word": str, "definition": str,
+             "example": str, "pronunciation": str, "pos": str, "word_grade": str}, ...]}}
+    """
+    if not KRDICT_KEY:
+        return {"channel": {"total": 0, "items": []}}
+    params = {
+        "key": KRDICT_KEY,
+        "q": query,
+        "start": 1,
+        "num": 10,
+        "sort": "dict",
+        "part": "word",
+    }
+    try:
+        response = requests.get(KRDICT_URL, params=params, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        return {"channel": {"total": 0, "items": []}}
+    if not response.text.strip():
+        return {"channel": {"total": 0, "items": []}}
+    # XML 파싱
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return {"channel": {"total": 0, "items": []}}
+    total_el = root.find("total")
+    total = int(total_el.text) if total_el is not None and total_el.text else 0
+    items = []
+    for item_el in root.findall("item"):
+        word_el = item_el.find("word")
+        pos_el = item_el.find("pos")
+        pron_el = item_el.find("pronunciation")
+        grade_el = item_el.find("word_grade")
+        sense_el = item_el.find("sense")
+        defn_el = sense_el.find("definition") if sense_el is not None else None
+        ex_el = sense_el.find("example") if sense_el is not None else None
+        items.append({
+            "word": word_el.text if word_el is not None else "",
+            "pos": pos_el.text if pos_el is not None else "",
+            "pronunciation": pron_el.text if pron_el is not None else "",
+            "word_grade": grade_el.text if grade_el is not None else "",
+            "definition": defn_el.text if defn_el is not None else "",
+            "example": ex_el.text if ex_el is not None else "",
+        })
+    return {"channel": {"total": total, "items": items}}
+
+
+# ---------------------------------------------------------------------------
+# 지역어 종합 정보 API — 방언↔표준어 대응 조회
+# ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=4096)
+def search_dialect(query: str) -> list[dict]:
+    """지역어 종합 정보 API에서 query를 검색한다.
+
+    반환값: [{"word": "지역어", "std_word": "대응 표준어", "region": "시도 코드",
+             "city": "시군구", "source": "출처", "year": "조사 연도"}, ...]
+    """
+    if not DIALECT_API_KEY:
+        return []
+    params = {
+        "apiKey": DIALECT_API_KEY,
+        "searchWord": query,
+    }
+    try:
+        response = requests.get(DIALECT_URL, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        return []
+    if not data:
+        return []
+    if data.get("returnCode") != 60000:
+        return []
+    results = []
+    for item in data.get("resultList", []):
+        results.append({
+            "word": item.get("dltTp", ""),
+            "std_word": item.get("stdTp", ""),
+            "region": item.get("sidoCd", ""),
+            "city": item.get("sigunguNm", ""),
+            "source": item.get("source", ""),
+            "year": item.get("basisYear", ""),
+        })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 순화어(다듬은 말) API + 정적 목록 통합 조회
+# ---------------------------------------------------------------------------
+
+_PURIFIED_API_CACHE: dict[str, str] | None = None
+
+
+def get_purified_terms() -> dict[str, str]:
+    """온용어 API에서 "다듬은 말"을 동적으로 조회하고, 정적 목록과 통합한다.
+
+    API가 실패하면 기존 정적 목록(PURIFIED_TERMS)으로 fallback한다.
+    서버 프로세스가 살아있는 동안 API 결과를 캐시해 반복 조회를 줄인다.
+    """
+    global _PURIFIED_API_CACHE
+    from subtitle_corrector.common_errors import PURIFIED_TERMS
+
+    if _PURIFIED_API_CACHE is not None:
+        merged = dict(PURIFIED_TERMS)
+        merged.update(_PURIFIED_API_CACHE)
+        return merged
+
+    api_terms: dict[str, str] = {}
+    try:
+        results = search_onyongeo("", glossary_type="다듬은 말")
+        for item in results:
+            word = item.get("word", "")
+            # 온용어 응답에서 word는 "표제어^의존형"처럼 캐럿이 포함될 수 있음
+            # -> 캐럿 앞부분만 추출
+            clean_word = word.split("^")[0] if "^" in word else word
+            if clean_word:
+                # "다듬은 말"의 경우 word가 이미 순화 대상(원래 표현),
+                # glossary나 definition에서 순화어(새 표현)를 찾아야 함
+                # 하지만 온용어 API의 "다듬은 말"은 표제어=순화 대상,
+                # 대역어(translation) 또는 정의에서 순화 결과를 제공
+                translation = item.get("translation", "")
+                if translation:
+                    api_terms[clean_word] = translation
+    except Exception:
+        pass
+
+    _PURIFIED_API_CACHE = api_terms
+    merged = dict(PURIFIED_TERMS)
+    merged.update(api_terms)
+    return merged
