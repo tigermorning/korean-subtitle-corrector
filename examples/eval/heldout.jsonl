@@ -1,0 +1,14 @@
+{"id": "g01", "category": "외래어", "input": "새 로보트를 샀다", "gold": "새 로봇을 샀다", "basis": "외래어표기법 robot→로봇 (표준국어대사전 표제어)", "verify": true}
+{"id": "g02", "category": "외래어", "input": "수퍼마켓에 갔다", "gold": "슈퍼마켓에 갔다", "basis": "외래어표기법 super→슈퍼 (표준국어대사전 표제어)", "verify": true}
+{"id": "g03", "category": "띄어쓰기-의존명사", "input": "이것도 먹을수있다", "gold": "이것도 먹을 수 있다", "basis": "의존명사 '수' 앞 띄어쓰기 (한글맞춤법 제42항)", "verify": false}
+{"id": "g04", "category": "맞춤법", "input": "몇일 뒤에 보자", "gold": "며칠 뒤에 보자", "basis": "표준어 '며칠' (표준국어대사전; '몇일' 비표준)", "verify": true}
+{"id": "g05", "category": "맞춤법", "input": "그는 안절부절했다", "gold": "그는 안절부절못했다", "basis": "표준어 '안절부절못하다' (표준국어대사전)", "verify": true}
+{"id": "g06", "category": "차별어-순화", "input": "장애자 주차 구역이다", "gold": "장애인 주차 구역이다", "basis": "순화어 '장애인' (국립국어원 다듬은 말)", "verify": true}
+{"id": "t01", "category": "함정-동음이의", "input": "문을 지그시 눌렀다", "gold": "문을 지그시 눌렀다", "basis": "문맥상 '지그시'(살며시)가 맞음 — '지긋이'(나이)로 바꾸면 오교정", "verify": false, "trap": true}
+{"id": "t02", "category": "함정-맞춤법", "input": "왠지 기분이 좋다", "gold": "왠지 기분이 좋다", "basis": "'왠지'가 표준 — '웬지'로 바꾸면 오교정", "verify": false, "trap": true}
+{"id": "t03", "category": "함정-띄어쓰기", "input": "한 번 더 해 보자", "gold": "한 번 더 해 보자", "basis": "횟수 '한 번' 띄어씀이 맞음 — 붙여 '한번'으로 바꾸면 의미 왜곡", "verify": false, "trap": true}
+{"id": "t04", "category": "함정-고유명사", "input": "스노우 감독이 왔다", "gold": "스노우 감독이 왔다", "basis": "인명 고유표기 — '스노'로 강제 변환하면 안 됨(플래그는 허용)", "verify": false, "trap": true, "flag_ok": true}
+{"id": "d01", "category": "사투리-protect", "input": "밥 뭇나?", "speaker": "철수", "region": "경상도", "mode": "protect", "gold": "밥 뭇나?", "basis": "protect 기본: 의도된 사투리, 무변경·무플래그", "verify": false, "expect_no_flag": true}
+{"id": "d02", "category": "사투리-protect", "input": "거시기 좀 갖고 오랑께", "speaker": "순자", "region": "전라도", "mode": "protect", "gold": "거시기 좀 갖고 오랑께", "basis": "protect: 전라도 사투리 원문 보존", "verify": false, "expect_no_flag": true}
+{"id": "d03", "category": "사투리-protect", "input": "혼저 옵서예", "speaker": "삼춘", "region": "제주도", "mode": "protect", "gold": "혼저 옵서예", "basis": "protect: 제주도 사투리 원문 보존", "verify": false, "expect_no_flag": true}
+{"id": "d04", "category": "사투리-assist", "input": "빨리 와라", "speaker": "철수", "region": "경상도", "mode": "assist", "gold": "빨리 와라", "basis": "assist: 텍스트 무변경, 사투리 제안 플래그(suggested_fix)만 기대", "verify": false, "expect_flag": true}
