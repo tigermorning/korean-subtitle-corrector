@@ -13,6 +13,7 @@ from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from . import store
+from .dictionary import DIALECT_MARKERS
 from .engine import correct_entries, register_custom_words
 from .parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 
@@ -33,7 +34,11 @@ def _split_words(raw: str) -> list[str]:
 
 
 @app.post("/api/correct")
-def correct_subtitle(file: UploadFile, names: str = Form("")):
+def correct_subtitle(
+    file: UploadFile,
+    names: str = Form(""),
+    dialect_map: str = Form(""),
+):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
     # 요청(health check 포함)도 응답을 못 받는다. sync def로 두면 FastAPI가
@@ -66,7 +71,19 @@ def correct_subtitle(file: UploadFile, names: str = Form("")):
             entries = parse_docx(in_path)
         else:
             entries = parse_plain_text(in_path)
-        corrected_entries, flags, applied_log = correct_entries(entries)
+
+        # dialect_map 파싱: JSON 문자열 → dict
+        parsed_dialect_map: dict[str, str] = {}
+        if dialect_map.strip():
+            import json
+            try:
+                parsed_dialect_map = json.loads(dialect_map)
+            except json.JSONDecodeError:
+                pass
+
+        corrected_entries, flags, applied_log = correct_entries(
+            entries, dialect_map=parsed_dialect_map,
+        )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
         # 일반 텍스트와 동일하게 결과를 순수 텍스트로 돌려준다.
@@ -112,6 +129,40 @@ def get_report(report_id: str):
     if not row:
         raise HTTPException(404, "해당 id의 리포트를 찾을 수 없습니다.")
     return row
+
+
+@app.get("/api/speakers")
+def get_speakers(file: UploadFile):
+    """업로드된 SRT 파일에서 화자 목록을 추출해 반환한다.
+
+    SDH 브래킷([이름])이나 "speaker: value" 형식에서 화자를 추출한다.
+    """
+    ext = Path(file.filename).suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(400, ".srt, .txt, .docx 파일만 지원합니다.")
+
+    raw = file.file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "파일이 너무 큽니다.")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        in_path = Path(tmp) / f"input{ext}"
+        in_path.write_bytes(raw)
+        if ext == ".srt":
+            entries = parse_srt(in_path)
+        elif ext == ".docx":
+            entries = parse_docx(in_path)
+        else:
+            entries = parse_plain_text(in_path)
+
+    speakers = sorted({e.speaker for e in entries if e.speaker})
+    return {"speakers": speakers}
+
+
+@app.get("/api/dialect-regions")
+def get_dialect_regions():
+    """사투리 교정에서 지원하는 지역 목록을 반환한다."""
+    return {"regions": list(DIALECT_MARKERS.keys())}
 
 
 # 정적 프론트엔드 (업로드 화면). API 라우트보다 아래에 있어야

@@ -34,6 +34,11 @@
   .intro-list{list-style:none;margin:0;padding:0}
   .intro-list li{color:#666;font-size:0.9em;margin:6px 0;line-height:1.2}
   .intro-list b{color:#111}
+  .dialect-section{background:#f8f9fb;border:1px solid #e3e6ea;border-radius:10px;padding:14px 18px;margin-top:14px;display:none}
+  .dialect-section h2{font-size:0.95em;margin:0 0 8px}
+  .dialect-row{display:flex;align-items:center;gap:12px;margin:6px 0}
+  .dialect-row label{font-size:0.9em;color:#444;min-width:100px;font-weight:600}
+  .dialect-row select{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:0.9em}
 </style>
 </head>
 <body>
@@ -66,6 +71,12 @@
     </div>
   </section>
 
+  <section class="dialect-section" id="dialectSection">
+    <h2>화자별 사투리 설정 (선택)</h2>
+    <p style="color:#666;font-size:0.85em;margin:0 0 10px">SDH 브래킷([이름])으로 화자가 감지된 경우, 각 화자의 사투리 종류를 지정할 수 있습니다. 지정하지 않으면 자동으로 감지해 플래그를 남깁니다.</p>
+    <div id="dialectRows"></div>
+  </section>
+
   <section>
     <div class="drop">
       <input type="file" id="fileInput" accept=".srt,.txt,.docx">
@@ -92,6 +103,73 @@
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
 const submitBtn = document.getElementById('submitBtn');
+
+// 사투리 관련 전역 상태
+let dialectRegions = [];
+let currentSpeakers = [];
+
+// 사투리 지역 목록 로드
+(async () => {
+  try {
+    const res = await fetch('/api/dialect-regions');
+    if (res.ok) {
+      const data = await res.json();
+      dialectRegions = data.regions || [];
+    }
+  } catch {}
+})();
+
+// 파일 선택 시 화자 추출
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext !== 'srt') {
+    document.getElementById('dialectSection').style.display = 'none';
+    currentSpeakers = [];
+    return;
+  }
+
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/speakers', { method: 'POST', body: form });
+    if (!res.ok) return;
+    const data = await res.json();
+    currentSpeakers = data.speakers || [];
+    buildDialectRows(currentSpeakers);
+  } catch {}
+});
+
+function buildDialectRows(speakers) {
+  const container = document.getElementById('dialectRows');
+  if (!speakers.length) {
+    container.innerHTML = '<p style="color:#999;font-size:0.85em">SDH 화자가 감지되지 않았습니다.</p>';
+    document.getElementById('dialectSection').style.display = 'none';
+    return;
+  }
+  document.getElementById('dialectSection').style.display = 'block';
+  container.innerHTML = speakers.map(s => `
+    <div class="dialect-row">
+      <label>${escapeHtml(s)}</label>
+      <select data-speaker="${escapeHtml(s)}">
+        <option value="">설정 안함 (자동 감지)</option>
+        ${dialectRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+}
+
+function getDialectMap() {
+  const map = {};
+  document.querySelectorAll('#dialectRows select').forEach(sel => {
+    const speaker = sel.getAttribute('data-speaker');
+    const region = sel.value;
+    if (speaker && region) map[speaker] = region;
+  });
+  return map;
+}
 
 function renderResult(data) {
   resultEl.classList.add('show');
@@ -136,6 +214,10 @@ submitBtn.addEventListener('click', async () => {
     const form = new FormData();
     form.append('file', file);
     form.append('names', document.getElementById('namesInput').value);
+    const dialectMap = getDialectMap();
+    if (Object.keys(dialectMap).length > 0) {
+      form.append('dialect_map', JSON.stringify(dialectMap));
+    }
     const res = await fetch('/api/correct', { method: 'POST', body: form });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
     const data = await res.json();

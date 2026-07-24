@@ -41,9 +41,12 @@ from kiwipiepy import Kiwi
 from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from .dictionary import (
     compound_status,
+    detect_dialect_ratio,
+    detect_speaker_dialect,
     get_purified_terms,
     loanword_fix,
     registered_ending,
+    search_dialect,
     search_kornorms,
     standard_term_replacement,
     usage_examples,
@@ -814,6 +817,79 @@ def check_purified_terms(index: int, text: str) -> FlagItem | None:
     return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
+def check_dialect(
+    index: int,
+    text: str,
+    speaker: str | None,
+    dialect_map: dict[str, str] | None,
+) -> FlagItem | None:
+    """화자에게 지정된 사투리가 있으면 해당 화자의 대사에서 사투리 패턴을
+    감지해 플래그한다. 사투리 설정이 없는 화자는 자동 감지 플래그를 남긴다.
+
+    핵심 원칙:
+    - 사투리가 지정되지 않은 화자는 표준어로 간주한다.
+    - 표준어로 간주된 화자의 어미가 표준이 아닐 경우에도 자동교정하지 않는다.
+      어미의 표준 여부는 문맥·장르·작품 의도에 따라 달라져 자동 판단이 불가능하기 때문이다.
+    - 사투리가 지정된 화자 역시 자동교정하지 않고 플래그만 남긴다.
+
+    동작 방식:
+    1. 화자에게 사투리가 지정되어 있으면:
+       - 해당 지역의 사투리 마커를 text에서 검색
+       - 감지되면 "이 대사는 ~사투리로 쓰여 있습니다" 플래그
+       - search_dialect()로 표준어 대응도 함께 제시
+
+    2. 화자에게 사투리가 지정되어 있지 않으면:
+       - 자동 감지로 사투리 패턴 비율 계산
+       - 임계값(0.15) 초과 시 "이 화자가 ~사투리를 쓰는 것 같다" 플래그
+
+    자동 교정은 하지 않는다 — 항상 사람이 최종 판단."""
+    if not dialect_map:
+        dialect_map = {}
+
+    # 화자에게 사투리가 지정된 경우
+    if speaker and speaker in dialect_map:
+        region = dialect_map[speaker]
+        ratio = detect_dialect_ratio(text, region)
+        if ratio < 0.05:
+            return None
+        # 사투리 패턴 감지됨 — 표준어 대응 조회
+        api_results = []
+        try:
+            api_results = search_dialect(text.split()[-1] if text.split() else "")
+        except Exception:
+            pass
+        std_suggestion = ""
+        if api_results:
+            first = api_results[0]
+            std_suggestion = f" (표준어: {first.get('std_word', '')})"
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"사투리 사용 감지 ({region}){std_suggestion} — "
+                f"이 대사는 {region} 사투리로 쓰여 있습니다. "
+                "표준어로 교정할지 그대로 유지할지 확인이 필요합니다."
+            ),
+        )
+
+    # 화자에게 사투리가 지정되지 않은 경우 — 자동 감지
+    if speaker:
+        from .dictionary import DIALECT_MARKERS
+        for region in DIALECT_MARKERS:
+            ratio = detect_dialect_ratio(text, region)
+            if ratio >= 0.15:
+                return FlagItem(
+                    line_index=index,
+                    original_text=text,
+                    reason=(
+                        f"사투리 패턴 감지 ({region}) — "
+                        f"이 화자가 {region} 사투리를 쓰는 것 같습니다. "
+                        "사투리 설정이 필요하면 화자별 사투리를 지정해 주세요."
+                    ),
+                )
+    return None
+
+
 def _inserted_space_ranges(original: str, suggested: str) -> list[tuple[int, int, int]]:
     """kiwi.space()가 원문에 없던 공백을 새로 끼워 넣은 지점들을 찾는다.
 
@@ -1180,6 +1256,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
 
 def correct_entries(
     entries: list[SubtitleEntry],
+    dialect_map: dict[str, str] | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -1190,6 +1267,9 @@ def correct_entries(
     고유명사)를 자동으로 감지해 kiwi에 등록한다(register_custom_words
     참고) — 사용자가 이름 목록을 따로 적지 않아도 이 자동 감지만으로
     대부분의 고유명사 오분석이 해결된다.
+
+    dialect_map이 제공되면, 화자별 사투리 설정에 따라 사투리 플래그를
+    생성한다. 미설정 화자는 자동 감지 플래그를 남긴다.
     """
     corrected_entries = []
     flags = []
@@ -1220,7 +1300,10 @@ def correct_entries(
         )
 
         corrected_entries.append(
-            SubtitleEntry(index=e.index, start=e.start, end=e.end, text=corrected_text)
+            SubtitleEntry(
+                index=e.index, start=e.start, end=e.end,
+                text=corrected_text, speaker=e.speaker,
+            )
         )
 
         for fix, context in review_fixes:
@@ -1257,6 +1340,7 @@ def correct_entries(
                 check_spelling(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
+                check_dialect(e.index, corrected_text, e.speaker, dialect_map),
             )
             if f
         )

@@ -245,3 +245,26 @@
 ### 검증
 
 - `examples/sample.srt` 회귀 테스트: 자동 교정 6건, 플래그 3건 — 이전과 동일 (API 추가가 기존 동작에 영향 없음).
+
+## 29. 사투리 교정 기능 구현 + 사투리 처리 원칙 확립 (2026-07-24)
+
+### 변경 파일
+- `dictionary.py`: DIALECT_MARKERS (경상도/제주도/전라도/충청도), detect_dialect_ratio(), detect_speaker_dialect()
+- `engine.py`: check_dialect() 함수 + correct_entries()에 dialect_map 파라미터 통합
+- `api.py`: dialect_map Form 파라미터, /api/speakers, /api/dialect-regions 엔드포인트
+- `static/index.html`: 화자별 사투리 드롭다운 UI
+- `AGENTS.md`, `PRD.md`: 사투리 처리 원칙 명문화
+
+### 사투리 처리 원칙 (핵심)
+
+1. **화자에게 사투리가 지정되지 않으면 표준어로 간주한다.**
+2. **표준어로 간주된 화자의 어미가 표준이 아닐 경우에도 자동교정하지 않는다.** 어미의 표준 여부는 문맥·장르·작품 의도에 따라 달라져 자동 판단이 불가능하기 때문이다.
+3. **사투리가 지정된 화자 역시 자동교정하지 않고 플래그만 남긴다.**
+
+이 원칙은 PRD.md §12, AGENTS.md, engine.py check_dialect() docstring에 모두 기록됨.
+
+### 검증
+
+- 회귀 테스트: 자동교정 6건, 플래그 3건 — 이전과 동일
+- 사투리 감지 함수 단위 테스트: 경상도 비율 0.615, 자동 감지 정상
+- 시나리오 3건 모두 정상: 지정 화자 플래그, 미지정 화자 자동감지, 사투리 없는 대사 무시

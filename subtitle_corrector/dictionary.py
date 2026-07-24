@@ -564,3 +564,86 @@ def get_purified_terms() -> dict[str, str]:
     merged = dict(PURIFIED_TERMS)
     merged.update(api_terms)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# 사투리 마커 — 지역별 특징적 어미·조사·어휘 패턴
+# ---------------------------------------------------------------------------
+
+DIALECT_MARKERS: dict[str, dict[str, list[str]]] = {
+    "경상도": {
+        "어미": ["스라", "나요", "라요", "이까", "으이라", "니", "아이가", "monton"],
+        "조사": ["한테루", "한테가", "한테서"],
+        "어휘": ["마이시", "예뿌다", "기rab다", "좋다", "아이가", "모려"],
+    },
+    "제주도": {
+        "어미": ["수다", "주와", "수과", "ᄒᆞ다", "ありが다", "이우다", "라버"],
+        "조사": ["한테가", "한데서"],
+        "어휘": ["하르방", "마르", " Ấ리", "꼬닥", "phins"],
+    },
+    "전라도": {
+        "어미": ["이", "라", "재", "네", "수룩", "래"],
+        "조사": ["한테랑", "한테나"],
+        "어휘": ["아주머니", "총각", "여라자"],
+    },
+    "충청도": {
+        "어미": ["지", "제", "쥬", "유", "잉"],
+        "어휘": ["adio", "기냥", "거시기"],
+    },
+}
+
+# 사투리 마커를 정규표현식으로 변환 (미리 컴파일)
+_DIALECT_PATTERN_CACHE: dict[str, re.Pattern] = {}
+
+
+def _get_dialect_pattern(region: str) -> re.Pattern:
+    """특정 지역의 사투리 마커를 하나의 정규표현식으로 반환."""
+    if region in _DIALECT_PATTERN_CACHE:
+        return _DIALECT_PATTERN_CACHE[region]
+    markers = DIALECT_MARKERS.get(region, {})
+    all_markers: list[str] = []
+    for category in ("어미", "조사", "어휘"):
+        all_markers.extend(markers.get(category, []))
+    if not all_markers:
+        pattern = re.compile("(?!x)x")  # 아무것도 매칭 안 되는 패턴
+    else:
+        escaped = [re.escape(m) for m in sorted(all_markers, key=len, reverse=True)]
+        pattern = re.compile("|".join(escaped))
+    _DIALECT_PATTERN_CACHE[region] = pattern
+    return pattern
+
+
+def detect_dialect_ratio(text: str, region: str) -> float:
+    """text에서 특정 지역 사투리 마커의 비율(0.0~1.0)을 반환.
+
+    텍스트의 어미·조사·어휘 영역에서 사투리 패턴이 차지하는 비율을 계산한다.
+    0.0이면 사투리 없음, 1.0이면 전부 사투리."""
+    pattern = _get_dialect_pattern(region)
+    matches = pattern.findall(text)
+    if not matches:
+        return 0.0
+    # 매칭된 문자열의 총 길이를 텍스트 길이로 나눔
+    total_len = sum(len(m) for m in matches)
+    return min(total_len / max(len(text), 1), 1.0)
+
+
+def detect_speaker_dialect(texts: list[str]) -> str | None:
+    """여러 대사 텍스트에서 사투리 종류를 자동 감지.
+
+    각 지역별 마커 비율을 계산해, 임계값(0.15) 이상인 지역 중 가장 높은 비율의
+    지역을 돌려준다. 어떤 지역도 임계값에 도달하지 못하면 None을 돌려준다.
+
+    반환값: "경상도", "제주도", "전라도", "충청도" 중 하나 또는 None
+    """
+    if not texts:
+        return None
+    combined = " ".join(texts)
+    best_region = None
+    best_ratio = 0.0
+    threshold = 0.15
+    for region in DIALECT_MARKERS:
+        ratio = detect_dialect_ratio(combined, region)
+        if ratio >= threshold and ratio > best_ratio:
+            best_ratio = ratio
+            best_region = region
+    return best_region
