@@ -34,11 +34,16 @@
   .intro-list{list-style:none;margin:0;padding:0}
   .intro-list li{color:#666;font-size:0.9em;margin:6px 0;line-height:1.2}
   .intro-list b{color:#111}
-  .dialect-section{background:#f8f9fb;border:1px solid #e3e6ea;border-radius:10px;padding:14px 18px;margin-top:14px;display:none}
+  .dialect-section{background:#f8f9fb;border:1px solid #e3e6ea;border-radius:10px;padding:14px 18px;margin-top:14px}
   .dialect-section h2{font-size:0.95em;margin:0 0 8px}
-  .dialect-row{display:flex;align-items:center;gap:12px;margin:6px 0}
+  .dialect-row{display:flex;align-items:center;gap:12px;margin:6px 0;flex-wrap:wrap}
   .dialect-row label{font-size:0.9em;color:#444;min-width:100px;font-weight:600}
-  .dialect-row select{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:0.9em}
+  .dialect-row select,.dialect-row input{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:0.9em}
+  .dialect-row input[type=text]{width:120px}
+  .dialect-add{margin-top:10px;display:flex;gap:8px;align-items:center}
+  .dialect-add input{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:0.9em;width:140px}
+  .dialect-add button{padding:6px 14px;font-size:0.85em;background:#2d3436;color:#fff;border:none;border-radius:6px;cursor:pointer}
+  .dialect-row .remove-btn{background:none;border:none;color:#c0392b;cursor:pointer;font-size:1.1em;padding:0 4px}
 </style>
 </head>
 <body>
@@ -73,8 +78,17 @@
 
   <section class="dialect-section" id="dialectSection">
     <h2>화자별 사투리 설정 (선택)</h2>
-    <p style="color:#666;font-size:0.85em;margin:0 0 10px">SDH 브래킷([이름])으로 화자가 감지된 경우, 각 화자의 사투리 종류를 지정할 수 있습니다. 지정하지 않으면 자동으로 감지해 플래그를 남깁니다.</p>
+    <p style="color:#666;font-size:0.85em;margin:0 0 10px">
+      화자에게 사투리를 지정하고, 반영 수준을 선택할 수 있습니다.<br>
+      <b>플래그만</b>: 사투리 감지 → 확인 플래그만 남김 (텍스트 변경 없음)<br>
+      <b>사투리→표준어</b>: 사투리 텍스트를 표준어로 자동 변환<br>
+      <b>표준어→사투리</b>: 표준어 텍스트를 사투리로 자동 변환
+    </p>
     <div id="dialectRows"></div>
+    <div class="dialect-add">
+      <input type="text" id="newSpeakerName" placeholder="화자 이름">
+      <button id="addSpeakerBtn">+ 화자 추가</button>
+    </div>
   </section>
 
   <section>
@@ -108,7 +122,7 @@ const submitBtn = document.getElementById('submitBtn');
 let dialectRegions = [];
 let currentSpeakers = [];
 
-// 사투리 지역 목록 로드
+// 사투리 지역 목록 로드 + 사투리 섹션 항상 표시
 (async () => {
   try {
     const res = await fetch('/api/dialect-regions');
@@ -117,6 +131,7 @@ let currentSpeakers = [];
       dialectRegions = data.regions || [];
     }
   } catch {}
+  document.getElementById('dialectSection').style.display = 'block';
 })();
 
 // 파일 선택 시 화자 추출
@@ -126,7 +141,6 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
 
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext !== 'srt') {
-    document.getElementById('dialectSection').style.display = 'none';
     currentSpeakers = [];
     return;
   }
@@ -142,31 +156,65 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
   } catch {}
 });
 
+// 화자 추가 버튼
+document.getElementById('addSpeakerBtn').addEventListener('click', () => {
+  const input = document.getElementById('newSpeakerName');
+  const name = input.value.trim();
+  if (!name) return;
+  if (currentSpeakers.includes(name)) { input.value = ''; return; }
+  currentSpeakers.push(name);
+  buildDialectRows(currentSpeakers);
+  input.value = '';
+});
+
 function buildDialectRows(speakers) {
   const container = document.getElementById('dialectRows');
   if (!speakers.length) {
-    container.innerHTML = '<p style="color:#999;font-size:0.85em">SDH 화자가 감지되지 않았습니다.</p>';
-    document.getElementById('dialectSection').style.display = 'none';
+    container.innerHTML = '<p style="color:#999;font-size:0.85em">화자를 추가하거나 파일을 업로드하세요.</p>';
     return;
   }
-  document.getElementById('dialectSection').style.display = 'block';
   container.innerHTML = speakers.map(s => `
     <div class="dialect-row">
       <label>${escapeHtml(s)}</label>
-      <select data-speaker="${escapeHtml(s)}">
+      <select data-speaker="${escapeHtml(s)}" class="dialect-region-select">
         <option value="">설정 안함 (자동 감지)</option>
         ${dialectRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}
       </select>
+      <select data-speaker="${escapeHtml(s)}" class="dialect-mode-select">
+        <option value="protect">기본: 사투리 보호 (교정·플래그 안 함)</option>
+        <option value="assist">사투리로 고쳐주기 제안</option>
+        <option value="to_standard">표준어로 자동 변환</option>
+      </select>
+      <span class="remove-btn" data-speaker="${escapeHtml(s)}" title="삭제">&times;</span>
     </div>
   `).join('');
+
+  // 삭제 버튼 이벤트
+  container.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sp = btn.getAttribute('data-speaker');
+      currentSpeakers = currentSpeakers.filter(x => x !== sp);
+      buildDialectRows(currentSpeakers);
+    });
+  });
 }
 
 function getDialectMap() {
   const map = {};
-  document.querySelectorAll('#dialectRows select').forEach(sel => {
+  document.querySelectorAll('#dialectRows .dialect-region-select').forEach(sel => {
     const speaker = sel.getAttribute('data-speaker');
     const region = sel.value;
     if (speaker && region) map[speaker] = region;
+  });
+  return map;
+}
+
+function getDialectModes() {
+  const map = {};
+  document.querySelectorAll('#dialectRows .dialect-mode-select').forEach(sel => {
+    const speaker = sel.getAttribute('data-speaker');
+    const mode = sel.value;
+    if (speaker) map[speaker] = mode;
   });
   return map;
 }
@@ -215,8 +263,12 @@ submitBtn.addEventListener('click', async () => {
     form.append('file', file);
     form.append('names', document.getElementById('namesInput').value);
     const dialectMap = getDialectMap();
+    const dialectModes = getDialectModes();
     if (Object.keys(dialectMap).length > 0) {
       form.append('dialect_map', JSON.stringify(dialectMap));
+    }
+    if (Object.keys(dialectModes).length > 0) {
+      form.append('dialect_modes', JSON.stringify(dialectModes));
     }
     const res = await fetch('/api/correct', { method: 'POST', body: form });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);

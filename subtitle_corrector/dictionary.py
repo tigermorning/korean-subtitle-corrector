@@ -592,6 +592,51 @@ DIALECT_MARKERS: dict[str, dict[str, list[str]]] = {
     },
 }
 
+# 양방향 사투리 변환 맵 — {사투리표현: 표준어} 형태
+# 어미·조사·어휘를 구분하지 않고 하나의 딕셔너리로 관리
+DIALECT_TO_STANDARD: dict[str, dict[str, str]] = {
+    "경상도": {
+        "아이가": "그래",
+        "마이시": "많이",
+        "예뿌다": "예쁘다",
+        "기rab다": "기르다",
+        "모려": "몰라",
+        "한테루": "한테",
+        "한테가": "한테",
+        "나요": "나요",
+        "라요": "라요",
+        "이까": "이야",
+        "으이라": "이야",
+        "스라": "지",
+    },
+    "제주도": {
+        "하르방": "아버지",
+        "마르": "배고프다",
+        "꼬닥": "꼭",
+        "ᄒᆞ다": "하다",
+        "수다": "것이다",
+        "주와": "줄을",
+        "이우다": "이르다",
+    },
+    "전라도": {
+        "수룩": "금세",
+        "래": "라고",
+        "아주머니": "아줌마",
+        "총각": "청년",
+        "여라자": "여자",
+    },
+    "충청도": {
+        "거시기": "저것",
+        "기냥": "그냥",
+        "adio": "아이고",
+    },
+}
+
+# 역방향: 표준어→사투리 변환용 (각 지역별로 어떤 표준어를 어떤 사투리로 바꿀 수 있는지)
+STANDARD_TO_DIALECT: dict[str, dict[str, str]] = {}
+for _region, _map in DIALECT_TO_STANDARD.items():
+    STANDARD_TO_DIALECT[_region] = {v: k for k, v in _map.items()}
+
 # 사투리 마커를 정규표현식으로 변환 (미리 컴파일)
 _DIALECT_PATTERN_CACHE: dict[str, re.Pattern] = {}
 
@@ -647,3 +692,34 @@ def detect_speaker_dialect(texts: list[str]) -> str | None:
             best_ratio = ratio
             best_region = region
     return best_region
+
+
+def convert_dialect(text: str, region: str, direction: str) -> str:
+    """사투리↔표준어 양방향 변환.
+
+    direction:
+        - "to_standard": 사투리→표준어 (예: "아이가" → "그래")
+        - "to_dialect": 표준어→사투리 (예: "그래" → "아이가")
+
+    변환 규칙:
+        - 긴 표현을 먼저 치환 (예: "한테루"를 "한테"보다 먼저)
+        - 이미 변환된 부분은 재변환하지 않음
+        - 단어 경계 고려 없이 문자열 치환 (사투리는 어미·조사에 붙는 경우가 많음)
+
+    반환값: 변환된 텍스트
+    """
+    if direction == "to_standard":
+        mapping = DIALECT_TO_STANDARD.get(region, {})
+    elif direction == "to_dialect":
+        mapping = STANDARD_TO_DIALECT.get(region, {})
+    else:
+        return text
+
+    if not mapping:
+        return text
+
+    result = text
+    # 긴 표현부터 치환 (이중 치환 방지)
+    for old, new in sorted(mapping.items(), key=lambda x: len(x[0]), reverse=True):
+        result = result.replace(old, new)
+    return result

@@ -41,6 +41,7 @@ from kiwipiepy import Kiwi
 from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from .dictionary import (
     compound_status,
+    convert_dialect,
     detect_dialect_ratio,
     detect_speaker_dialect,
     get_purified_terms,
@@ -817,77 +818,142 @@ def check_purified_terms(index: int, text: str) -> FlagItem | None:
     return FlagItem(line_index=index, original_text=text, reason=reason)
 
 
+# 화자별 사투리 처리 모드.
+#   - "protect": (지정된 화자의 기본값) 사투리를 그대로 보호한다. 어떤
+#     자동 교정도, 어떤 플래그도 남기지 않는다. 대본 속 사투리는 대부분
+#     작가의 의도이므로 기본적으로 건드리지 않는다.
+#   - "assist": 텍스트는 그대로 두고, 표준어→사투리 제안 플래그만 남긴다
+#     (작가가 사투리 화자를 원하지만 사투리에 익숙하지 않은 경우 도움).
+#   - "to_standard": 사투리→표준어 자동 변환 + 확인 플래그(드문 opt-in).
+_VALID_DIALECT_MODES = frozenset({"protect", "assist", "to_standard"})
+
+# 이전 모드명과의 하위 호환: 옛 호출부가 넘기는 문자열을 새 모드로 매핑한다.
+#   - "flag_only"(사투리를 의심스러운 것으로 플래그하던 옛 기본값) → "protect"
+#   - "to_dialect"(표준어→사투리 자동 재작성) → "assist"
+_DIALECT_MODE_ALIASES = {
+    "flag_only": "protect",
+    "to_dialect": "assist",
+}
+
+
+def normalize_dialect_mode(mode: str | None) -> str:
+    """모드 문자열을 유효한 새 모드명으로 정규화한다.
+
+    빈 값/미지정은 "protect"(기본값). 하위 호환 별칭(flag_only/to_dialect)은
+    각각 protect/assist로 매핑한다. 알 수 없는 값도 안전하게 "protect"로 둔다.
+    """
+    if not mode:
+        return "protect"
+    mode = _DIALECT_MODE_ALIASES.get(mode, mode)
+    if mode not in _VALID_DIALECT_MODES:
+        return "protect"
+    return mode
+
+
+def resolve_dialect_mode(
+    speaker: str | None,
+    dialect_map: dict[str, str] | None,
+    dialect_modes: dict[str, str] | None,
+) -> tuple[str | None, str | None]:
+    """화자의 사투리 (지역, 모드)를 결정한다.
+
+    반환값:
+        - 화자가 dialect_map에 있으면 (지역, 정규화된 모드).
+        - 그 외(사투리 미지정 화자)는 (None, None).
+    """
+    if not dialect_map or not speaker or speaker not in dialect_map:
+        return None, None
+    region = dialect_map[speaker]
+    mode = normalize_dialect_mode((dialect_modes or {}).get(speaker))
+    return region, mode
+
+
 def check_dialect(
     index: int,
     text: str,
-    speaker: str | None,
-    dialect_map: dict[str, str] | None,
-) -> FlagItem | None:
-    """화자에게 지정된 사투리가 있으면 해당 화자의 대사에서 사투리 패턴을
-    감지해 플래그한다. 사투리 설정이 없는 화자는 자동 감지 플래그를 남긴다.
+    region: str | None,
+    mode: str | None,
+) -> tuple[str, list[FlagItem]]:
+    """resolve_dialect_mode()로 이미 결정된 (region, mode)에 따라 사투리를 처리한다.
 
-    핵심 원칙:
-    - 사투리가 지정되지 않은 화자는 표준어로 간주한다.
-    - 표준어로 간주된 화자의 어미가 표준이 아닐 경우에도 자동교정하지 않는다.
-      어미의 표준 여부는 문맥·장르·작품 의도에 따라 달라져 자동 판단이 불가능하기 때문이다.
-    - 사투리가 지정된 화자 역시 자동교정하지 않고 플래그만 남긴다.
+    - region이 None(사투리 미지정 화자): 자동 감지 후 플래그만 남긴다(비율 >= 0.15).
+      표준어로 간주하지만 어미가 표준이 아니어도 자동교정하지 않는다.
+    - mode == "assist": 텍스트는 그대로 두고, 표준어→사투리 제안 플래그만 만든다.
+      convert_dialect(to_dialect)가 바꿀 게 없고 search_dialect도 비면 플래그 없음.
+    - mode == "to_standard": 사투리→표준어 자동 변환 + 확인 플래그.
 
-    동작 방식:
-    1. 화자에게 사투리가 지정되어 있으면:
-       - 해당 지역의 사투리 마커를 text에서 검색
-       - 감지되면 "이 대사는 ~사투리로 쓰여 있습니다" 플래그
-       - search_dialect()로 표준어 대응도 함께 제시
+    "protect" 모드는 이 함수를 호출하지 않는다(호출부에서 통째로 건너뛴다).
 
-    2. 화자에게 사투리가 지정되어 있지 않으면:
-       - 자동 감지로 사투리 패턴 비율 계산
-       - 임계값(0.15) 초과 시 "이 화자가 ~사투리를 쓰는 것 같다" 플래그
+    반환값: (처리된 텍스트, 플래그 목록)
+    """
+    # 사투리 미지정 화자 — 자동 감지 (항상 플래그만)
+    if region is None:
+        from .dictionary import DIALECT_MARKERS
+        for detected in DIALECT_MARKERS:
+            if detect_dialect_ratio(text, detected) >= 0.15:
+                return text, [FlagItem(
+                    line_index=index,
+                    original_text=text,
+                    reason=(
+                        f"사투리 패턴 감지 ({detected}) — "
+                        f"이 화자가 {detected} 사투리를 쓰는 것 같습니다. "
+                        "사투리 설정이 필요하면 화자별 사투리를 지정해 주세요."
+                    ),
+                )]
+        return text, []
 
-    자동 교정은 하지 않는다 — 항상 사람이 최종 판단."""
-    if not dialect_map:
-        dialect_map = {}
+    if mode == "to_standard":
+        converted = convert_dialect(text, region, "to_standard")
+        if converted != text:
+            return converted, [FlagItem(
+                line_index=index,
+                original_text=text,
+                suggested_fix=converted,
+                reason=(
+                    f"사투리→표준어 자동 변환 ({region}) — "
+                    "변환된 텍스트를 확인해 주세요."
+                ),
+            )]
+        return text, []
 
-    # 화자에게 사투리가 지정된 경우
-    if speaker and speaker in dialect_map:
-        region = dialect_map[speaker]
-        ratio = detect_dialect_ratio(text, region)
-        if ratio < 0.05:
-            return None
-        # 사투리 패턴 감지됨 — 표준어 대응 조회
+    if mode == "assist":
+        # 텍스트는 절대 바꾸지 않는다. 표준어 표현을 사투리로 바꾸는 제안만 남긴다.
+        suggested = convert_dialect(text, region, "to_dialect")
+        if suggested != text:
+            return text, [FlagItem(
+                line_index=index,
+                original_text=text,
+                suggested_fix=suggested,
+                reason=(
+                    f"사투리 제안 ({region}) — 이 화자는 {region} 사투리를 쓰도록 "
+                    "지정돼 있습니다. 표준어 표현을 사투리로 바꾸는 제안이며, "
+                    "자동 반영하지 않으니 검토 후 채택하세요."
+                ),
+            )]
+        # convert가 바꿀 게 없으면 지역어 종합 정보 API로 대응 사투리를 조회한다.
         api_results = []
         try:
             api_results = search_dialect(text.split()[-1] if text.split() else "")
         except Exception:
             pass
-        std_suggestion = ""
-        if api_results:
-            first = api_results[0]
-            std_suggestion = f" (표준어: {first.get('std_word', '')})"
-        return FlagItem(
-            line_index=index,
-            original_text=text,
-            reason=(
-                f"사투리 사용 감지 ({region}){std_suggestion} — "
-                f"이 대사는 {region} 사투리로 쓰여 있습니다. "
-                "표준어로 교정할지 그대로 유지할지 확인이 필요합니다."
-            ),
-        )
-
-    # 화자에게 사투리가 지정되지 않은 경우 — 자동 감지
-    if speaker:
-        from .dictionary import DIALECT_MARKERS
-        for region in DIALECT_MARKERS:
-            ratio = detect_dialect_ratio(text, region)
-            if ratio >= 0.15:
-                return FlagItem(
+        for result in api_results:
+            dialect_word = result.get("word", "")
+            if dialect_word:
+                std_word = result.get("std_word", "")
+                std_note = f" (표준어: {std_word})" if std_word else ""
+                return text, [FlagItem(
                     line_index=index,
                     original_text=text,
                     reason=(
-                        f"사투리 패턴 감지 ({region}) — "
-                        f"이 화자가 {region} 사투리를 쓰는 것 같습니다. "
-                        "사투리 설정이 필요하면 화자별 사투리를 지정해 주세요."
+                        f"사투리 제안 ({region}) — 참고 사투리 표현: "
+                        f"{dialect_word}{std_note}. 검토 후 직접 반영하세요."
                     ),
-                )
-    return None
+                )]
+        # 제안할 사투리가 없으면 플래그를 남기지 않는다.
+        return text, []
+
+    # 알 수 없는 모드는 안전하게 보호로 간주한다(플래그 없음).
+    return text, []
 
 
 def _inserted_space_ranges(original: str, suggested: str) -> list[tuple[int, int, int]]:
@@ -1257,6 +1323,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
 def correct_entries(
     entries: list[SubtitleEntry],
     dialect_map: dict[str, str] | None = None,
+    dialect_modes: dict[str, str] | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -1268,8 +1335,13 @@ def correct_entries(
     참고) — 사용자가 이름 목록을 따로 적지 않아도 이 자동 감지만으로
     대부분의 고유명사 오분석이 해결된다.
 
-    dialect_map이 제공되면, 화자별 사투리 설정에 따라 사투리 플래그를
-    생성한다. 미설정 화자는 자동 감지 플래그를 남긴다.
+    dialect_map에 지정된 화자는 dialect_modes의 모드에 따라 처리한다(기본값은
+    "protect"):
+      - protect: 원문을 그대로 두고 표준화 교정·플래그를 전부 건너뛴다.
+      - assist: 텍스트는 그대로, 표준어→사투리 제안 플래그만 남긴다.
+      - to_standard: 사투리→표준어 변환 후 표준화 파이프라인을 적용한다.
+    사투리 미지정 화자는 기존대로 표준화 파이프라인을 돌리고, 이름이 있으면
+    자동 감지 플래그(비율 >= 0.15)를 남긴다.
     """
     corrected_entries = []
     flags = []
@@ -1281,7 +1353,52 @@ def correct_entries(
         applied_log.append(f"[자동 감지] 반복 등장하는 고유명사로 인식해 등록: {', '.join(auto_detected)}")
 
     for e in entries:
-        corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(e.text)
+        # 사투리 모드를 가장 먼저 결정한다 — 표준화 파이프라인을 돌리기 전에
+        # 이 화자의 대사를 건드려도 되는지 판단해야 하기 때문이다. 대본 속
+        # 사투리는 대부분 작가의 의도이므로, 지정된 화자의 기본값(protect)은
+        # 어떤 교정·플래그도 하지 않고 원문을 그대로 둔다.
+        region, mode = resolve_dialect_mode(e.speaker, dialect_map, dialect_modes)
+
+        # protect — 원문을 완전히 그대로 둔다. 표준화 교정도, 외래어/고유명사
+        # 검토 플래그도, 맞춤법/순화어/띄어쓰기 검사도 전부 건너뛴다.
+        # (지정된 화자의 대사 안에 진짜 오타가 있어도 그대로 두는 것을 감수한다 —
+        #  "의도된 사투리"와 "오타"를 확실히 구분하는 것은 판별 불가능한 경계
+        #  사례라, 확률적 추정으로 자동 수정하지 않는 것이 이 프로젝트의 정책이다.)
+        if region is not None and mode == "protect":
+            corrected_entries.append(
+                SubtitleEntry(
+                    index=e.index, start=e.start, end=e.end,
+                    text=e.text, speaker=e.speaker,
+                )
+            )
+            continue
+
+        # assist — 텍스트는 그대로 두고 표준화 파이프라인도 돌리지 않는다
+        # (표준화는 의도와 정반대다). 표준어→사투리 제안 플래그만 남긴다.
+        if region is not None and mode == "assist":
+            _, dialect_flags = check_dialect(e.index, e.text, region, mode)
+            flags.extend(dialect_flags)
+            corrected_entries.append(
+                SubtitleEntry(
+                    index=e.index, start=e.start, end=e.end,
+                    text=e.text, speaker=e.speaker,
+                )
+            )
+            continue
+
+        # 여기부터: 사투리 미지정 화자 또는 to_standard 화자.
+        # to_standard는 먼저 사투리→표준어로 변환한 뒤, 변환된 표준어 텍스트에
+        # 일반 표준화 파이프라인을 적용한다(이 화자는 표준 출력을 원한다).
+        corrected_text = e.text
+        if region is not None and mode == "to_standard":
+            corrected_text, dialect_flags = check_dialect(
+                e.index, corrected_text, region, mode,
+            )
+            flags.extend(dialect_flags)
+            if corrected_text != e.text:
+                applied_log.append(f"[{e.index}] 사투리→표준어 변환: {corrected_text}")
+
+        corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
         corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
@@ -1297,13 +1414,6 @@ def correct_entries(
             + always_wrong_fixes
             + nonstandard_fixes
             + discriminatory_fixes
-        )
-
-        corrected_entries.append(
-            SubtitleEntry(
-                index=e.index, start=e.start, end=e.end,
-                text=corrected_text, speaker=e.speaker,
-            )
         )
 
         for fix, context in review_fixes:
@@ -1334,15 +1444,26 @@ def correct_entries(
                 )
             )
 
+        # 사투리 미지정 화자(이름은 있으나 지역 지정 없음)는 자동 감지 플래그만 남긴다.
+        if region is None and e.speaker:
+            _, dialect_flags = check_dialect(e.index, corrected_text, None, None)
+            flags.extend(dialect_flags)
+
         flags.extend(
             f
             for f in (
                 check_spelling(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
-                check_dialect(e.index, corrected_text, e.speaker, dialect_map),
             )
             if f
+        )
+
+        corrected_entries.append(
+            SubtitleEntry(
+                index=e.index, start=e.start, end=e.end,
+                text=corrected_text, speaker=e.speaker,
+            )
         )
 
     return corrected_entries, flags, applied_log

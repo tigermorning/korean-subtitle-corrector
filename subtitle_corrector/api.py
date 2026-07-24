@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .dictionary import DIALECT_MARKERS
-from .engine import correct_entries, register_custom_words
+from .engine import correct_entries, normalize_dialect_mode, register_custom_words
 from .parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 
 app = FastAPI(title="한국어 자막 교정 API")
@@ -38,6 +38,7 @@ def correct_subtitle(
     file: UploadFile,
     names: str = Form(""),
     dialect_map: str = Form(""),
+    dialect_modes: str = Form(""),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -81,8 +82,27 @@ def correct_subtitle(
             except json.JSONDecodeError:
                 pass
 
+        # dialect_modes 파싱: JSON 문자열 → dict.
+        # 허용 모드: protect(기본값, 사투리 보호) / assist(사투리 제안) /
+        # to_standard(표준어 자동 변환). 하위 호환 별칭 flag_only→protect,
+        # to_dialect→assist도 받는다. 그 외 값이나 미지정은 protect로 정규화한다.
+        parsed_dialect_modes: dict[str, str] = {}
+        if dialect_modes.strip():
+            import json
+            try:
+                raw_modes = json.loads(dialect_modes)
+                if isinstance(raw_modes, dict):
+                    parsed_dialect_modes = {
+                        speaker: normalize_dialect_mode(mode)
+                        for speaker, mode in raw_modes.items()
+                    }
+            except json.JSONDecodeError:
+                pass
+
         corrected_entries, flags, applied_log = correct_entries(
-            entries, dialect_map=parsed_dialect_map,
+            entries,
+            dialect_map=parsed_dialect_map,
+            dialect_modes=parsed_dialect_modes,
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
@@ -131,7 +151,7 @@ def get_report(report_id: str):
     return row
 
 
-@app.get("/api/speakers")
+@app.post("/api/speakers")
 def get_speakers(file: UploadFile):
     """업로드된 SRT 파일에서 화자 목록을 추출해 반환한다.
 
