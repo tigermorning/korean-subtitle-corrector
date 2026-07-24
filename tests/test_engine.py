@@ -86,10 +86,14 @@ class TestApplyReplacementsTokenBoundary:
     치환하는지 확인 — '재판장님'(재판장+님) 안에 우연히 들어있는 '장님'을
     '시각장애인'으로 잘못 바꾸는 사고를 막기 위한 회귀 테스트."""
 
-    def test_ganjil_discriminatory_term_replaced(self):
+    def test_ganjil_not_in_discriminatory_terms(self):
+        """'간질'은 DISCRIMINATORY_TERMS에서 제거됨 — 옛 용어(뇌전증) 뜻 외에
+        곤충·조직 뜻도 있는 동형이의어라, 자동 교체 대신 correct_former_terms()의
+        '전 용어' 동적 규칙이 플래그로 처리한다. 여기서는 자동 교체가 일어나지
+        않는지만 확인한다(플래그 동작은 tests/test_former_terms.py)."""
         assert correct_discriminatory_terms("그는 간질이 있다") == (
-            "그는 뇌전증이 있다",
-            ["간질 -> 뇌전증"],
+            "그는 간질이 있다",
+            [],
         )
 
     def test_ganjilida_unrelated_verb_untouched(self):

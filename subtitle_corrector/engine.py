@@ -44,6 +44,7 @@ from .dictionary import (
     convert_dialect,
     detect_dialect_ratio,
     detect_speaker_dialect,
+    former_term_lookup,
     get_purified_terms,
     loanword_fix,
     registered_ending,
@@ -541,6 +542,91 @@ def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
     return _apply_replacements(text, DISCRIMINATORY_TERMS)
+
+
+def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[FlagItem]]:
+    """표준국어대사전이 "'X'의 전 용어"로 표시한 옛 용어(지양 대상)를 처리한다.
+
+    correct_nonstandard_terms()가 우리말샘의 "규범 표기는/표준 용어는" 안내를
+    보는 것과 원천만 다를 뿐 같은 성격의 실시간 동적 규칙이다 — 정적 목록이
+    아니라 매번 표준국어대사전을 조회하므로 국립국어원이 표준 용어를 바꿔도
+    코드 수정이 필요 없다.
+
+    안전 규칙(동형이의어 오교정 방지):
+    - 모든 뜻이 "전 용어" 뜻인 단어(예: "정신분열증" → 전부 "조현병"의 전 용어)는
+      문맥과 무관하게 하나의 정답만 있으므로 조용히 자동 교정한다.
+    - "전 용어" 뜻 외에 다른 뜻도 있는 동형이의어(예: "간질" — 옛 용어(뇌전증)
+      외에 곤충·조직·'간질거리다' 어근 뜻도 있음)는 자동 교정하지 않고 플래그만
+      남긴다. 텍스트만으로 어느 뜻인지 자동 판별하는 것은 확률적 추정이라 이
+      프로젝트가 금지하는 방식이므로(문맥 기반 의미 판별 시도 안 함), 사람이
+      문맥으로 판단하도록 다른 뜻들을 사유에 실어 안전하게 넘긴다.
+
+    반환값: (수정된 텍스트, 자동 교정 로그: '원문 -> 정답', 확인 플래그 목록)
+
+    kiwi는 "정신분열증"을 "정신"+"분열증"으로 쪼갠다 — 그런데 "정신분열증"
+    (정신^분열증)은 통째로 하나의 옛 용어 표제어다. 개별 토큰만 조회하면
+    "분열증"만 잡혀 "정신조현병" 같은 오교정이 난다. 그래서 공백 없이 바로
+    이어진 명사 토큰들의 최대 구간에서 **긴 결합부터** 사전을 조회해, 여러
+    형태소로 이루어진 옛 용어(정신분열증)를 한 단위로 처리한다."""
+    tokens = _kiwi.tokenize(text)
+    noun_tags = ("NNG", "NNP")
+    n = len(tokens)
+    auto_replacements: dict[str, str] = {}
+    flags: list[FlagItem] = []
+    flagged: set[str] = set()
+
+    i = 0
+    while i < n:
+        if tokens[i].tag not in noun_tags:
+            i += 1
+            continue
+        # 공백 없이 바로 이어진 명사 토큰들의 최대 구간(run)을 모은다.
+        j = i
+        while (
+            j + 1 < n
+            and tokens[j + 1].tag in noun_tags
+            and tokens[j + 1].start == tokens[j].start + tokens[j].len
+        ):
+            j += 1
+        # run 안에서 긴 결합부터 그리디 매칭 — 가장 긴 옛 용어를 한 단위로 잡는다.
+        p = i
+        while p <= j:
+            matched = False
+            for q in range(j, p - 1, -1):
+                surface = text[tokens[p].start : tokens[q].start + tokens[q].len]
+                result = former_term_lookup(surface)
+                if result is None:
+                    continue
+                target = result["target"]
+                if not result["ambiguous"]:
+                    auto_replacements[surface] = target
+                elif surface not in flagged:
+                    flagged.add(surface)
+                    others = "; ".join(result["other_meanings"])
+                    flags.append(
+                        FlagItem(
+                            line_index=index,
+                            original_text=text,
+                            reason=(
+                                f"표준국어대사전이 '{surface}'을(를) '{target}'의 전 용어(옛 "
+                                f"용어)로 표시함 — 지양 대상이나, '{surface}'에 다른 뜻도 있어 "
+                                f"자동 교정하지 않고 플래그만 남김(문맥으로 판단 필요). "
+                                f"다른 뜻: {others}"
+                            ),
+                            suggested_fix=target,
+                        )
+                    )
+                p = q + 1
+                matched = True
+                break
+            if not matched:
+                p += 1
+        i = j + 1
+
+    corrected, applied = text, []
+    if auto_replacements:
+        corrected, applied = _apply_replacements(text, auto_replacements)
+    return corrected, applied, flags
 
 
 _AUX_EC_FORMS = {"아", "어", "여"}
@@ -1405,6 +1491,9 @@ def correct_entries(
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
         corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
+        corrected_text, former_term_fixes, former_term_flags = correct_former_terms(
+            e.index, corrected_text
+        )
         applied_log.extend(
             f"[{e.index}] {fix}"
             for fix in applied_fixes
@@ -1414,7 +1503,9 @@ def correct_entries(
             + always_wrong_fixes
             + nonstandard_fixes
             + discriminatory_fixes
+            + former_term_fixes
         )
+        flags.extend(former_term_flags)
 
         for fix, context in review_fixes:
             flags.append(

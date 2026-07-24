@@ -136,6 +136,76 @@ def standard_term_replacement(query: str) -> str | None:
     return None
 
 
+# 표준국어대사전이 "'뇌전증'의 전 용어.", "'조현병'의 전 용어."처럼 옛 용어를
+# 안내하는 문구. 대상 용어는 통낫표(‘’)로 감싸며, 곧바로 "의 전 용어"가 온다.
+# 곧은 따옴표('')로 온 경우도 fallback으로 함께 잡는다. 여기서 group(1)이
+# 현재 표준 용어(교체 대상)다. "낮잡아 이르는 말"/"속되게 이르는 말"(예:
+# 문둥이·지랄병)은 이 문구가 아니므로 이 규칙이 건드리지 않는다 — 정확히
+# "전 용어" 표지만 매칭한다.
+_FORMER_TERM_RE = re.compile(r"[‘']([^’']+)[’']의\s*전\s*용어")
+
+
+@lru_cache(maxsize=4096)
+def former_term_lookup(word: str) -> dict | None:
+    """word가 표준국어대사전에서 "'X'의 전 용어."로 표시된 옛 용어(지양 대상)면,
+    그 현재 표준 용어(X)와 동형이의 판정 정보를 돌려준다.
+
+    표준국어대사전은 표준 용어가 바뀐 옛 표기(예: "간질"→"뇌전증",
+    "정신분열증"→"조현병")를 뜻풀이 끝에 "'X'의 전 용어."로 안내한다. 다만
+    "간질"처럼 옛 용어 뜻 외에 전혀 다른 뜻(곤충 이름·조직 이름·'간질거리다'
+    어근 등)이 같이 등재된 동형이의어가 있어, 문맥 없이 무턱대고 바꾸면 다른
+    뜻을 훼손한다. 그래서 판단 근거만 모아 돌려주고, 자동 교정할지 플래그만
+    할지는 호출부가 결정한다.
+
+    반환값:
+    - None: 이 단어에 "전 용어" 뜻이 하나도 없음(교체 대상 아님. 현재 표준
+      용어인 "뇌전증"/"조현병"도 여기 해당해 절대 플래그되지 않는다).
+    - {"target": X, "ambiguous": bool, "other_meanings": [...]}:
+        target       = 현재 표준 용어(교체 목표)
+        ambiguous    = "전 용어"가 아닌 다른 뜻이 하나라도 있으면 True
+                       (모든 뜻이 "전 용어" 뜻이면 False → 안전하게 자동 교체 가능)
+        other_meanings = "전 용어"가 아닌 나머지 뜻풀이 목록(플래그 사유에 실어
+                         사람이 문맥으로 판단하게 함)
+
+    조회·파싱 실패는 search_dialect/standard_term_replacement와 같은 원칙으로
+    None(교체 대상 아님)으로 흡수해 파이프라인이 멈추지 않게 한다."""
+    try:
+        data = search_stdict(word)
+    except Exception:
+        return None
+    items = data.get("channel", {}).get("item", [])
+    if isinstance(items, dict):
+        items = [items]
+    former_target = None
+    other_meanings: list[str] = []
+    has_former = False
+    for item in items:
+        # 검색 API가 부분일치 표제어까지 돌려줄 수 있으므로, 조회한 단어와
+        # 정확히 일치하는 표제어의 뜻만 본다(word_exists 등과 같은 안전장치).
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword != word:
+            continue
+        senses = item.get("sense", [])
+        if isinstance(senses, dict):
+            senses = [senses]
+        for sense in senses:
+            definition = (sense.get("definition") or "").strip()
+            match = _FORMER_TERM_RE.search(definition)
+            if match:
+                has_former = True
+                if former_target is None:
+                    former_target = match.group(1)
+            elif definition:
+                other_meanings.append(definition)
+    if not has_former:
+        return None
+    return {
+        "target": former_target,
+        "ambiguous": bool(other_meanings),
+        "other_meanings": other_meanings,
+    }
+
+
 def word_exists(query: str) -> bool:
     """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
 
