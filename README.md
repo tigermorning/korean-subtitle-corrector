@@ -1,3 +1,19 @@
+<!-- lang-switcher:start -->
+<p align="center">
+  <a href="README.en.md">English</a>
+  ·
+  <a href="README.zh-CN.md">中文(简体)</a>
+  ·
+  <a href="README.zh-TW.md">中文(繁體)</a>
+  ·
+  <a href="README.ja.md">日本語</a>
+  ·
+  <a href="README.es.md">Español</a>
+  ·
+  <a href="README.ar.md">العربية</a>
+</p>
+<!-- lang-switcher:end -->
+
 # 한국어 띄어쓰기·맞춤법 자동 교정 도구
 
 자막(.srt)/일반 텍스트(.txt)/MS Word(.docx) 등 다양한 형식의 한국어 문서의 띄어쓰기·맞춤법을 자동 교정하는 도구. CLI와 웹 API(FastAPI) 두 가지 방식으로 쓸 수 있다.

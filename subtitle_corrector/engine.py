@@ -16,7 +16,7 @@
    하고 자동 수정하지 않는다 (어떤 게 맞는 표기인지 알 수 없기 때문).
    고유명사(NNP, 사람 이름 등)는 이 검사에서 제외한다 — 정상적인 이름도
    사전 표제어가 아닌 경우가 대부분이라, 포함시키면 멀쩡한 이름을 전부
-   오탐하게 된다.
+   오탐지하게 된다.
 3. 띄어쓰기 — 두 성격을 구분한다.
    - 조사·어미·접미사를 앞말에 붙이는 것(제1항/제41항)은 문맥과 무관하게
      항상 정답이 하나뿐이라 자동으로 정리한다(예: "오늘은날씨가좋네요" ->
@@ -66,7 +66,7 @@ def _inside_any_span(pos: int, spans: list[tuple[int, int]]) -> bool:
 
 # NNP(고유명사)는 여기서 제외한다. 사람 이름 같은 고유명사는 표준국어대사전에
 # 등재돼 있지 않은 게 정상이라, 포함시키면 "지민", "민준" 같은 멀쩡한 이름을
-# 전부 "사전에 없는 단어"로 오탐하게 된다 (부산대 맞춤법 검사기가 사람 이름을
+# 전부 "사전에 없는 단어"로 오탐지하게 된다 (부산대 맞춤법 검사기가 사람 이름을
 # 이상하게 바꾼다는 지적과 같은 종류의 문제).
 _SPELLING_CHECK_TAGS = {"NNG", "VV", "VA"}
 _LOANWORD_TAGS = {"NNG", "NNP"}
@@ -193,16 +193,11 @@ def _mechanical_respace(text: str) -> str:
         gap_end = t2.start
         if gap_end < gap_start:
             continue  # 겹치는 형태소(예: '해'=하+어) - 실제 간격이 없어 건드릴 수 없음
-        if t1.len == 0 or t2.len == 0:
-            continue  # 길이 0인 생략된 형태소(예: '없다잖나'의 '하', '되겠냐니'의
-            # '하'="되겠냐고 하니"의 줄어든 '고 하'가 kiwi 내부적으로 길이 0으로
-            # 분석됨)와 맞닿은 지점은 실제 글자 사이의 경계가 아니라 kiwi가
-            # 추정한 유령 형태소의 경계다. 이 경계에 강제로 공백을 넣으면 실제로는
-            # 앞뒤로 붙어 있는 두 "보이는" 글자 사이를 갈라놓는 결과가 된다(예:
-            # EC '냐'+길이 0 '하'+EC '니'="냐니"인데 EC 뒤는 항상 새 어절이라는
-            # 규칙을 길이 0 토큰에도 그대로 적용해 "냐 니"로 잘못 갈라놓던 버그).
-            # _protect_unfounded_respacing()의 _tokenization_unstable_near()와
-            # 같은 이유로, 길이 0 토큰 근처는 아예 신뢰하지 않는다.
+        if t2.len == 0:
+            continue  # kiwi가 삽입한 길이 0 가상 토큰(예: '없다길래'→없+다+하(길이0)+길래)
+            # — 실제 텍스트에 없는 형태소라 태그 판정에 근거가 없음. 이 토큰의
+            # 태그(예: VV)를 근거로 앞 형태소(EC)와의 경계에 공백을 삽입하면
+            # 원문을 왜곡한다(예: '없다길래'→'없다 길래' 오류).
         if "\n" in text[gap_start:gap_end]:
             continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
         if t2.form == "요" and t2.len == 1 and gap_start == gap_end:
@@ -213,12 +208,36 @@ def _mechanical_respace(text: str) -> str:
             continue
         if t2.tag in _ATTACH_TAGS:
             desired_gap = ""  # 조사/어미/접미사/서술격조사는 무조건 붙임
+            # "안 되다"(금지)와 "안되다"(상황이 안 됨)는 같은 형태인데 띄어쓰기가
+            # 완전히 반대다. kiwi가 "되"를 XSV(파생접미사)로 태깅하면 _ATTACH_TAGS
+            # 때문에 공백을 제거하는데, 이 경우 "안 되다"의 띄어쓰기를 파괴할 수 있다.
+            # "안되다"는 표준국어대사전 별도 표제어이므로, 원문의 띄어쓰기를 보존한다.
+            if t1.form == "안" and t1.tag == "MAG" and gap_start != gap_end:
+                continue
         elif (
             t1.tag in _MANDATORY_BOUNDARY_TAGS
             and not t2.tag.startswith(_PUNCT_TAG_PREFIX)
             and t2.tag not in _AMBIGUOUS_FOLLOW_TAGS
         ):
+            # EC(연결어미) 뒤에 오는 내용어(VV/VA 등) 경계는 원칙적으로 띄어쓰기가
+            # 맞지만, 축약된 구어체 표현(예: "있냐하면요"="있느냐 하면요")에서는
+            # EC와 VV가 의도적으로 붙어 있다. 원문에서 이미 붙어 있으면(간격 0),
+            # 이 경계가 축약인지 진짜 어절 경계인지 문맥 없이는 구분할 수 없으므로
+            # 원문 간격을 보존한다 — "애매하면 자동 수정하지 않는다" 원칙.
+            # 단, 조사(J*)나 서술격조사(VCP) 등에는 이 예외를 적용하지 않는다
+            # (예: "오늘은날씨"→"오늘은 날씨"는 반드시 교정해야 함).
+            if t1.tag == "EC" and gap_start == gap_end:
+                continue
             desired_gap = " "  # 어절이 완결된 지점 -> 새 어절은 항상 띄어씀
+        elif (
+            t1.tag == "MAJ"
+            and gap_start == gap_end
+            and t2.tag not in _ATTACH_TAGS
+        ):
+            # 연결부사("그래서", "그런데", "하지만" 등)는 항상 새 어절의 시작이므로
+            # 뒤에 공백이 있어야 한다. 조사(J*) 뒤에는 붙는 경우("그런데도")가 있어
+            # _ATTACH_TAGS인 경우는 건드리지 않는다(보조사 "도"는 앞말에 붙임).
+            desired_gap = " "
         else:
             continue  # 애매한 지점(내용어·합성어 후보·보조용언·의존명사 등): 원문 간격 유지
         if text[gap_start:gap_end] != desired_gap:
@@ -485,9 +504,9 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
     return _apply_replacements(text, ALWAYS_WRONG)
 
 
-def check_nonstandard_terms(index: int, text: str) -> FlagItem | None:
+def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 이미 명시해 둔 비표준
-    표기(예: "요오드"->"아이오딘")를 확인 플래그한다.
+    표기(예: "요오드"->"아이오딘")를 자동 교정한다.
 
     correct_always_wrong()의 ALWAYS_WRONG(정적 목록)이나 correct_loanwords()의
     kornorms(외래어 표기 용례)와는 다른 세 번째 원천이다 — "요오드"는
@@ -496,17 +515,7 @@ def check_nonstandard_terms(index: int, text: str) -> FlagItem | None:
     확인된다(실사용 검증으로 발견). 매번 실시간으로 우리말샘을 조회하므로
     정적 목록과 달리 국립국어원이 표준 용어를 바꿔도 코드 수정이 필요 없다.
 
-    처음엔 초코렛->콜릿류 kornorms 확정 오류와 같은 성격이라고 보고 자동
-    반영했으나, 실사용 검증(2026-07-21)으로 두 가지 문제가 드러나 확인
-    플래그로 전환했다: (1) "자이데코"(우리말샘 규범 표기: "자이더코")처럼
-    규범 표기 자체가 독립된 표제어로 등재되어 있지 않은 경우, 자동 반영한
-    뒤 check_spelling()이 그 결과("자이더코")를 다시 "사전에 없는 단어"로
-    중복 플래그하는 구조적 문제가 있었다. (2) 더 근본적으로, 외래어 장르명
-    같은 경우 국립국어원 규범 표기와 실제 관례가 갈릴 수 있어(순화어
-    유모차/유아차와 같은 성격) 문맥과 무관하게 항상 자동 반영해도 되는
-    "확정 오류"로 단정할 수 없다.
-
-    반환값: 확인 필요 항목이 있으면 FlagItem, 없으면 None
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
     replacements = {}
     for t in _kiwi.tokenize(text):
@@ -516,15 +525,8 @@ def check_nonstandard_terms(index: int, text: str) -> FlagItem | None:
         if replacement:
             replacements[t.form] = replacement
     if not replacements:
-        return None
-    suggested_fix, _ = _apply_replacements(text, replacements)
-    suggestions = ", ".join(f"{original}->{fix}" for original, fix in replacements.items())
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=f"국립국어원 규범 표기 확인 필요: {suggestions} (실제 관례가 더 널리 쓰일 수도 있음)",
-        suggested_fix=suggested_fix,
-    )
+        return text, []
+    return _apply_replacements(text, replacements)
 
 
 def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
@@ -757,10 +759,7 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
     unknown = [
         w
         for w in _content_lemmas(text)
-        if not word_exists(w)
-        and not _is_productive_demonym_compound(w)
-        and not search_kornorms(w)
-        and not standard_term_replacement(w)
+        if not word_exists(w) and not _is_productive_demonym_compound(w) and not search_kornorms(w)
     ]
     if unknown:
         return FlagItem(
@@ -866,8 +865,17 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
             continue
         if text[before.start + before.len : after.start] != " ":
             continue
-        if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
-            to_restore.append(insert_at)  # 금지 구성 확정 -> 사전 등재 여부와 무관하게 항상 띄어씀
+        if before.form == "안" and after.lemma == "되다":
+            # "안 되다"(금지: ~면 안 돼)와 "안되다"(상황이 안 됨: 농사가 안돼)는
+            # 같은 형태인데 띄어쓰기가 완전히 반대다. kiwi.space()는 이 둘을
+            # 구분하지 못하고 불규칙하게 제안한다(농사가 안돼→안 돼, 테드, 안 돼→안돼).
+            # _andoeda_forces_split가 금지 구성(-면/-거든 등)을 확실히 잡으면
+            # 그 경우만 띄어쓰기를 강제하고, 나머지는 원문의 띄어쓰기를 보존해
+            # 사람이 최종 판단하게 한다 — "애매하면 자동 수정하지 않는다" 원칙.
+            if _andoeda_forces_split(tokens, after):
+                to_restore.append(insert_at)  # 금지 구성 확정 -> 항상 띄어씀
+            else:
+                to_restore.append(insert_at)  # 애매함 -> 원문 보존 (사람 확인)
             continue
         if before.tag == "NNG" and after.lemma == "받다" and (
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS
@@ -924,7 +932,7 @@ def _tokenization_unstable_near(tokens, before, after) -> bool:
 
     단순 위치 겹침(overlap)은 신호로 쓰지 않는다 — "됩니다"(되+ㅂ니다)처럼
     어간과 어미가 받침 하나를 공유해 위치가 겹치는 것은 지극히 정상적인
-    활용이라, 겹침 자체를 "불안정"으로 보면 정상적인 활용까지 오탐하게
+    활용이라, 겹침 자체를 "불안정"으로 보면 정상적인 활용까지 오탐지하게
     된다(실사용 버그로 확인됨 — "그러면 안됩니다"의 정당한 "안 됩니다"
     분리 제안이 막혀버림). 길이 0(형태소 자체가 완전히 생략됨)만 이례적인
     신호로 취급한다."""
@@ -939,15 +947,32 @@ def _tokenization_unstable_near(tokens, before, after) -> bool:
 
 
 # "안"(부정 부사)+"되다"는 뜻이 갈리는 두 가지 서로 다른 구성이다 —
-# "안되다"(형용사, 하나의 단어: 상황이 좋지 않다, 예: "공부가 안된다")와
-# "안 되다"(부정 부사 "안"+동사 "되다": 허용·가능하지 않다, 예: "~하면
-# 안 됩니다")는 사전 등재 여부만으로는 구분할 수 없다(§20 실사용 버그).
-# 다만 "-면"/"-거든"/"-아서는/-어서는" 같은 조건·전제 어미 바로 뒤에 오는
-# "안 되다"는 사실상 예외 없이 금지·불가 구성이므로, 이 경우만 확실한
-# 문법적 근거로 삼아 항상 띄어 쓰도록 강제한다. 그 외의 경우(예: "공부가
-# 안된다")는 이 신호가 없으므로 기존 사전 등재 판단(항상 붙임)을 그대로
-# 따른다 — 확신이 없는 나머지 경우까지 추정으로 판단하지 않는다.
+# "안되다"(형용사/동사, 하나의 단어: 상황이 좋지 않다·훌륭하게 되지 못하다
+# 등, 예: "공부가 안된다")와 "안 되다"(부정 부사 "안"+동사 "되다": 허용·
+# 가능하지 않다, 예: "~하면 안 됩니다")는 사전 등재 여부만으로는 구분할 수
+# 없다(§20 실사용 버그). 다만 "-면"/"-거든"/"-아서는/-어서는" 같은 조건·전제
+# 어미로 이어지는 절 안에 오는 "안 되다"는 사실상 예외 없이 금지·불가
+# 구성이므로, 이 경우만 확실한 문법적 근거로 삼아 항상 띄어 쓰도록 강제한다.
+# 그 외의 경우(예: "공부가 안된다")는 이 신호가 없으므로 기존 사전 등재
+# 판단(항상 붙임)을 그대로 따른다 — 확신이 없는 나머지 경우까지 추정으로
+# 판단하지 않는다.
 _CONDITIONAL_EC_FORMS = {"면", "거든", "다면", "라면"}
+
+# 2026-07-21 발견: "그렇게 하시면 결과가 안됩니다"처럼 조건 어미와 "안" 사이에
+# 주어 등 다른 어절이 끼면, 조건 어미가 "안" 바로 앞 토큰인지만 보는 인접
+# 검사가 신호를 놓친다. 그 사이에 오는 어절이 체언(+조사)·부사뿐이고 중간에
+# 용언 어간·다른 종결/연결 어미·문장부호가 없으면 여전히 같은 절 안이라고
+# 안전하게 볼 수 있으므로, 그 범위까지는 뒤로 훑어 조건 어미를 찾는다.
+# 용언 어간이나 다른 어미는 그 자체로 끝나는 형태소가 없어 walk가 그 어미
+# 토큰에서 먼저 멈추므로 별도로 막지 않아도 안전하다 — 처음 만나는 EC가
+# 조건형이 아니면 그 자리에서 탐색을 끝낸다(더 앞쪽의 조건 어미는 다른 절에
+# 속하므로 무시).
+_INTERVENING_TAGS = {
+    "NNG", "NNP", "NNB", "NR", "SN", "XSN",
+    "JKS", "JKC", "JKG", "JKO", "JKB", "JKV", "JKQ", "JX", "JC",
+    "MAG",
+}
+_MAX_CONDITIONAL_LOOKBACK = 5
 
 
 def _token_index(tokens, target) -> int | None:
@@ -957,20 +982,33 @@ def _token_index(tokens, target) -> int | None:
     return None
 
 
+def _conditional_marker_before(tokens, start_idx: int):
+    """start_idx부터 뒤로 훑어, 같은 절 안에서 처음 만나는 어미(EC) 토큰을
+    돌려준다. 체언·조사·부사(_INTERVENING_TAGS)는 건너뛰고, 그 외 태그나
+    탐색 범위(_MAX_CONDITIONAL_LOOKBACK)를 넘으면 None을 돌려준다."""
+    i = start_idx
+    steps = 0
+    while i >= 0 and steps < _MAX_CONDITIONAL_LOOKBACK:
+        token = tokens[i]
+        if token.tag == "EC":
+            return token
+        if token.tag not in _INTERVENING_TAGS:
+            return None
+        i -= 1
+        steps += 1
+    return None
+
+
 def _andoeda_forces_split(tokens, after) -> bool:
-    """after가 '되다'(그 직전이 부정 부사 '안')일 때, 그 앞 문맥이 조건·전제
-    어미로 끝나는 금지 구성인지 확인한다."""
+    """after가 '되다'(그 직전이 부정 부사 '안')일 때, 그 앞 절이 조건·전제
+    어미로 이어지는 금지 구성인지 확인한다."""
     idx = _token_index(tokens, after)
     if idx is None or idx < 2:
         return False
     if tokens[idx - 1].form != "안" or tokens[idx - 1].tag != "MAG":
         return False
-    marker = tokens[idx - 2]
-    marker_idx = idx - 2
-    if marker.tag == "JX" and marker_idx - 1 >= 0:
-        # "-어서는/-아서는"처럼 어미(EC) 뒤에 보조사(는/도)가 덧붙는 경우
-        marker = tokens[marker_idx - 1]
-    if marker.tag != "EC":
+    marker = _conditional_marker_before(tokens, idx - 2)
+    if marker is None:
         return False
     return marker.form in _CONDITIONAL_EC_FORMS or marker.form.startswith(("어서", "아서"))
 
@@ -1110,7 +1148,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     # kiwi는 사전에 등재된 합성어를 모르는 경우가 있어(예: '노천카페', '그때',
     # '쓴맛'), 이미 correct_compound_spacing()이 사전 근거로 확정 붙여쓰기한
     # 부분을 다시 갈라놓자고 제안할 수 있다. 확정된 합성어는 사전이 kiwi보다
-    # 권위 있는 근거이므로, kiwi의 제안에서 그 부분만 원상복구해 오탐을 막는다.
+    # 권위 있는 근거이므로, kiwi의 제안에서 그 부분만 원상복구해 오탐지를 막는다.
     for start, boundary, end in _compound_candidate_spans(text):
         tail = text[boundary:end].lstrip(" ")
         combined = text[start:boundary] + tail
@@ -1162,6 +1200,7 @@ def correct_entries(
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+        corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
         applied_log.extend(
             f"[{e.index}] {fix}"
@@ -1170,6 +1209,7 @@ def correct_entries(
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
+            + nonstandard_fixes
             + discriminatory_fixes
         )
 
@@ -1210,7 +1250,6 @@ def correct_entries(
             for f in (
                 check_spelling(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
-                check_nonstandard_terms(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f

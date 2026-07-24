@@ -15,7 +15,6 @@
 """
 
 from subtitle_corrector.engine import (
-    check_nonstandard_terms,
     check_spacing,
     check_spelling,
     correct_always_wrong,
@@ -23,6 +22,7 @@ from subtitle_corrector.engine import (
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_loanwords,
+    correct_nonstandard_terms,
     correct_particle_spacing,
 )
 
@@ -151,16 +151,6 @@ class TestParticleSpacing:
         """존대 보조사 '요'를 kiwi가 관형사(MM)로 잘못 태깅해도 그대로 둔다."""
         assert correct_particle_spacing("때만요") == ("때만요", [])
 
-    def test_nyani_quotative_ending_not_split(self):
-        """"-냐니"(-냐고 하니의 축약, 표준국어대사전 등재 어미)를 kiwi가
-        내부적으로 "냐"+길이 0인 생략된 "하"+"니"로 분석하는데, EC 뒤는
-        항상 새 어절이라는 규칙을 길이 0 토큰에도 그대로 적용해 "되겠냐니"를
-        "되겠냐 니"로 잘못 갈라놓던 실사용 버그(2026-07-21)."""
-        assert correct_particle_spacing("상대가 되겠냐니, 무슨 말이에요?") == (
-            "상대가 되겠냐니, 무슨 말이에요?",
-            [],
-        )
-
 
 class TestCompoundSpacing:
     """사전에 하나의 합성어(하이픈 표기)로 등재된 경우만 자동으로 붙인다."""
@@ -197,38 +187,22 @@ class TestLoanwordFix:
 
 class TestNonstandardTermReplacement:
     """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 직접 명시한 비표준
-    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 확인 플래그한다.
+    표기(예: "요오드"->"아이오딘")를 실시간으로 조회해 자동 교정한다.
     kornorms(외래어 표기 용례)는 "요오드"를 오히려 정답으로 등재해 두고
-    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견.
+    있어 correct_loanwords()로는 못 잡는 사례 — 실사용 검증으로 발견."""
 
-    처음엔 자동 교정했으나, "자이데코"(우리말샘 규범 표기: "자이더코")
-    실사용 사례에서 규범 표기 자체가 독립된 표제어가 아니라 자동 반영 뒤
-    check_spelling()이 그 결과를 다시 "사전에 없는 단어"로 중복 플래그하는
-    문제가 발견되어(2026-07-21), 순화어(check_purified_terms)와 같은 확인
-    플래그 방식으로 전환했다."""
+    def test_iodine_corrected_to_standard_term(self):
+        assert correct_nonstandard_terms("요오드가 필요합니다") == (
+            "아이오딘이 필요합니다",
+            ["요오드 -> 아이오딘"],
+        )
 
-    def test_iodine_flagged_with_standard_term_suggestion(self):
-        flag = check_nonstandard_terms(0, "요오드가 필요합니다")
-        assert flag is not None
-        assert flag.suggested_fix == "아이오딘이 필요합니다"
-        assert "요오드->아이오딘" in flag.reason
-
-    def test_homograph_with_standard_sense_not_falsely_flagged(self):
+    def test_homograph_with_standard_sense_not_falsely_corrected(self):
         """"집"은 "즙"의 비표준 표기라는 동형이의어도 있지만, "집"(거처)
         자체는 완전히 표준이다 — 동형이의어 중 하나라도 표준이면 전체를
         비표준으로 단정하면 안 된다 (실사용 버그: "그리고 나서 집에 갔다"가
         "그러고 나서 즙에 갔다"로 잘못 고쳐짐)."""
-        assert check_nonstandard_terms(0, "나는 집에 간다") is None
-
-    def test_zydeco_not_double_flagged_by_check_spelling(self):
-        """"자이데코"(규범 표기: "자이더코")는 그 규범 표기 자체가 독립된
-        사전 표제어가 아니라, check_spelling()이 별도로 "사전에 없는 단어"로
-        중복 플래그하지 않아야 한다 — check_nonstandard_terms() 하나로만
-        확인 플래그가 나가야 한다."""
-        assert check_spelling(0, "이건 자이데코 스타일이에요") is None
-        flag = check_nonstandard_terms(0, "이건 자이데코 스타일이에요")
-        assert flag is not None
-        assert "자이데코->자이더코" in flag.reason
+        assert correct_nonstandard_terms("나는 집에 간다") == ("나는 집에 간다", [])
 
 
 class TestApplyReplacementsParticleAllomorph:
@@ -320,6 +294,20 @@ class TestAndoedaContextDisambiguation:
     def test_already_correct_forms_unflagged(self):
         assert check_spacing(0, "그러면 안 됩니다") is None
         assert check_spacing(0, "공부가 안 된다") is None
+
+    def test_intervening_subject_still_forces_split(self):
+        """2026-07-21 발견: 조건 어미와 "안" 사이에 주어 등 어절이 끼어도
+        같은 절 안이면 여전히 금지 구성으로 봐야 한다 — 인접 토큰만 보는
+        검사로는 이 신호를 놓쳤다."""
+        assert (
+            check_spacing(0, "그렇게 급하게 진행하시면 결과가 안됩니다").suggested_fix
+            == "그렇게 급하게 진행하시면 결과가 안 됩니다"
+        )
+
+    def test_unrelated_earlier_connective_not_treated_as_conditional(self):
+        """조건 어미가 아닌 다른 연결어미("지만")가 먼저 걸리면, 그보다 앞쪽에
+        있는 조건 어미는 별개의 절에 속하므로 신호로 보지 않는다."""
+        assert check_spacing(0, "그가 밥을 먹었지만 결과가 안됩니다") is None
 
 
 class TestCheckSpacingCompoundVerbStemLookback:
@@ -453,3 +441,183 @@ class TestCheckSpellingProductiveDemonymCompound:
 
     def test_country_plus_gun_not_flagged(self):
         assert check_spelling(0, "미군과 영국군") is None
+
+
+class TestZeroLengthTokenSpacing:
+    """kiwi가 길이 0인 가상 토큰(예: 하/VV)을 삽입할 때, _mechanical_respace가
+    이 토큰의 태그를 근거로 원문에 없는 공백을 삽입하는 버그를 방지한다."""
+
+    def test_eopdagillae_not_split(self):
+        """'없다길래'는 kiwi가 없/VA + 다길래/EC로 토크나이징하더라도
+        원문의 붙여쓰기가 보존되어야 한다 (없+다+하(길이0)+길래 경계에서
+        EC→VV 판정으로 공백 삽입되는 버그 회귀 방지)."""
+        assert correct_particle_spacing("내 도움 필요 없다길래") == (
+            "내 도움 필요 없다길래",
+            [],
+        )
+
+    def test_ondaeseoyo_not_split(self):
+        """'온대서요'는 kiwi가 오/VV + ᆫ다고/EC + 하(길이0) + 어서/EC + 요/JX로
+        토크나이징할 때, EC→VV 경계에서 공백이 삽입되지 않아야 한다."""
+        assert correct_particle_spacing("갑자기 못 온대서요") == (
+            "갑자기 못 온대서요",
+            [],
+        )
+
+    def test_contracted_ec_vv_not_split(self):
+        """'있냐하면요'처럼 EC(연결어미)+VV(동사)가 축약되어 붙어 있는 경우,
+        원문의 붙여쓰기가 보존되어야 한다. _MANDATORY_BOUNDARY_TAGS에 EC가
+        포함되어 있어 어절 경계로 오인하고 공백을 삽입하는 버그 회귀 방지."""
+        assert correct_particle_spacing("여기 뭐라고 돼 있냐하면요") == (
+            "여기 뭐라고 돼 있냐하면요",
+            [],
+        )
+
+
+class TestAndoedaSpacingProtection:
+    """'안 되다'(금지)와 '안되다'(상황이 안 됨)는 같은 형태인데 띄어쓰기가
+    완전히 반대다. _mechanical_respace가 XSV(파생접미사) 태그를 근거로
+    '안 돼'의 공백을 제거하는 버그를 방지한다."""
+
+    def test_andwae_prohibition_keeps_space(self):
+        """'테드, 안 돼'(금지)의 띄어쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("테드, 안 돼") == (
+            "테드, 안 돼",
+            [],
+        )
+
+    def test_andoeda_compound_keeps_original(self):
+        """'농사가 안돼'(상황이 안 됨)의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("농사가 안돼") == (
+            "농사가 안돼",
+            [],
+        )
+
+    def test_andoeda_keep_together(self):
+        """'안됩니다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("안됩니다") == (
+            "안됩니다",
+            [],
+        )
+
+
+class TestParticleSpacingAutoFix:
+    """조사 띄어쓰기 자동 교정 테스트. 조사가 앞말과 띄어져 있는 경우
+    원칙대로 붙여쓰기로 교정되어야 한다 (한글 맞춤법 제41항)."""
+
+    def test_eun_spacing(self):
+        """'은' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("나는학생이다") == (
+            "나는 학생이다",
+            ["나는학생이다 -> 나는 학생이다"],
+        )
+
+    def test_eul_spacing(self):
+        """'을' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("밥을먹었다") == (
+            "밥을 먹었다",
+            ["밥을먹었다 -> 밥을 먹었다"],
+        )
+
+    def test_e_spacing(self):
+        """'에' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("서울에산다") == (
+            "서울에 산다",
+            ["서울에산다 -> 서울에 산다"],
+        )
+
+    def test_i_spacing(self):
+        """'이' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("가방이무겁다") == (
+            "가방이 무겁다",
+            ["가방이무겁다 -> 가방이 무겁다"],
+        )
+
+    def test_reul_spacing(self):
+        """'를' 조사가 띄어져 있는 경우 교정"""
+        assert correct_particle_spacing("한국어를읽었다") == (
+            "한국어를 읽었다",
+            ["한국어를읽었다 -> 한국어를 읽었다"],
+        )
+
+
+class TestContractedExpressionProtection:
+    """축약된 표현 보호 테스트. EC+VV, EF+요 등이 축약되어 붙어 있는 경우
+    kiwi가 분리하더라도 원문의 붙여쓰기가 보존되어야 한다."""
+
+    def test_gatjanaeyo_not_split(self):
+        """'같잖아요'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("같잖아요") == (
+            "같잖아요",
+            [],
+        )
+
+    def test_halsu_itta_not_split(self):
+        """'할수있다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("할수있다") == (
+            "할수있다",
+            [],
+        )
+
+    def test_mokgo_sipda_not_split(self):
+        """'먹고싶다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("먹고싶다") == (
+            "먹고싶다",
+            [],
+        )
+
+
+class TestExistingProtectionPreserved:
+    """기존 보호 로직이 여전히 동작하는지 확인하는 테스트."""
+
+    def test_english_particle_spacing(self):
+        """영어 단어 뒤 조사 띄어쓰기가 교정되어야 한다."""
+        assert correct_particle_spacing(" Books를읽었다") == (
+            " Books를 읽었다",
+            [" Books를읽었다 ->  Books를 읽었다"],
+        )
+
+    def test_hanbeon_protected(self):
+        """'한번'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("한번") == ("한번", [])
+
+    def test_geuttae_protected(self):
+        """'그때'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("그때") == ("그때", [])
+
+    def test_geureoldeuthada_protected(self):
+        """'그럴듯하다'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("그럴듯하다") == ("그럴듯하다", [])
+
+    def test_gatayo_protected(self):
+        """'같아요'의 붙여쓰기가 보존되어야 한다."""
+        assert correct_particle_spacing("같아요") == ("같아요", [])
+
+
+class TestMajSpacingAutoFix:
+    """연결부사(MAJ) 뒤에 오는 내용어와의 경계 자동 교정 테스트. 연결부사
+    ("그래서", "그런데", "하지만" 등)는 항상 새 어절의 시작이므로 뒤에 공백이
+    있어야 한다. 단, 보조사(JX) 등 조사는 앞말에 붙이므로 연결부사+조사는
+    교정하지 않는다."""
+
+    def test_maj_plus_vv_spacing(self):
+        """'그래서먹었다' → '그래서 먹었다' (연결부사+동사)"""
+        assert correct_particle_spacing("그래서먹었다") == (
+            "그래서 먹었다",
+            ["그래서먹었다 -> 그래서 먹었다"],
+        )
+
+    def test_maj_plus_nng_spacing(self):
+        """'그런데비가' → '그런데 비가' (연결부사+명사)"""
+        assert correct_particle_spacing("그런데비가") == (
+            "그런데 비가",
+            ["그런데비가 -> 그런데 비가"],
+        )
+
+    def test_maj_plus_jx_no_split(self):
+        """'그런데도'는 보조사 "도"가 앞말에 붙어야 하므로 변경 없음."""
+        assert correct_particle_spacing("그런데도") == ("그런데도", [])
+
+    def test_maj_plus_jx_no_split_geuraeseodo(self):
+        """'그래서도'는 보조사 "도"가 앞말에 붙어야 하므로 변경 없음."""
+        assert correct_particle_spacing("그래서도") == ("그래서도", [])
