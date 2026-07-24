@@ -64,6 +64,6 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-测试会实时查询在线的《标准国语大词典》/《우리말샘》API（不使用静态缓存的响应），因此 `.env` 中必须设置 `STDICT_API_KEY` / `OPENDICT_API_KEY`，并且需要联网。若测试失败，请先判断是代码回归，还是国立国语院词典确实发生了修订（参阅 PRD.md §5）。
+测试会实时查询在线的《标准国语大词典》/《우리말샘》API（不使用预先捕获的静态响应），因此 `.env` 中必须设置 `STDICT_API_KEY` / `OPENDICT_API_KEY`，并且需要联网。若测试失败，请先判断是代码回归，还是国立国语院词典确实发生了修订（参阅 PRD.md §5）。
 
 > 🤖 由[韩语原文](./README.md)机器翻译，尚未经母语者校对。
