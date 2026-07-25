@@ -42,6 +42,7 @@ from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from .dictionary import (
     compound_status,
     convert_dialect,
+    definition_markers,
     detect_dialect_ratio,
     detect_speaker_dialect,
     former_term_lookup,
@@ -412,6 +413,13 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
         if original == combined:
             continue  # 이미 붙어 있음
         if compound_status(combined) == "합성어":
+            # 붙임형이 '준말'(예: 큰애='큰아이'의 준말)이나 '비유적'(예: 턱밑)
+            # 표제어면, 띄어 쓴 구(句)와 의미가 경쟁하므로 문맥 없이 자동으로
+            # 붙이지 않는다. 명사+명사 경우는 check_ambiguous_compound()가 확인
+            # 플래그를, 용언 관형사형+명사(큰 애들=크다+애들)는 명백한 구라
+            # 아무 처리도 하지 않는다.
+            if definition_markers(combined):
+                continue
             fixes.append((start, end, combined, f"{original} -> {combined}"))
 
     corrected = text
@@ -420,6 +428,42 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
         corrected = corrected[:start] + replacement + corrected[end:]
         applied.append(desc)
     return corrected, list(reversed(applied))
+
+
+def check_ambiguous_compound(index: int, text: str) -> FlagItem | None:
+    """붙이면 사전 합성어(비유어/준말)가 되지만 띄어 쓰면 글자 그대로의 구(句)로도
+    읽히는 '명사+명사' 조합을 확인 플래그한다 (예: '턱 밑' ↔ 턱밑=비유어 '아주
+    가까운 곳'). correct_compound_spacing()이 이런 표지 있는 합성어를 자동으로
+    붙이지 않으므로, 대신 여기서 사람이 문맥으로 판단하도록 남긴다.
+
+    용언 관형사형+명사(예: '큰 애들' = 크다의 관형형 '큰' + '애들')는 명백한
+    구이므로 플래그하지 않는다 — 사용자 확인 사항."""
+    tokens = _kiwi.tokenize(text)
+    # 용언 어간(VV/VA)이 시작하는 위치. 관형사형 어미(ㄴ 등)가 어간과 같은
+    # start를 공유할 수 있어(예: '크'/VA와 'ㄴ'/ETM이 둘 다 start=14) dict로는
+    # 덮어써지므로 집합으로 모은다.
+    adnominal_starts = {t.start for t in tokens if t.tag in ("VV", "VA")}
+    for start, boundary, end in _compound_candidate_spans(text):
+        original = text[start:end]
+        combined = text[start:boundary] + text[boundary:end].lstrip(" ")
+        if original == combined:
+            continue  # 이미 붙어 있으면 대상 아님
+        if start in adnominal_starts:
+            continue  # 용언 관형사형+명사 = 구, 플래그 안 함
+        if compound_status(combined) != "합성어":
+            continue
+        if not definition_markers(combined):
+            continue
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{combined}'로 붙여 쓰면 사전 표제어(비유·준말)가 되지만, "
+                f"'{original}'처럼 띄어 쓰면 글자 그대로의 뜻일 수 있어 문맥 확인이 필요합니다."
+            ),
+            suggested_fix=text[:start] + combined + text[end:],
+        )
+    return None
 
 
 # 받침 유무에 따라 형태가 바뀌는 조사 짝: (받침 있을 때 형태, 받침 없을
@@ -1649,6 +1693,7 @@ def correct_entries(
             for f in (
                 check_spelling(e.index, corrected_text),
                 check_purified_terms(e.index, corrected_text),
+                check_ambiguous_compound(e.index, corrected_text),
                 check_spacing(e.index, corrected_text),
             )
             if f

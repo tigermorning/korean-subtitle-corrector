@@ -206,6 +206,37 @@ def former_term_lookup(word: str) -> dict | None:
     }
 
 
+@lru_cache(maxsize=4096)
+def definition_markers(word: str) -> frozenset:
+    """word의 표준국어대사전 뜻풀이에 나타나는 '맥락 경쟁' 표지를 돌려준다.
+    - '준말': 다른 말의 준말(예: 큰애='큰아이'의 준말)
+    - '비유적': 비유어(예: 턱밑='아주 가까운 곳'을 비유적으로)
+    이런 표지가 있으면 그 붙여쓰기 형태는 띄어 쓴 구(句)와 의미가 경쟁하므로,
+    합성어라도 문맥 없이 자동으로 붙이면 안 된다는 신호다. 조회 실패는 빈
+    집합으로 흡수한다."""
+    markers = set()
+    try:
+        items = search_stdict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return frozenset()
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword != word:
+            continue
+        senses = item.get("sense", [])
+        if isinstance(senses, dict):
+            senses = [senses]
+        for sense in senses:
+            definition = sense.get("definition") or ""
+            if "준말" in definition:
+                markers.add("준말")
+            if "비유적" in definition:
+                markers.add("비유적")
+    return frozenset(markers)
+
+
 def word_exists(query: str) -> bool:
     """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
 
