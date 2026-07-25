@@ -4,7 +4,7 @@
 
 핵심 한 줄: 이 프로젝트는 "확률적 추측이 아닌 권위 있는 규범 근거 기반, 애매하면 반드시 사람에게 확인"을 최우선 원칙으로 삼는다. 이 원칙과 충돌하는 자동화는 제안하지 마라.
 
-**최근 완료 (2026-07-26):** 5차 실사용 감수(과교정·오탐 8건 A·B·C) 구현·검증·커밋 완료 — `docs/IMPLEMENTATION_LOG.md` §31, 정답표 테스트 `tests/test_realusage_review.py`. 미착수: 리포트 UX(D), 자막/일반 글 모드(E), `search_dialect` API 중단 대응, IMPLEMENTATION_LOG 아카이브.
+**최근 완료 (2026-07-26):** 실사용 감수 8건(A·B·C, §31) + 리포트 축약(D) + 사용목적 모드(E, §32) 구현·검증·커밋 완료. 정답표 테스트 `tests/test_realusage_review.py`. 남은 것: `search_dialect`(지역어 API 서버 500 장애 — 서버측 문제, `docs/KNOWN_LIMITATIONS.md` 참고).
 
 ## 사투리 처리 원칙
 

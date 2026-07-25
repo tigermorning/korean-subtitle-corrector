@@ -175,3 +175,10 @@
 - C5 '김치찌갯집': 단독/반복 모두 현재 오탐 재현 안 됨(반복 등장 시 recurring-unknown 검출기가 NNP로 등록해 플래그 안 남). 별도 조치 불필요.
 
 미해결/후속: `search_dialect()`(지역어 종합정보 API)는 현재 non-JSON을 반환해 사실상 중단 상태(assist 사투리 제안이 정적 convert 맵에만 의존). `docs/IMPLEMENTATION_LOG.md`가 30KB 임계를 넘어 다음 세션에 앞쪽 절반을 `docs/log-archive/`로 아카이브 필요. 리포트 UX(D: 긴 문장 변경 위치 표시)와 자막/일반 글 모드(E)는 미착수.
+
+## 32. 리포트 변경 위치 축약(D) + 사용목적 모드(E) (2026-07-26)
+
+실사용 피드백에서 나온 두 개선. pytest 124 통과.
+
+- **D — 긴 줄 자동교정 로그 축약**: 긴 대사에서 자동교정 로그가 문장 전체를 다시 적어 어디가 바뀌었는지 안 보이던 문제. `_localized_change()`로 공통 접두/접미를 제거해 변경 구간만 `…앞 -> …뒤…`로 표시(25자 이하 짧은 줄은 전체 유지). `correct_particle_spacing`/`correct_aux_verb_spacing`의 전체라인 로그에 적용 — CLI·웹 UI 둘 다 `applied_log`를 렌더하므로 동시 개선.
+- **E — 사용목적 모드(자막/일반 글)**: 자막 관례상 문장 끝 마침표를 안 쓰므로, 자막 모드(기본)에서 문장 종결 마침표(.)를 오류로 플래그한다(`check_subtitle_punctuation` — 자동 삭제 아닌 확인 플래그, `suggested_fix`에 마침표 뺀 형태; 소수점 3.14·말줄임표 ... 제외). 일반 글 모드는 구두점 허용. `correct_entries(doc_type=...)`(기본 subtitle)로 제어하고, `/api/correct`의 `doc_type` Form, `main.py --prose`, `static/index.html`의 사용 목적 라디오로 노출. 사용자 결정: 기본=자막, 플래그 범위=마침표만.
