@@ -842,16 +842,78 @@ def _is_action_noun(noun_lemma: str) -> bool:
 _PASSIVE_ONLY_BATDA_NOUNS = {"스트레스"}
 
 
+def _syllable_run_len(text: str, pos: int, ch: str) -> int:
+    """text의 pos 위치를 포함해 같은 글자 ch가 연달아 몇 번 반복되는지 센다."""
+    if pos < 0 or pos >= len(text) or text[pos] != ch:
+        return 1
+    left = pos
+    while left > 0 and text[left - 1] == ch:
+        left -= 1
+    right = pos
+    while right + 1 < len(text) and text[right + 1] == ch:
+        right += 1
+    return right - left + 1
+
+
+def _is_reduplication(word: str) -> bool:
+    """'건숭건숭'(사전 표제어 첩어)처럼 같은 요소가 반복된 형태는 외래어 음차가
+    아니므로 미등록어 플래그에서 제외한다.
+    - 완전 반복(word == 단위*n): 첩어/의성·의태어로 본다.
+    - 사전 표제어의 반복 + 짧은 조사·서술격 꼬리(2음절 이하): 첩어로 본다
+      (예: kiwi가 '건숭건숭이야'를 '건숭건숭이'(NNG)로 묶는 경우)."""
+    n = len(word)
+    if n < 2:
+        return False
+    for unit_len in range(1, n // 2 + 1):
+        unit = word[:unit_len]
+        if n % unit_len == 0 and unit * (n // unit_len) == word:
+            return True
+    for unit_len in range(1, n // 2 + 1):
+        unit = word[:unit_len]
+        if word.startswith(unit * 2) and word_exists(unit) and (n - 2 * unit_len) <= 2:
+            return True
+    return False
+
+
+def _unknown_content_words(text: str) -> list[str]:
+    """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
+    조각내는 경우의 오탐을 토큰 인접 관계로 걸러낸다:
+    - '얄짤없다'를 '얄짤'(NNG)+'없다'(VA)로 쪼갠 경우: 명사+뒤 용언이 합쳐 표제어면 제외.
+    - '건숭건숭'(첩어)이나 '콸콸콸'(의성어)처럼 반복된 형태: 제외.
+    이 셋 다 사전/규범 근거로만 판정하며 확률적 추측은 쓰지 않는다."""
+    brackets = _bracket_spans(text)
+    tokens = _kiwi.tokenize(text)
+    unknown = []
+    for i, t in enumerate(tokens):
+        if t.tag not in _SPELLING_CHECK_TAGS:
+            continue
+        if _inside_any_span(t.start, brackets):
+            continue
+        lemma = t.lemma
+        if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
+            continue
+        if _is_reduplication(lemma):
+            continue
+        # 한 글자 미등록어가 원문에서 같은 글자 반복(콸콸콸)의 조각이면 의성·의태어.
+        if len(t.form) == 1 and _syllable_run_len(text, t.start, t.form) >= 2:
+            continue
+        # 미등록 명사가 바로 뒤 용언과 붙어 하나의 표제어를 이루면(얄짤+없다=얄짤없다)
+        # kiwi가 쪼갠 것일 뿐이므로 미등록어가 아니다.
+        if t.tag == "NNG" and i + 1 < len(tokens):
+            nxt = tokens[i + 1]
+            if nxt.tag.startswith(("VA", "VV")) and nxt.start == t.start + t.len:
+                if word_exists(t.form + nxt.lemma):
+                    continue
+        unknown.append(lemma)
+    return unknown
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
     있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,
     번역가 교육자료가 권장하는 실제 검증 방법(국립국어원 용례, 발음기호
     사전, 한글라이즈)으로 직접 확인하라고 안내만 한다."""
-    unknown = [
-        w
-        for w in _content_lemmas(text)
-        if not word_exists(w) and not _is_productive_demonym_compound(w) and not search_kornorms(w)
-    ]
+    unknown = _unknown_content_words(text)
     if unknown:
         return FlagItem(
             line_index=index,
