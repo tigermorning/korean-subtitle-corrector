@@ -39,6 +39,7 @@ def correct_subtitle(
     names: str = Form(""),
     dialect_map: str = Form(""),
     dialect_modes: str = Form(""),
+    doc_type: str = Form("subtitle"),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -99,10 +100,15 @@ def correct_subtitle(
             except json.JSONDecodeError:
                 pass
 
+        # 사용목적 모드: subtitle(기본, 문장 끝 마침표를 오류로 플래그) /
+        # prose(일반 글, 구두점 허용). 그 외 값은 subtitle로 정규화한다.
+        normalized_doc_type = doc_type if doc_type == "prose" else "subtitle"
+
         corrected_entries, flags, applied_log = correct_entries(
             entries,
             dialect_map=parsed_dialect_map,
             dialect_modes=parsed_dialect_modes,
+            doc_type=normalized_doc_type,
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른

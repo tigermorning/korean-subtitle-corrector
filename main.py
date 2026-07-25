@@ -28,6 +28,9 @@ def correct(
     names: Path = typer.Option(
         None, help="고유명사·요리/음료 이름 목록 파일 (한 줄에 하나씩) - kiwi가 절대 잘못 쪼개지 않게 함. 3번 이상 반복되는 단어는 적지 않아도 자동 감지됨"
     ),
+    prose: bool = typer.Option(
+        False, "--prose", help="일반 글 모드(구두점 허용). 기본은 자막 모드로, 문장 끝 마침표를 오류로 플래그합니다."
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -40,7 +43,9 @@ def correct(
         entries = parse_docx(input_file)
     else:
         entries = parse_plain_text(input_file)
-    corrected_entries, flags, applied_log = correct_entries(entries)
+    corrected_entries, flags, applied_log = correct_entries(
+        entries, doc_type="prose" if prose else "subtitle"
+    )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
     # 텍스트와 동일하게 결과를 순수 텍스트(.txt)로 돌려준다.

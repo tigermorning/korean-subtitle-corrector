@@ -95,6 +95,11 @@
     <div class="drop">
       <input type="file" id="fileInput" accept=".srt,.txt,.docx">
       <br>
+      <div class="doc-type-row" style="margin:10px 0;font-size:0.9em">
+        <span style="font-weight:600;color:#444;margin-right:8px">사용 목적:</span>
+        <label style="margin-right:14px"><input type="radio" name="docType" value="subtitle" checked> 자막 (문장 끝 마침표를 오류로 표시)</label>
+        <label><input type="radio" name="docType" value="prose"> 일반 글 (구두점 허용)</label>
+      </div>
       <button id="submitBtn">교정하기</button>
     </div>
     <div id="status"></div>
@@ -262,6 +267,8 @@ submitBtn.addEventListener('click', async () => {
     const form = new FormData();
     form.append('file', file);
     form.append('names', document.getElementById('namesInput').value);
+    const docType = document.querySelector('input[name="docType"]:checked');
+    form.append('doc_type', docType ? docType.value : 'subtitle');
     const dialectMap = getDialectMap();
     const dialectModes = getDialectModes();
     if (Object.keys(dialectMap).length > 0) {

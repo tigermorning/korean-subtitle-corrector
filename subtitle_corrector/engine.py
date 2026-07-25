@@ -534,6 +534,35 @@ def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def check_subtitle_punctuation(index: int, text: str) -> FlagItem | None:
+    """자막 관례상 문장 끝에 마침표(.)를 쓰지 않는다. 문장을 종결하는 마침표를
+    오류로 플래그한다(자동 삭제하지 않고 확인 플래그 — suggested_fix에 마침표를
+    뺀 형태를 담는다). 소수점(3.14)과 말줄임표(...)는 마침표가 아니므로 제외한다.
+    일반 글 모드에서는 이 검사를 아예 돌리지 않는다(correct_entries에서 제어)."""
+    positions = []
+    for i, ch in enumerate(text):
+        if ch != ".":
+            continue
+        prev = text[i - 1] if i > 0 else ""
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if prev == "." or nxt == ".":
+            continue  # 말줄임표(...)의 일부
+        if prev.isdigit() and nxt.isdigit():
+            continue  # 소수점
+        if nxt == "" or nxt.isspace():
+            positions.append(i)  # 줄 끝이거나 뒤가 공백 = 문장 종결 마침표
+    if not positions:
+        return None
+    drop = set(positions)
+    fixed = "".join(ch for i, ch in enumerate(text) if i not in drop)
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason="자막에서는 문장 끝 마침표(.)를 쓰지 않습니다 — 마침표 제거를 확인하세요.",
+        suggested_fix=fixed,
+    )
+
+
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
     """행 끝에 띄어 쓴 '나'가 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
     '나아'의 오기인지 모호할 때 확인 플래그한다. correct_particle_spacing()이
@@ -1680,6 +1709,7 @@ def correct_entries(
     entries: list[SubtitleEntry],
     dialect_map: dict[str, str] | None = None,
     dialect_modes: dict[str, str] | None = None,
+    doc_type: str = "subtitle",
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -1814,14 +1844,18 @@ def correct_entries(
         # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
         # '백 배나'로 제안) 하나만 남긴다.
         seen_fixes = set()
-        for f in (
+        checks = [
             check_spelling(e.index, corrected_text),
             check_purified_terms(e.index, corrected_text),
             check_colloquial_loanword(e.index, corrected_text),
             check_ambiguous_compound(e.index, corrected_text),
             check_ambiguous_particle(e.index, corrected_text),
             check_spacing(e.index, corrected_text),
-        ):
+        ]
+        # 자막 모드에서만 문장 끝 마침표를 오류로 플래그한다(일반 글은 구두점 허용).
+        if doc_type == "subtitle":
+            checks.append(check_subtitle_punctuation(e.index, corrected_text))
+        for f in checks:
             if not f:
                 continue
             if f.suggested_fix and f.suggested_fix in seen_fixes:

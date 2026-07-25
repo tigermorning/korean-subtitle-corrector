@@ -104,3 +104,33 @@ def test_d_short_line_log_full():
     # 짧은 줄은 전체를 보여주는 편이 더 명확하므로 축약하지 않는다.
     applied = _applied_log("오늘은날씨가좋네요")
     assert any("오늘은날씨가좋네요 -> 오늘은 날씨가 좋네요" in a for a in applied)
+
+
+# --- E: 사용목적 모드(자막 vs 일반 글) — 문장 끝 마침표 ---
+
+def _run_mode(text: str, doc_type: str):
+    entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text, speaker=None)
+    _corrected, flags, _log = correct_entries([entry], None, None, doc_type)
+    return flags
+
+
+def test_e_subtitle_flags_sentence_period():
+    flags = _run_mode("안녕하세요.", "subtitle")
+    assert any("마침표" in f.reason and f.suggested_fix == "안녕하세요" for f in flags)
+
+
+def test_e_prose_allows_period():
+    flags = _run_mode("안녕하세요.", "prose")
+    assert not any("마침표" in f.reason for f in flags)
+
+
+def test_e_default_mode_is_subtitle():
+    # doc_type 인자를 생략하면 자막 모드 — 마침표를 플래그해야 한다.
+    entry = SubtitleEntry(index=1, start="0", end="1", text="맞아요.", speaker=None)
+    _c, flags, _l = correct_entries([entry])
+    assert any("마침표" in f.reason for f in flags)
+
+
+def test_e_subtitle_ignores_decimal_and_ellipsis():
+    assert not any("마침표" in f.reason for f in _run_mode("원주율은 3.14다", "subtitle"))
+    assert not any("마침표" in f.reason for f in _run_mode("글쎄...", "subtitle"))
