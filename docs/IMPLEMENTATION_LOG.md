@@ -296,3 +296,23 @@
 - `tests/test_former_terms.py` 10건 + 전체 스위트 108건 통과(실 API 조회).
 - held-out eval 12/14 유지(회귀 없음; 실패 2건 g05·d04는 이 변경과 무관한 기존 항목).
 - 라이브 확인: "그는 정신분열증 진단을 받았다" → "그는 조현병 진단을 받았다"(자동); "환자가 간질 발작을 일으켰다" → 원문 유지 + 플래그(suggested_fix=뇌전증, 다른 뜻 3개 명시).
+
+## 31. 5차 실사용 감수: 과교정·오탐 8건 수정 (2026-07-26)
+
+실제 대사 텍스트(사용자 제공)로 돌려 발견한 과교정/오탐을 근본 원인별로 수정. 모든 판별은 결정론적 신호(kiwi 형태소 태그 / `word_exists` / 반복구조 / 사전 뜻풀이 표지)만 쓰고 확률적 문맥 추측은 배제. 검증 근거는 `docs/HANDOFF_realusage_review.md`, 정답표 테스트는 `tests/test_realusage_review.py`(10건). 전체 스위트 108→ 통과, held-out eval 12/14 유지, `examples/sample.srt` 6건 자동교정 유지.
+
+**A. 합성어 자동병합이 파스·문맥 무시** (`correct_compound_spacing`, 신규 `check_ambiguous_compound`, `dictionary.definition_markers`)
+- '큰 애들'(크다 관형형 '큰'+'애들')을 준말 '큰애'로, '턱 밑'을 비유어 '턱밑'으로 자동 병합하던 과교정. 판별자는 표준국어대사전 뜻풀이의 '준말'/'비유적' 표지 — 이 표지가 있으면 붙임형이 띄어 쓴 구(句)와 의미가 경쟁하므로 자동 병합하지 않는다. 명사+명사(턱 밑)는 확인 플래그, 용언 관형사형+명사(큰 애들)는 명백한 구라 플래그도 안 함(사용자 확인). 함정: 용언 어간(크/VA)과 관형사형 어미(ㄴ/ETM)가 같은 `start`를 공유해 dict로는 덮어써지므로, 관형사형 판별은 `{t.start for VV/VA}` 집합으로. 회귀: 쓴맛/그때/노천카페(표지 없음) 자동 병합 유지.
+
+**B. 모호한 자동교체 → 플래그**
+- B1 '빤스'→'팬츠'(외래어 표기) 자동교체를, 된소리 구어형 '빤쓰'가 사전 표제어라 말투일 수 있으므로 플래그로 전환(`_tensified_headword_variant`로 한 음절 초성을 된소리로 바꾼 형태가 표제어인지 확인 → `correct_loanwords`·`correct_nonstandard_terms`에서 스킵, 미등록어 오탐도 억제, `check_colloquial_loanword`가 빤쓰/팬츠 선택 플래그). 회귀: 초코렛→초콜릿, 리모콘→리모컨(변이 표제어 없음) 자동교정 유지.
+- B2 '백 배 나'의 '나'를 조사로 붙여 '백 배나'로 자동교정하던 것을, '낫다'의 활용 '나아'의 오기일 수 있어 플래그로(`_mechanical_respace`에서 행 끝 띄어쓴 '나'(JX)는 붙이지 않음, `check_ambiguous_particle`가 플래그). `check_spacing`과 중복 플래그는 `suggested_fix` 기준 dedup.
+
+**C. 유효 표제어인데 미등록어/분리 오탐** (`check_spelling`의 `_unknown_content_words`, `check_spacing`의 `_protect_headword_run_splits`)
+- C1 '얄짤없어': '얄짤'(NNG)+'없다'(VA)가 합쳐 표제어 '얄짤없다'면 미등록어 아님(인접 명사+용언 결합 확인).
+- C2 '평생을 껄쩍지근하게 살았다': '껄쩍지근하다'(방언 표제어)를 '껄쩍 지근'으로 분리 제안하던 오탐 — 기존 사전 검사는 인접 두 토큰만 이어 봐서 놓침. 공백 삽입 지점을 포함하는 한글 런 전체를 사전과 대조(런 자체가 표제어이거나 용언이면 어간+다가 표제어면 되돌림).
+- C3 '건숭건숭이야': '건숭'(방언 표제어) 첩어 반복이면 억제(`_is_reduplication`).
+- C4 '콸콸콸': 같은 음절 반복(의성·의태어)이면 억제 — kiwi가 '콸'(NNP)+'콸콸'(MAG)로 쪼개 단독 '콸'만 남으므로 원문 음절 런(`_syllable_run_len`)으로 판별.
+- C5 '김치찌갯집': 단독/반복 모두 현재 오탐 재현 안 됨(반복 등장 시 recurring-unknown 검출기가 NNP로 등록해 플래그 안 남). 별도 조치 불필요.
+
+미해결/후속: `search_dialect()`(지역어 종합정보 API)는 현재 non-JSON을 반환해 사실상 중단 상태(assist 사투리 제안이 정적 convert 맵에만 의존). `docs/IMPLEMENTATION_LOG.md`가 30KB 임계를 넘어 다음 세션에 앞쪽 절반을 `docs/log-archive/`로 아카이브 필요. 리포트 UX(D: 긴 문장 변경 위치 표시)와 자막/일반 글 모드(E)는 미착수.
