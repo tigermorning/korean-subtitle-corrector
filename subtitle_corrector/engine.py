@@ -221,6 +221,17 @@ def _mechanical_respace(text: str) -> str:
             # "안되다"는 표준국어대사전 별도 표제어이므로, 원문의 띄어쓰기를 보존한다.
             if t1.form == "안" and t1.tag == "MAG" and gap_start != gap_end:
                 continue
+            # 행 끝에 띄어 쓴 '나'는 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
+            # '나아'의 오기인지 문맥 없이 가릴 수 없다. 붙여 버리면 '나아'였을
+            # 가능성을 지우므로, 원문 간격을 보존하고 check_ambiguous_particle()이
+            # 사람 확인용 플래그를 남긴다.
+            if (
+                t2.form == "나"
+                and t2.tag == "JX"
+                and gap_start != gap_end
+                and i + 1 == len(tokens) - 1
+            ):
+                continue
         elif (
             t1.tag in _MANDATORY_BOUNDARY_TAGS
             and not t2.tag.startswith(_PUNCT_TAG_PREFIX)
@@ -462,6 +473,28 @@ def check_ambiguous_compound(index: int, text: str) -> FlagItem | None:
                 f"'{original}'처럼 띄어 쓰면 글자 그대로의 뜻일 수 있어 문맥 확인이 필요합니다."
             ),
             suggested_fix=text[:start] + combined + text[end:],
+        )
+    return None
+
+
+def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
+    """행 끝에 띄어 쓴 '나'가 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
+    '나아'의 오기인지 모호할 때 확인 플래그한다. correct_particle_spacing()이
+    이 경우 자동으로 붙이지 않으므로, 사람이 문맥으로 판단하게 남긴다."""
+    tokens = _kiwi.tokenize(text)
+    if len(tokens) < 2:
+        return None
+    last, prev = tokens[-1], tokens[-2]
+    if last.form == "나" and last.tag == "JX" and prev.start + prev.len < last.start:
+        joined = text[: prev.start + prev.len] + text[last.start :]  # 사이 공백 제거
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                "행 끝 '나'가 조사('~나')인지 '낫다'의 활용 '나아'의 오기인지 "
+                "모호합니다 — 문맥 확인이 필요합니다."
+            ),
+            suggested_fix=joined,
         )
     return None
 
@@ -1688,16 +1721,24 @@ def correct_entries(
             _, dialect_flags = check_dialect(e.index, corrected_text, None, None)
             flags.extend(dialect_flags)
 
-        flags.extend(
-            f
-            for f in (
-                check_spelling(e.index, corrected_text),
-                check_purified_terms(e.index, corrected_text),
-                check_ambiguous_compound(e.index, corrected_text),
-                check_spacing(e.index, corrected_text),
-            )
-            if f
-        )
+        # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
+        # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
+        # '백 배나'로 제안) 하나만 남긴다.
+        seen_fixes = set()
+        for f in (
+            check_spelling(e.index, corrected_text),
+            check_purified_terms(e.index, corrected_text),
+            check_ambiguous_compound(e.index, corrected_text),
+            check_ambiguous_particle(e.index, corrected_text),
+            check_spacing(e.index, corrected_text),
+        ):
+            if not f:
+                continue
+            if f.suggested_fix and f.suggested_fix in seen_fixes:
+                continue
+            if f.suggested_fix:
+                seen_fixes.add(f.suggested_fix)
+            flags.append(f)
 
         corrected_entries.append(
             SubtitleEntry(
