@@ -137,29 +137,12 @@ let currentSpeakers = [];
     }
   } catch {}
   document.getElementById('dialectSection').style.display = 'block';
+  buildDialectRows(currentSpeakers);  // 초기 안내문 표시(자동 감지 없음)
 })();
 
-// 파일 선택 시 화자 추출
-document.getElementById('fileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (ext !== 'srt') {
-    currentSpeakers = [];
-    return;
-  }
-
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch('/api/speakers', { method: 'POST', body: form });
-    if (!res.ok) return;
-    const data = await res.json();
-    currentSpeakers = data.speakers || [];
-    buildDialectRows(currentSpeakers);
-  } catch {}
-});
+// 사투리는 작업자가 직접 지정한다. 파일에서 화자를 자동 감지·추천하면
+// '늘어지며'·'피식' 같은 지문이나 효과음이 화자로 잘못 섞여 들어오므로,
+// 자동 추출을 하지 않고 아래 '화자 추가'로 필요한 화자만 직접 입력받는다.
 
 // 화자 추가 버튼
 document.getElementById('addSpeakerBtn').addEventListener('click', () => {
@@ -175,7 +158,7 @@ document.getElementById('addSpeakerBtn').addEventListener('click', () => {
 function buildDialectRows(speakers) {
   const container = document.getElementById('dialectRows');
   if (!speakers.length) {
-    container.innerHTML = '<p style="color:#999;font-size:0.85em">화자를 추가하거나 파일을 업로드하세요.</p>';
+    container.innerHTML = '<p style="color:#999;font-size:0.85em">사투리를 지정할 화자 이름을 아래에 직접 추가하세요.</p>';
     return;
   }
   container.innerHTML = speakers.map(s => `

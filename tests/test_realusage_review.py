@@ -153,3 +153,11 @@ def test_sound_effect_brackets_not_speakers(tmp_path):
     speakers = {e.speaker for e in entries if e.speaker}
     # 브래킷만 있는 효과음 줄([문 여는 소리], [웃음])은 화자가 아니다.
     assert speakers == {"민수", "영희"}
+
+
+def test_no_dialect_auto_recommendation_for_unassigned_speaker():
+    # 사투리는 작업자가 직접 지정한다 — dialect_map에 없는 화자에게는 사투리
+    # 자동 감지 '추천' 플래그를 띄우지 않는다(지문/효과음 오탐 방지).
+    entry = SubtitleEntry(index=1, start="0", end="1", text="아이고 마 그래 가꼬", speaker="늘어지며")
+    _corrected, flags, _log = correct_entries([entry])  # dialect_map 없음
+    assert not any("사투리" in f.reason for f in flags)

@@ -1835,10 +1835,10 @@ def correct_entries(
                 )
             )
 
-        # 사투리 미지정 화자(이름은 있으나 지역 지정 없음)는 자동 감지 플래그만 남긴다.
-        if region is None and e.speaker:
-            _, dialect_flags = check_dialect(e.index, corrected_text, None, None)
-            flags.extend(dialect_flags)
+        # 사투리는 작업자가 직접 지정한다 — 미지정 화자에 대한 사투리 자동 감지
+        # '추천' 플래그는 띄우지 않는다('늘어지며'·'피식' 같은 지문이 화자로
+        # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
+        # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
 
         # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
         # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
