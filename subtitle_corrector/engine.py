@@ -267,13 +267,41 @@ def _mechanical_respace(text: str) -> str:
     return corrected
 
 
+def _localized_change(original: str, corrected: str) -> str:
+    """한 줄 전체를 다시 적는 대신, 실제로 바뀐 부분만 추려 '원문조각 -> 교정조각'
+    형태로 돌려준다. 긴 대사에서 어디가 자동 교정됐는지 한눈에 보이게 하기 위함
+    (앞뒤로 안 바뀐 부분이 있으면 '…'로 표시). 공통 접두/접미를 제거해 최소
+    변경 구간만 남긴다. 짧은 줄은 전체를 보여주는 편이 더 명확하므로, 긴 대사
+    (25자 초과)에서만 축약한다."""
+    if len(original) <= 25:
+        return f"{original} -> {corrected}"
+    i = 0
+    n = min(len(original), len(corrected))
+    while i < n and original[i] == corrected[i]:
+        i += 1
+    jo, jc = len(original), len(corrected)
+    while jo > i and jc > i and original[jo - 1] == corrected[jc - 1]:
+        jo -= 1
+        jc -= 1
+    # 변경 구간에 앞뒤 맥락 몇 글자를 붙인다 — 순수 공백 삽입(예: '할만하다'→
+    # '할 만하다')처럼 바뀐 부분만 떼면 무의미해지는(∅→' ') 경우를 막고,
+    # 어느 단어에서 바뀌었는지 보이게 하기 위함이다.
+    margin = 3
+    ci = max(0, i - margin)
+    cjo = min(len(original), jo + margin)
+    cjc = min(len(corrected), jc + margin)
+    pre = "…" if ci > 0 else ""
+    suf = "…" if cjo < len(original) else ""
+    return f"{pre}{original[ci:cjo]}{suf} -> {pre}{corrected[ci:cjc]}{suf}"
+
+
 def correct_particle_spacing(text: str) -> tuple[str, list[str]]:
     """조사·어미·접미사 결합 지점의 띄어쓰기 오류를 자동으로 정리한다.
 
-    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문조각 -> 교정조각')
     """
     corrected = _mechanical_respace(text)
-    applied = [f"{text} -> {corrected}"] if corrected != text else []
+    applied = [_localized_change(text, corrected)] if corrected != text else []
     return corrected, applied
 
 
@@ -906,7 +934,7 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
     corrected = text
     for gap_start, gap_end in sorted(edits, key=lambda e: e[0], reverse=True):
         corrected = corrected[:gap_start] + " " + corrected[gap_end:]
-    applied = [f"{text} -> {corrected}"] if corrected != text else []
+    applied = [_localized_change(text, corrected)] if corrected != text else []
     return corrected, applied
 
 

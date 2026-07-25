@@ -80,3 +80,27 @@ def test_c4_onomatopoeia_not_flagged_foreign():
     out, flags = _run("콸콸콸 콸콸콸")
     assert out == "콸콸콸 콸콸콸"
     assert not any("사전에 없는 단어" in f.reason for f in flags)
+
+
+# --- D: 긴 줄 자동교정 로그는 변경 부분만 축약 표시 ---
+
+def _applied_log(text: str):
+    entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text, speaker=None)
+    _corrected, _flags, applied = correct_entries([entry], None, None)
+    return applied
+
+
+def test_d_long_line_log_localized():
+    # 긴 대사에서 한 곳만 바뀌면 전체 라인을 다시 적지 않고 변경 부분만 '…'로 축약.
+    long_text = "상용화 직전 마지막 테스트 단계래 땡큐지 갔어 뭔가 착오가있었던 것 같대"
+    applied = _applied_log(long_text)
+    assert applied, "띄어쓰기 자동 교정이 있어야 함"
+    joined = " ".join(applied)
+    assert "…" in joined
+    assert long_text not in joined  # 원문 전체를 그대로 다시 싣지 않는다
+
+
+def test_d_short_line_log_full():
+    # 짧은 줄은 전체를 보여주는 편이 더 명확하므로 축약하지 않는다.
+    applied = _applied_log("오늘은날씨가좋네요")
+    assert any("오늘은날씨가좋네요 -> 오늘은 날씨가 좋네요" in a for a in applied)
