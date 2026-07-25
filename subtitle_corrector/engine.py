@@ -308,6 +308,10 @@ def correct_loanwords(
         # 말로 둔갑하는 사고가 생긴다 (실제로 발견된 버그).
         if word_exists(t.form):
             continue
+        # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 외래어 표기로 자동 교정하지
+        # 않고 check_colloquial_loanword()가 사람 확인 플래그를 남긴다.
+        if _tensified_headword_variant(t.form):
+            continue
         fix, needs_review, context = loanword_fix(t.form)
         if fix:
             replacements.append((t.start, t.len, t.form, fix, needs_review, context, t.tag == "NNP"))
@@ -477,6 +481,31 @@ def check_ambiguous_compound(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
+    """'빤스'처럼 외래어 표기 교정 대상이지만 된소리 구어형('빤쓰')이 사전
+    표제어로 있어 화자의 말투일 수 있는 경우, 자동 교정하지 않고 구어형과
+    외래어 표기 중 어느 쪽으로 적을지 사람이 정하도록 플래그한다."""
+    for t in _kiwi.tokenize(text):
+        if t.tag not in _LOANWORD_TAGS or word_exists(t.form):
+            continue
+        variant = _tensified_headword_variant(t.form)
+        if not variant:
+            continue
+        fix, _needs_review, _context = loanword_fix(t.form)
+        if not fix:
+            continue
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{t.form}'은 구어형 '{variant}'(사전 표제어)일 수도, 외래어 표기 "
+                f"'{fix}'일 수도 있습니다 — 말투를 살릴지 여부를 사람이 판단하세요."
+            ),
+            suggested_fix=text[: t.start] + variant + text[t.start + t.len :],
+        )
+    return None
+
+
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
     """행 끝에 띄어 쓴 '나'가 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
     '나아'의 오기인지 모호할 때 확인 플래그한다. correct_particle_spacing()이
@@ -603,6 +632,10 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     replacements = {}
     for t in _kiwi.tokenize(text):
         if t.tag not in ("NNG", "NNP"):
+            continue
+        # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 규범 표기로 자동 바꾸지 않고
+        # check_colloquial_loanword()가 말투 보존 여부를 사람에게 묻는다.
+        if _tensified_headword_variant(t.form):
             continue
         replacement = standard_term_replacement(t.form)
         if replacement:
@@ -932,6 +965,30 @@ def _syllable_run_len(text: str, pos: int, ch: str) -> int:
     return right - left + 1
 
 
+# 된소리(경음) 초성 변환: ㄱ→ㄲ, ㄷ→ㄸ, ㅂ→ㅃ, ㅅ→ㅆ, ㅈ→ㅉ (초성 인덱스 기준).
+_TENSE_CHOSEONG = {0: 1, 3: 4, 7: 8, 9: 10, 12: 13}
+
+
+def _tensified_headword_variant(word: str) -> str | None:
+    """word의 어느 한 음절 초성을 된소리로 바꾼 형태가 표준국어대사전/우리말샘
+    표제어이면 그 형태를 돌려준다 (예: '빤스'→'빤쓰'). '빤쓰'처럼 구어형이
+    사전에 등재돼 있으면, 그 말을 외래어 표기('팬츠')로 자동 교정하지 않고
+    말투 보존 여부를 사람이 정하도록 플래그하는 근거가 된다. 그런 변이가
+    없으면(예: '초코렛') None."""
+    for i, ch in enumerate(word):
+        code = ord(ch)
+        if not (0xAC00 <= code <= 0xD7A3):
+            continue
+        syllable = code - 0xAC00
+        cho = syllable // 588
+        if cho in _TENSE_CHOSEONG:
+            tense = 0xAC00 + _TENSE_CHOSEONG[cho] * 588 + (syllable % 588)
+            variant = word[:i] + chr(tense) + word[i + 1 :]
+            if variant != word and word_exists(variant):
+                return variant
+    return None
+
+
 def _is_reduplication(word: str) -> bool:
     """'건숭건숭'(사전 표제어 첩어)처럼 같은 요소가 반복된 형태는 외래어 음차가
     아니므로 미등록어 플래그에서 제외한다.
@@ -970,6 +1027,10 @@ def _unknown_content_words(text: str) -> list[str]:
         if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
             continue
         if _is_reduplication(lemma):
+            continue
+        # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 미등록 외래어가 아니라
+        # check_colloquial_loanword()가 다룰 말투 표현이다.
+        if _tensified_headword_variant(t.form):
             continue
         # 한 글자 미등록어가 원문에서 같은 글자 반복(콸콸콸)의 조각이면 의성·의태어.
         if len(t.form) == 1 and _syllable_run_len(text, t.start, t.form) >= 2:
@@ -1728,6 +1789,7 @@ def correct_entries(
         for f in (
             check_spelling(e.index, corrected_text),
             check_purified_terms(e.index, corrected_text),
+            check_colloquial_loanword(e.index, corrected_text),
             check_ambiguous_compound(e.index, corrected_text),
             check_ambiguous_particle(e.index, corrected_text),
             check_spacing(e.index, corrected_text),
