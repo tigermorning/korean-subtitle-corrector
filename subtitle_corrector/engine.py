@@ -1435,6 +1435,47 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
     return suggested
 
 
+def _hangul_run_bounds(text: str, pos: int) -> tuple[int, int]:
+    """text의 pos 위치를 포함하는, 공백 없이 이어진 한글 글자 런의 [시작, 끝)."""
+    def is_hangul(ch: str) -> bool:
+        return "가" <= ch <= "힣"
+
+    left = pos
+    while left > 0 and is_hangul(text[left - 1]):
+        left -= 1
+    right = pos
+    while right < len(text) and is_hangul(text[right]):
+        right += 1
+    return left, right
+
+
+def _protect_headword_run_splits(text: str, suggested: str) -> str:
+    """kiwi.space()가 사전 표제어(용언 포함) '내부'에 공백을 끼워 넣는 경우를
+    되돌린다. _protect_unfounded_respacing()의 사전 검사는 공백을 사이에 둔 두
+    토큰만 이어 보므로, '껄쩍지근하다'(방언 형용사)처럼 여러 형태소에 걸친
+    표제어를 '껄쩍 지근하게'로 쪼개는 것을 놓친다. 여기서는 공백이 끼워진
+    지점을 포함하는 한글 런 전체를 사전과 대조한다 — 사전이 kiwi의 통계적
+    추정보다 권위 있는 근거다."""
+    to_remove = []
+    for i1, j1, j2 in _inserted_space_ranges(text, suggested):
+        run_start, run_end = _hangul_run_bounds(text, i1)
+        run = text[run_start:run_end]
+        if len(run) < 2:
+            continue
+        if word_exists(run):
+            to_remove.append((j1, j2))
+            continue
+        run_tokens = _kiwi.tokenize(run)
+        # 용언이면 마지막 어미를 떼고 기본형(어간+다)으로 사전을 확인한다.
+        if run_tokens and run_tokens[-1].tag.startswith("E"):
+            stem = run[: run_tokens[-1].start]
+            if len(stem) >= 2 and word_exists(stem + "다"):
+                to_remove.append((j1, j2))
+    for j1, j2 in sorted(to_remove, key=lambda r: r[0], reverse=True):
+        suggested = suggested[:j1] + suggested[j2:]
+    return suggested
+
+
 def check_spacing(index: int, text: str) -> FlagItem | None:
     """띄어쓰기 제안은 신뢰도를 알 수 없으므로 절대 자동 적용하지 않고
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
@@ -1456,6 +1497,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
 
     suggested = _normalize_aux_verb_spacing(text, suggested)
     suggested = _protect_unfounded_respacing(text, suggested)
+    suggested = _protect_headword_run_splits(text, suggested)
     suggested = _protect_unfounded_joining(text, suggested)
 
     if suggested != text:
