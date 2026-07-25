@@ -134,3 +134,22 @@ def test_e_default_mode_is_subtitle():
 def test_e_subtitle_ignores_decimal_and_ellipsis():
     assert not any("마침표" in f.reason for f in _run_mode("원주율은 3.14다", "subtitle"))
     assert not any("마침표" in f.reason for f in _run_mode("글쎄...", "subtitle"))
+
+
+# --- 효과음 브래킷을 화자로 오인하지 않기 ---
+
+def test_sound_effect_brackets_not_speakers(tmp_path):
+    from subtitle_corrector.parsers import parse_srt
+
+    srt = (
+        "1\n00:00:01,000 --> 00:00:03,000\n[민수] 안녕하세요\n\n"
+        "2\n00:00:04,000 --> 00:00:06,000\n[문 여는 소리]\n\n"
+        "3\n00:00:07,000 --> 00:00:09,000\n[웃음]\n\n"
+        "4\n00:00:10,000 --> 00:00:12,000\n[영희] 어서 와\n"
+    )
+    path = tmp_path / "sfx.srt"
+    path.write_text(srt, encoding="utf-8")
+    entries = parse_srt(path)
+    speakers = {e.speaker for e in entries if e.speaker}
+    # 브래킷만 있는 효과음 줄([문 여는 소리], [웃음])은 화자가 아니다.
+    assert speakers == {"민수", "영희"}

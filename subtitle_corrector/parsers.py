@@ -33,12 +33,18 @@ def parse_srt(path: Path) -> list[SubtitleEntry]:
         if not match:
             continue
         text = "\n".join(lines[2:])
-        # SDH 브래킷에서 화자 이름 추출 ([민수], [민수/상황] 등)
+        # SDH 브래킷에서 화자 이름 추출 ([민수], [민수/상황] 등).
+        # 단, "[문 여는 소리]"처럼 브래킷만 있고 뒤에 대사가 없는 줄은 효과음·
+        # 지문이므로 화자로 잡지 않는다(그렇지 않으면 효과음이 사투리 설정
+        # 목록에 대거 섞여 들어온다). 브래킷 뒤에 실제 대사가 이어질 때만 화자.
         speaker = None
         first_line = lines[2].strip() if len(lines) > 2 else ""
         bracket_match = _SPEAKER_BRACKET_RE.match(first_line)
         if bracket_match:
-            speaker = bracket_match.group(1).strip()
+            close_idx = first_line.find("]")
+            remainder = first_line[close_idx + 1 :].strip() if close_idx != -1 else ""
+            if remainder:
+                speaker = bracket_match.group(1).strip()
         entries.append(
             SubtitleEntry(
                 index=int(lines[0].strip()),
