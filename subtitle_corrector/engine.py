@@ -764,6 +764,22 @@ def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[Fl
                 result = former_term_lookup(surface)
                 if result is None:
                     continue
+                # '수강생'처럼 이 명사(수강)가 뒤따르는 접미사(생/XSN)와 결합해
+                # 별개의 표제어를 이루면, 그 안의 '수강'을 옛 용어로 보지 않는다
+                # (더 긴 표제어 우선 — '수강생'은 '수강(옛 용어)'과 무관한 단어).
+                k = q + 1
+                while (
+                    k < n
+                    and tokens[k].tag == "XSN"
+                    and tokens[k].start == tokens[k - 1].start + tokens[k - 1].len
+                ):
+                    k += 1
+                if k > q + 1:
+                    extended = text[tokens[p].start : tokens[k - 1].start + tokens[k - 1].len]
+                    if word_exists(extended):
+                        p = q + 1
+                        matched = True
+                        break
                 target = result["target"]
                 if not result["ambiguous"]:
                     auto_replacements[surface] = target
