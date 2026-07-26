@@ -1388,7 +1388,18 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS
         ):
             continue  # 동작성 명사+받다(접사) -> "호출받다"처럼 사전 미등재라도 항상 붙여씀
-        before_part = before.lemma if before.tag.startswith("V") else before.form
+        # before가 연결어미(EC)면 어간까지 포함한 실제 용언 표면형으로 확인한다
+        # (예: '싶어 하다'의 before는 '어'뿐이라, '어'+'하다'='어하다'라는 무관한
+        # 표제어와 우연히 겹쳐 근거 없는 결합을 정당한 것으로 오인한다 — '집→지브'
+        # 사고와 같은 유형. 어간을 붙여 '싶어'+'하다'='싶어하다'로 검사해야 맞다).
+        before_part = before.form
+        if before.tag == "EC":
+            before_idx = _token_index(tokens, before)
+            stem = tokens[before_idx - 1] if before_idx and before_idx >= 1 else None
+            if stem is not None and stem.tag.startswith("V") and stem.start < before.start:
+                before_part = text[stem.start : before.start + before.len]
+        elif before.tag.startswith("V"):
+            before_part = before.lemma
         after_part = after.lemma if after.tag.startswith("V") else after.form
         if not word_exists(before_part + after_part):
             to_restore.append(insert_at)
