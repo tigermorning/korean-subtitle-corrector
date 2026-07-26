@@ -171,8 +171,20 @@ class TestCompoundSpacing:
             ["그 때 -> 그때"],
         )
 
-    def test_sseun_mat(self):
-        assert correct_compound_spacing("쓴 맛이 난다") == ("쓴맛이 난다", ["쓴 맛 -> 쓴맛"])
+    def test_sseun_mat_adnominal_not_auto_merged(self):
+        # 용언 관형사형(쓰+ㄴ)+명사는 '쓴 맛'(맛이 쓰다)이라는 구문 읽기가 늘
+        # 가능해 정답이 하나로 확정되지 않으므로 자동 병합하지 않는다(사용자
+        # 원칙: 자동 교정은 정답이 100% 하나일 때만). '본 집', '큰 애들'도 동일.
+        assert correct_compound_spacing("쓴 맛이 난다") == ("쓴 맛이 난다", [])
+
+    def test_bon_jip_adnominal_not_auto_merged(self):
+        # '많이 본 집'(보다+집)을 '본집'(本-집)으로 자동 병합하지 않는다.
+        assert correct_compound_spacing("많이 본 집 같은데") == ("많이 본 집 같은데", [])
+
+    def test_left_grouping_ambiguous_not_merged(self):
+        # '보물선 투자'에서 kiwi가 '보물선'을 '보물'+'선'으로 쪼개도, '보물'+'선'=
+        # '보물선'(표제어)이라 '선'이 좌우 어디에도 붙을 수 있어 '선투자'로 병합하지 않는다.
+        assert correct_compound_spacing("보물선 투자를 했다") == ("보물선 투자를 했다", [])
 
 
 class TestLoanwordFix:

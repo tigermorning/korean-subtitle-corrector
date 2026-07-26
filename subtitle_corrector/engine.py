@@ -449,8 +449,36 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
+    # 용언 관형사형(보/VV+ㄴ/ETM 등)이 이끄는 조합은 '본 집'(보다+집)처럼 구문
+    # 읽기가 항상 가능해 정답이 하나로 확정되지 않으므로, 사전에 합성어로
+    # 등재돼 있어도 자동으로 붙이지 않는다(자동 교정은 정답이 100% 하나일 때만).
+    tokens = _kiwi.tokenize(text)
+    adnominal_starts = {t.start for t in tokens if t.tag in ("VV", "VA")}
+    start_to_idx = {}
+    for idx, tok in enumerate(tokens):
+        start_to_idx.setdefault(tok.start, idx)
+
+    def left_grouping_ambiguous(start: int) -> bool:
+        """병합 시작 토큰(예: '보물선 투자'에서 kiwi가 '보물선'을 '보물'+'선'으로
+        쪼갠 '선')이 바로 앞 명사와 붙어 다른 사전 표제어(보물+선='보물선')를
+        이루면, 그 토큰은 좌우 어느 쪽에도 붙을 수 있어 병합 결과가 유일하지
+        않다 — 자동 병합하지 않는다."""
+        idx = start_to_idx.get(start)
+        if not idx:
+            return False
+        prev, lead = tokens[idx - 1], tokens[idx]
+        if prev.tag not in ("NNG", "NNP"):
+            return False
+        if prev.start + prev.len != lead.start:
+            return False  # 사이에 공백/다른 토큰이 있으면 좌측 결합 후보 아님
+        return word_exists(prev.form + lead.form)
+
     fixes = []  # (start, end, replacement, description)
     for start, boundary, end in _compound_candidate_spans(text):
+        if start in adnominal_starts:
+            continue
+        if left_grouping_ambiguous(start):
+            continue
         original = text[start:end]
         combined = text[start:boundary] + text[boundary:end].lstrip(" ")
         if original == combined:
