@@ -338,6 +338,63 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     return corrected, [_localized_change(text, corrected)]
 
 
+# 동작성 신호로 쓰는 word_exists(N+"하다")가 동형이의어로 오탐하는 명사들.
+# '상'(賞)은 '상하다'(음식이 상하다)·'상당하다'·'상되다'가 사전에 있어 동작성으로
+# 오판되지만 실제로는 동작성이 없다('상 받다'는 띄움). '돈'·'벌'도 마찬가지.
+_AFFIX_ACTION_EXCLUDE = {"상", "돈", "벌"}
+# 동작성 명사 뒤에 붙는 접사(하다/시키다/당하다/받다). '되다'는 성격이 달라
+# 별도 처리한다(붙임형이 사전 표제어일 때만 — 피동성 조건).
+_AFFIX_LEMMAS = {"하다", "시키다", "당하다", "받다"}
+
+
+def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
+    """동작성 명사 뒤의 접사(하다/시키다/당하다/받다/되다)가 띄어 써 있으면 붙인다
+    (예: '선물 받았어'→'선물받았어', '배달 시켜서'→'배달시켜서', '무시 당하다'→
+    '무시당하다', '음악 하는'→'음악하는'). 동작성 없는 명사 뒤에서는 이들이 동사라
+    띄어 쓴다('상 받다', '짜장면 시키다', '팀장 되다'는 그대로).
+
+    동작성 판정 = _is_action_noun(word_exists(N+'하다')). 다만 이 신호는 '상하다'
+    (부패) 같은 동형이의어로 오탐하므로 _AFFIX_ACTION_EXCLUDE(상/돈/벌)를 먼저
+    배제한다. '되다'는 동작성 heuristic을 쓰지 않고 붙임형(N되다)이 사전 표제어일
+    때만 붙인다('해체되다' O / '도움 되다'·'팀장 되다' X). 접사가 명사 바로 뒤에
+    공백 하나로 떨어져 있을 때만 붙인다.
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    cuts = []  # (공백 시작, 공백 끝) — 제거해서 붙인다
+    for i in range(1, len(tokens)):
+        noun, affix = tokens[i - 1], tokens[i]
+        if noun.tag not in ("NNG", "NNP"):
+            continue
+        if text[noun.start + noun.len : affix.start] != " ":
+            continue  # 명사와 접사가 공백 하나로 떨어져 있을 때만
+        # 관형사(MM)·관형형(ETM)이 이 명사를 꾸미면 '하다'는 명사와 띄어야 한다
+        # (correct_adnominal_noun_verb_split과 같은 원칙: '이런 생각 하다'). 접사로
+        # 붙이면 그 분리를 되돌리게 되므로 건너뛴다.
+        if i >= 2:
+            prev = tokens[i - 2]
+            if prev.tag in ("MM", "ETM") and text[prev.start + prev.len : noun.start] in (" ", ""):
+                continue
+        n = noun.form
+        if n in _AFFIX_ACTION_EXCLUDE:
+            continue
+        affix_is_hada = affix.lemma == "하다" or (affix.tag == "XSV" and affix.form == "하")
+        if affix.lemma == "되다":
+            attach = word_exists(n + "되다")
+        elif affix.lemma in _AFFIX_LEMMAS or affix_is_hada:
+            attach = _is_action_noun(n)
+        else:
+            attach = False
+        if attach:
+            cuts.append((noun.start + noun.len, affix.start))
+    if not cuts:
+        return text, []
+    corrected = text
+    for gap_start, gap_end in sorted(cuts, reverse=True):
+        corrected = corrected[:gap_start] + corrected[gap_end:]
+    return corrected, [_localized_change(text, corrected)]
+
+
 def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
     """관형사(MM)나 관형형(…ETM) 바로 뒤에 '명사+하다' 동사가 붙어 있으면
     (예: '뭔 생각하냐', '만날 생각해') 명사와 '하'를 띄어 준다. 관형사·관형형은
@@ -2020,6 +2077,7 @@ def correct_entries(
         corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
         corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
         corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
+        corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
         corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
@@ -2034,6 +2092,7 @@ def correct_entries(
             for fix in applied_fixes
             + particle_fixes
             + adnominal_fixes
+            + affix_fixes
             + comma_fixes
             + compound_fixes
             + aux_verb_fixes
