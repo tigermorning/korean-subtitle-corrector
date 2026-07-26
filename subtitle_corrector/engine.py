@@ -534,31 +534,60 @@ def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
     return None
 
 
-def check_subtitle_punctuation(index: int, text: str) -> FlagItem | None:
-    """자막 관례상 문장 끝에 마침표(.)를 쓰지 않는다. 문장을 종결하는 마침표를
-    오류로 플래그한다(자동 삭제하지 않고 확인 플래그 — suggested_fix에 마침표를
-    뺀 형태를 담는다). 소수점(3.14)과 말줄임표(...)는 마침표가 아니므로 제외한다.
-    일반 글 모드에서는 이 검사를 아예 돌리지 않는다(correct_entries에서 제어)."""
+def _is_sentence_period(text: str, i: int) -> bool:
+    """text[i]의 '.'가 문장 종결 마침표인지 판정한다(소수점 3.14, 말줄임표
+    ... 제외)."""
+    if i < 0 or i >= len(text) or text[i] != ".":
+        return False
+    prev = text[i - 1] if i > 0 else ""
+    nxt = text[i + 1] if i + 1 < len(text) else ""
+    if prev == "." or nxt == ".":
+        return False  # 말줄임표(...)의 일부
+    if prev.isdigit() and nxt.isdigit():
+        return False  # 소수점
+    return True
+
+
+def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
+    """자막 관례상 줄 맨 끝(문장 종결)의 마침표는 쓰지 않는다 — 이건 정답이
+    하나뿐이라 자동으로 제거한다. 소수점·말줄임표는 건드리지 않는다.
+
+    반환값: (마침표를 뺀 텍스트, 적용 로그)."""
+    stripped = text.rstrip()
+    trailing_ws = text[len(stripped) :]
+    if not stripped.endswith(".") or stripped.endswith(".."):
+        return text, []  # 마침표로 안 끝나거나 말줄임표(...)면 건드리지 않는다
+    i = len(stripped) - 1
+    if not _is_sentence_period(stripped, i):
+        return text, []
+    corrected = stripped[:i] + trailing_ws
+    return corrected, ["문장 끝 마침표 제거 (자막)"]
+
+
+def check_subtitle_internal_period(index: int, text: str) -> FlagItem | None:
+    """자막에서 한 줄에 두 문장이 이어질 때, 문장 사이의 마침표는 쉼표(,)로
+    바꾸는 것이 관례다. 문장 종결 마침표 뒤에 공백을 두고 다른 문장이 이어지는
+    지점을 찾아, 마침표를 쉼표로 바꾼 형태를 확인 플래그로 제안한다(자동 교정은
+    하지 않는다 — 문장 경계 판단은 사람이 확인). 줄 맨 끝 마침표는
+    correct_subtitle_final_period()가 이미 자동으로 제거한다."""
     positions = []
     for i, ch in enumerate(text):
-        if ch != ".":
+        if ch != "." or not _is_sentence_period(text, i):
             continue
-        prev = text[i - 1] if i > 0 else ""
         nxt = text[i + 1] if i + 1 < len(text) else ""
-        if prev == "." or nxt == ".":
-            continue  # 말줄임표(...)의 일부
-        if prev.isdigit() and nxt.isdigit():
-            continue  # 소수점
-        if nxt == "" or nxt.isspace():
-            positions.append(i)  # 줄 끝이거나 뒤가 공백 = 문장 종결 마침표
+        if nxt.isspace() and text[i + 1 :].strip():
+            positions.append(i)  # 뒤에 공백 + 이어지는 문장 = 내부 문장 경계
     if not positions:
         return None
     drop = set(positions)
-    fixed = "".join(ch for i, ch in enumerate(text) if i not in drop)
+    fixed = "".join("," if i in drop else ch for i, ch in enumerate(text))
     return FlagItem(
         line_index=index,
         original_text=text,
-        reason="자막에서는 문장 끝 마침표(.)를 쓰지 않습니다 — 마침표 제거를 확인하세요.",
+        reason=(
+            "자막에서 한 줄에 두 문장이 이어질 때는 문장 사이에 마침표 대신 "
+            "쉼표(,)를 씁니다 — 확인하세요."
+        ),
         suggested_fix=fixed,
     )
 
@@ -1867,6 +1896,14 @@ def correct_entries(
         # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
         # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
 
+        # 자막 모드: 줄 끝 문장 종결 마침표는 관례상 쓰지 않으므로 자동 제거한다
+        # (정답이 하나뿐). 문장 사이 마침표(쉼표로 바꿔야 하는 경우)는 아래
+        # check_subtitle_internal_period()가 확인 플래그로 제안한다. 일반 글
+        # 모드는 구두점을 허용하므로 둘 다 하지 않는다.
+        if doc_type == "subtitle":
+            corrected_text, period_log = correct_subtitle_final_period(corrected_text)
+            applied_log.extend(f"[{e.index}] {m}" for m in period_log)
+
         # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
         # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
         # '백 배나'로 제안) 하나만 남긴다.
@@ -1879,9 +1916,8 @@ def correct_entries(
             check_ambiguous_particle(e.index, corrected_text),
             check_spacing(e.index, corrected_text),
         ]
-        # 자막 모드에서만 문장 끝 마침표를 오류로 플래그한다(일반 글은 구두점 허용).
         if doc_type == "subtitle":
-            checks.append(check_subtitle_punctuation(e.index, corrected_text))
+            checks.append(check_subtitle_internal_period(e.index, corrected_text))
         for f in checks:
             if not f:
                 continue

@@ -106,34 +106,47 @@ def test_d_short_line_log_full():
     assert any("오늘은날씨가좋네요 -> 오늘은 날씨가 좋네요" in a for a in applied)
 
 
-# --- E: 사용목적 모드(자막 vs 일반 글) — 문장 끝 마침표 ---
+# --- E: 사용목적 모드(자막 vs 일반 글) — 문장 부호 ---
 
-def _run_mode(text: str, doc_type: str):
+def _run_mode_full(text: str, doc_type: str):
     entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text, speaker=None)
-    _corrected, flags, _log = correct_entries([entry], None, None, doc_type)
-    return flags
+    return correct_entries([entry], None, None, doc_type)
 
 
-def test_e_subtitle_flags_sentence_period():
-    flags = _run_mode("안녕하세요.", "subtitle")
-    assert any("마침표" in f.reason and f.suggested_fix == "안녕하세요" for f in flags)
+def test_e_subtitle_removes_final_period():
+    # 줄 끝 문장 종결 마침표는 자막 관례상 자동으로 제거한다(플래그 아님).
+    corrected, flags, _log = _run_mode_full("안녕하세요.", "subtitle")
+    assert corrected[0].text == "안녕하세요"
+    assert not any(f.suggested_fix and f.suggested_fix.endswith(".") for f in flags)
 
 
-def test_e_prose_allows_period():
-    flags = _run_mode("안녕하세요.", "prose")
-    assert not any("마침표" in f.reason for f in flags)
+def test_e_subtitle_internal_period_to_comma_flag():
+    # 한 줄에 두 문장: 끝 마침표는 자동 제거, 문장 사이 마침표는 쉼표로 바꾸자고 플래그.
+    corrected, flags, _log = _run_mode_full("보여 주세요. 궁금해요.", "subtitle")
+    assert corrected[0].text == "보여 주세요. 궁금해요"  # 끝 마침표만 제거
+    assert any(f.suggested_fix == "보여 주세요, 궁금해요" for f in flags)
+
+
+def test_e_prose_keeps_periods():
+    corrected, flags, _log = _run_mode_full("보여 주세요. 궁금해요.", "prose")
+    assert corrected[0].text == "보여 주세요. 궁금해요."  # 일반 글은 구두점 유지
+    assert not any("쉼표" in f.reason for f in flags)
 
 
 def test_e_default_mode_is_subtitle():
-    # doc_type 인자를 생략하면 자막 모드 — 마침표를 플래그해야 한다.
-    entry = SubtitleEntry(index=1, start="0", end="1", text="맞아요.", speaker=None)
-    _c, flags, _l = correct_entries([entry])
-    assert any("마침표" in f.reason for f in flags)
+    # doc_type 인자를 생략하면 자막 모드 — 끝 마침표를 자동 제거한다.
+    corrected, _flags, _log = correct_entries(
+        [SubtitleEntry(index=1, start="0", end="1", text="맞아요.", speaker=None)]
+    )
+    assert corrected[0].text == "맞아요"
 
 
 def test_e_subtitle_ignores_decimal_and_ellipsis():
-    assert not any("마침표" in f.reason for f in _run_mode("원주율은 3.14다", "subtitle"))
-    assert not any("마침표" in f.reason for f in _run_mode("글쎄...", "subtitle"))
+    # 소수점(3.14)·말줄임표(...)는 문장 종결 마침표가 아니므로 건드리지 않는다.
+    corrected, _f, _l = _run_mode_full("원주율은 3.14다", "subtitle")
+    assert corrected[0].text == "원주율은 3.14다"
+    corrected2, _f2, _l2 = _run_mode_full("글쎄...", "subtitle")
+    assert corrected2[0].text == "글쎄..."
 
 
 # --- 효과음 브래킷을 화자로 오인하지 않기 ---
