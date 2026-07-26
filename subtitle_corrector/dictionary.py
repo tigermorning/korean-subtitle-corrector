@@ -106,7 +106,12 @@ def _opendict_item_is_standard(item: dict) -> bool:
             any(marker in definition for marker in _NONSTANDARD_REDIRECT_MARKERS)
             and "미확정" not in definition
         )
-        if not redirects:
+        # '북한어' 뜻(예: "'로봇'의 북한어.")은 남한 표준어가 아니므로 표준 자격
+        # 뜻으로 치지 않는다 — 이게 없으면 '로보트'(재지정 뜻 + 북한어 뜻)가
+        # 표준으로 오판되어 외래어 교정(로보트→로봇)이 막힌다. 방언은 제외하지
+        # 않는다(건숭 등 방언 표제어는 존재하는 단어로 인정해야 오탐을 막는다).
+        is_north_korean = "북한어" in definition
+        if not redirects and not is_north_korean:
             return True
     return False
 
