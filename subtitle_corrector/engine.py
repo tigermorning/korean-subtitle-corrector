@@ -1166,12 +1166,38 @@ def _is_native_compound(word: str) -> bool:
     return False
 
 
+def _covered_by_larger_dictionary_unit(text: str, tokens: list, i: int) -> bool:
+    """토큰 tokens[i]가 단독으론 표제어가 아니어도, 그것을 포함하는 '더 큰
+    사전-유효 단위'의 조각이면 True. 미등록어(외국어) 오탐의 근본 원인인
+    '조각 대조'(docs/DESIGN_PRINCIPLES.md 원리 1)를 막는 공유 가드다. kiwi가
+    사전 표제어를 조각내는 경우들을 사전·규범 근거로만 판정한다(확률적 추측 없음):
+    - 첩어('건숭건숭')·의성어('콸콸콸') 등 반복 형태
+    - 두 표제어가 결합한 고유어 합성어('김치'+'찌갯집')
+    - 된소리 구어형이 표제어인 경우('빤스'→'빤쓰'; 말투는 check_colloquial_loanword)
+    - 미등록 명사가 바로 뒤 용언과 합쳐 표제어를 이루는 경우('얄짤'+'없다'='얄짤없다')
+    """
+    t = tokens[i]
+    lemma = t.lemma
+    if _is_reduplication(lemma):
+        return True
+    if _is_native_compound(lemma):
+        return True
+    if _tensified_headword_variant(t.form):
+        return True
+    if len(t.form) == 1 and _syllable_run_len(text, t.start, t.form) >= 2:
+        return True
+    if t.tag == "NNG" and i + 1 < len(tokens):
+        nxt = tokens[i + 1]
+        if nxt.tag.startswith(("VA", "VV")) and nxt.start == t.start + t.len:
+            if word_exists(t.form + nxt.lemma):
+                return True
+    return False
+
+
 def _unknown_content_words(text: str) -> list[str]:
     """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
-    조각내는 경우의 오탐을 토큰 인접 관계로 걸러낸다:
-    - '얄짤없다'를 '얄짤'(NNG)+'없다'(VA)로 쪼갠 경우: 명사+뒤 용언이 합쳐 표제어면 제외.
-    - '건숭건숭'(첩어)이나 '콸콸콸'(의성어)처럼 반복된 형태: 제외.
-    이 셋 다 사전/규범 근거로만 판정하며 확률적 추측은 쓰지 않는다."""
+    조각내는 경우의 오탐은 _covered_by_larger_dictionary_unit()(원리 1 공유 가드)로
+    걸러낸다."""
     brackets = _bracket_spans(text)
     tokens = _kiwi.tokenize(text)
     unknown = []
@@ -1183,25 +1209,8 @@ def _unknown_content_words(text: str) -> list[str]:
         lemma = t.lemma
         if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
             continue
-        if _is_reduplication(lemma):
+        if _covered_by_larger_dictionary_unit(text, tokens, i):
             continue
-        # 두 사전 표제어가 결합한 고유어 합성어(김치+찌갯집)는 외래어가 아니다.
-        if _is_native_compound(lemma):
-            continue
-        # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 미등록 외래어가 아니라
-        # check_colloquial_loanword()가 다룰 말투 표현이다.
-        if _tensified_headword_variant(t.form):
-            continue
-        # 한 글자 미등록어가 원문에서 같은 글자 반복(콸콸콸)의 조각이면 의성·의태어.
-        if len(t.form) == 1 and _syllable_run_len(text, t.start, t.form) >= 2:
-            continue
-        # 미등록 명사가 바로 뒤 용언과 붙어 하나의 표제어를 이루면(얄짤+없다=얄짤없다)
-        # kiwi가 쪼갠 것일 뿐이므로 미등록어가 아니다.
-        if t.tag == "NNG" and i + 1 < len(tokens):
-            nxt = tokens[i + 1]
-            if nxt.tag.startswith(("VA", "VV")) and nxt.start == t.start + t.len:
-                if word_exists(t.form + nxt.lemma):
-                    continue
         unknown.append(lemma)
     return unknown
 
