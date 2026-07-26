@@ -744,6 +744,17 @@ DIALECT_TO_STANDARD: dict[str, dict[str, str]] = {
     },
 }
 
+# 여러 지역 노인 말투에 공통으로 나타나는 어미·조사 사투리 → 표준어 대응.
+# 지역별 어휘 사투리(위 DIALECT_TO_STANDARD)와 달리 특정 지역에 국한되지 않는
+# 규칙적 음운 변화라, 사투리로 지정된 화자면 지역과 무관하게 to_standard에서
+# 함께 적용한다. 예: 비하믄→비하면, 먹으믄→먹으면, 이라믄서→이라면서(믄→면),
+# 맛나겄냐→맛나겄냐(겄→겠). 표준어→사투리(역방향)에는 넣지 않는다 — '면'→'믄'을
+# 문자열로 치환하면 '화면·국수 면'처럼 무관한 '면'까지 바뀌기 때문이다.
+_COMMON_DIALECT_ENDINGS_TO_STANDARD: dict[str, str] = {
+    "믄": "면",
+    "겄": "겠",
+}
+
 # 역방향: 표준어→사투리 변환용 (각 지역별로 어떤 표준어를 어떤 사투리로 바꿀 수 있는지)
 STANDARD_TO_DIALECT: dict[str, dict[str, str]] = {}
 for _region, _map in DIALECT_TO_STANDARD.items():
@@ -821,7 +832,8 @@ def convert_dialect(text: str, region: str, direction: str) -> str:
     반환값: 변환된 텍스트
     """
     if direction == "to_standard":
-        mapping = DIALECT_TO_STANDARD.get(region, {})
+        # 지역 어휘 사투리 + 공통 어미 사투리(믄→면, 겄→겠)를 함께 적용한다.
+        mapping = {**DIALECT_TO_STANDARD.get(region, {}), **_COMMON_DIALECT_ENDINGS_TO_STANDARD}
     elif direction == "to_dialect":
         mapping = STANDARD_TO_DIALECT.get(region, {})
     else:

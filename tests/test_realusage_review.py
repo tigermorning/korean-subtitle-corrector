@@ -205,3 +205,13 @@ def test_no_dialect_auto_recommendation_for_unassigned_speaker():
     entry = SubtitleEntry(index=1, start="0", end="1", text="아이고 마 그래 가꼬", speaker="늘어지며")
     _corrected, flags, _log = correct_entries([entry])  # dialect_map 없음
     assert not any("사투리" in f.reason for f in flags)
+
+
+def test_common_dialect_endings_to_standard():
+    # 노인 말투 공통 어미 사투리(믄→면, 겄→겠)를 to_standard 변환에서 처리한다.
+    from subtitle_corrector.dictionary import convert_dialect
+    assert convert_dialect("먹으믄", "전라도", "to_standard") == "먹으면"
+    assert convert_dialect("맛나겄냐", "전라도", "to_standard") == "맛나겠냐"
+    assert convert_dialect("방이라믄서", "충청도", "to_standard") == "방이라면서"
+    # 역방향(표준어→사투리)에는 넣지 않아 '화면'의 '면'을 건드리지 않는다.
+    assert convert_dialect("화면", "전라도", "to_dialect") == "화면"
