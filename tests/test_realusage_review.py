@@ -168,6 +168,21 @@ def test_sound_effect_brackets_not_speakers(tmp_path):
     assert speakers == {"민수", "영희"}
 
 
+def test_native_compound_not_flagged_foreign():
+    # '김치찌갯집' = '김치'+'찌갯집'(둘 다 표제어) 고유어 합성어 — kiwi가 문맥에
+    # 따라 통짜 NNG로 태깅해도 외래어 음차로 오탐하지 않는다.
+    entry = SubtitleEntry(index=1, start="0", end="1", text="여기 김치찌갯집이 유명해", speaker=None)
+    _c, flags, _l = correct_entries([entry])
+    assert not any("사전에 없는 단어" in f.reason for f in flags)
+
+
+def test_headword_derived_word_not_split_by_spacing():
+    # '샘나'(샘나다)는 kiwi.space가 '샘 나'로 쪼개도 사전 표제어라 되돌린다.
+    entry = SubtitleEntry(index=1, start="0", end="1", text="샘나 미쳐 버려", speaker=None)
+    corrected, _flags, _l = correct_entries([entry])
+    assert corrected[0].text == "샘나 미쳐 버려"
+
+
 def test_no_dialect_auto_recommendation_for_unassigned_speaker():
     # 사투리는 작업자가 직접 지정한다 — dialect_map에 없는 화자에게는 사투리
     # 자동 감지 '추천' 플래그를 띄우지 않는다(지문/효과음 오탐 방지).

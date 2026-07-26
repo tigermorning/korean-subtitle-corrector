@@ -1111,6 +1111,17 @@ def _is_reduplication(word: str) -> bool:
     return False
 
 
+def _is_native_compound(word: str) -> bool:
+    """word가 두 개의 사전 표제어가 이어 붙은 고유어 합성어인지 확인한다
+    (예: '김치'+'찌갯집'='김치찌갯집'). 이런 말은 외래어 음차가 아니므로
+    미등록어(외국어) 플래그 대상이 아니다. 각 조각은 2글자 이상이어야 한다
+    (한 글자 조사·접사와의 우연한 일치를 피하려고)."""
+    for k in range(2, len(word) - 1):
+        if word_exists(word[:k]) and word_exists(word[k:]):
+            return True
+    return False
+
+
 def _unknown_content_words(text: str) -> list[str]:
     """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
     조각내는 경우의 오탐을 토큰 인접 관계로 걸러낸다:
@@ -1129,6 +1140,9 @@ def _unknown_content_words(text: str) -> list[str]:
         if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
             continue
         if _is_reduplication(lemma):
+            continue
+        # 두 사전 표제어가 결합한 고유어 합성어(김치+찌갯집)는 외래어가 아니다.
+        if _is_native_compound(lemma):
             continue
         # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 미등록 외래어가 아니라
         # check_colloquial_loanword()가 다룰 말투 표현이다.
