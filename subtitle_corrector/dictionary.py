@@ -93,11 +93,22 @@ def _opendict_item_is_standard(item: dict) -> bool:
     뜻이다 — 이 표기 자체가 현재로선 유일하게 등재된 표기이므로, 다른
     대안이 있는 경우("규범 표기는/표준 용어는 'X'이다")와 구분해서 표준으로
     인정한다."""
-    for sense in item.get("sense", []):
+    senses = item.get("sense", [])
+    if not senses:
+        return True
+    # 뜻풀이가 여럿인 표제어는(예: "흩어지다" — 뜻1은 표준 '흩어지다', 뜻2·3만
+    # "⇒규범 표기는 '흐트러지다'") 재지정 안내가 '없는' 뜻이 하나라도 있으면
+    # 그 표기 자체는 표준으로 등재된 것이다. 모든 뜻이 다른 표기로 재지정될
+    # 때만("요오드"⇒"아이오딘") 비표준으로 본다.
+    for sense in senses:
         definition = sense.get("definition") or ""
-        if any(marker in definition for marker in _NONSTANDARD_REDIRECT_MARKERS) and "미확정" not in definition:
-            return False
-    return True
+        redirects = (
+            any(marker in definition for marker in _NONSTANDARD_REDIRECT_MARKERS)
+            and "미확정" not in definition
+        )
+        if not redirects:
+            return True
+    return False
 
 
 _STANDARD_REPLACEMENT_RE = re.compile(
