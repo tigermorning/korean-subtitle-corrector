@@ -267,6 +267,77 @@ def _mechanical_respace(text: str) -> str:
     return corrected
 
 
+_PUNCT_TAG_PREFIXES = ("S",)  # kiwi 문장부호 계열 태그(SF/SP/SS/SE/SO/SW ...)
+
+
+def _is_punct_token(tok) -> bool:
+    return tok.tag.startswith(_PUNCT_TAG_PREFIXES)
+
+
+def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
+    """감탄사(IC)와 호격어(체언+호격조사 JKV)는 문장에서 쉼표로 구분한다.
+    문맥과 무관하게 규정상 정답이 정해져 있어 자동으로 쉼표를 넣는다:
+    - 문장 맨 앞 감탄사 + 내용어: '아이고 어떻기는' → '아이고, 어떻기는'
+    - 문장 맨 끝 감탄사(내용어 뒤): '싫다면 뭐' → '싫다면, 뭐'
+    - 문장 맨 끝 호격어: '먹어 준희야' → '먹어, 준희야'
+
+    이미 쉼표 등으로 구분돼 있으면 넣지 않는다. '거 참'(IC+IC)처럼 감탄사끼리
+    이어진 경우, 감탄사만 있고 내용어가 없는 경우는 대상이 아니다.
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    if len(tokens) < 2:
+        return text, []
+
+    def is_content(tok) -> bool:
+        return not _is_punct_token(tok) and tok.tag != "IC"
+
+    def already_delimited_before(pos: int) -> bool:
+        j = pos - 1
+        while j >= 0 and text[j] == " ":
+            j -= 1
+        return j < 0 or text[j] in ",.!?…"
+
+    insert_positions = set()
+
+    # 1) 문장 맨 앞 감탄사 + 내용어 → 감탄사 뒤에 쉼표
+    if tokens[0].tag == "IC" and is_content(tokens[1]):
+        pos = tokens[0].start + tokens[0].len
+        if pos < len(text) and text[pos - 1] != "," and text[pos] not in ",.!?…":
+            insert_positions.add(pos)
+
+    # 문장 맨 끝(문장부호 제외) 토큰 찾기
+    last = len(tokens) - 1
+    while last >= 0 and _is_punct_token(tokens[last]):
+        last -= 1
+
+    if last >= 1:
+        lt = tokens[last]
+        # 2) 문장 맨 끝 감탄사(내용어 뒤) → 감탄사 앞에 쉼표
+        if lt.tag == "IC" and is_content(tokens[last - 1]):
+            j = lt.start
+            while j > 0 and text[j - 1] == " ":
+                j -= 1
+            if not already_delimited_before(j):
+                insert_positions.add(j)
+        # 3) 문장 맨 끝 호격어(체언+JKV) → 호격 체언 앞에 쉼표
+        elif lt.tag == "JKV" and last >= 2:
+            noun = tokens[last - 1]
+            if noun.tag in ("NNP", "NNG") and is_content(tokens[last - 2]):
+                j = noun.start
+                while j > 0 and text[j - 1] == " ":
+                    j -= 1
+                if not already_delimited_before(j):
+                    insert_positions.add(j)
+
+    if not insert_positions:
+        return text, []
+    corrected = text
+    for pos in sorted(insert_positions, reverse=True):
+        corrected = corrected[:pos] + "," + corrected[pos:]
+    return corrected, [_localized_change(text, corrected)]
+
+
 def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
     """관형사(MM)나 관형형(…ETM) 바로 뒤에 '명사+하다' 동사가 붙어 있으면
     (예: '뭔 생각하냐', '만날 생각해') 명사와 '하'를 띄어 준다. 관형사·관형형은
@@ -1949,6 +2020,7 @@ def correct_entries(
         corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
         corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
         corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
+        corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
@@ -1962,6 +2034,7 @@ def correct_entries(
             for fix in applied_fixes
             + particle_fixes
             + adnominal_fixes
+            + comma_fixes
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes

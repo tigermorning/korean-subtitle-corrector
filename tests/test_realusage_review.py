@@ -230,3 +230,17 @@ def test_adnominal_noun_verb_split():
     assert out("잘 생각한다") == "잘 생각한다"
     assert out("그 사람 사랑한다") == "그 사람 사랑한다"
     assert out("공부한다") == "공부한다"
+
+
+def test_interjection_vocative_comma():
+    # 감탄사·호격어는 쉼표로 구분(문맥 무관 규정).
+    def out(t):
+        e = SubtitleEntry(index=1, start="0", end="1", text=t, speaker=None)
+        return correct_entries([e])[0][0].text
+    assert out("아이고 어떻기는") == "아이고, 어떻기는"   # 시작 감탄사
+    assert out("네가 싫다면 뭐") == "네가 싫다면, 뭐"     # 끝 감탄사
+    assert out("먹어 준희야") == "먹어, 준희야"          # 끝 호격
+    # 제외: IC+IC, 이미 쉼표, 대명사 뭐, 감탄사 단독
+    assert out("거 참") == "거 참"
+    assert out("먹어, 준희야") == "먹어, 준희야"
+    assert out("뭐 하냐") == "뭐 하냐"
