@@ -267,6 +267,45 @@ def _mechanical_respace(text: str) -> str:
     return corrected
 
 
+def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
+    """관형사(MM)나 관형형(…ETM) 바로 뒤에 '명사+하다' 동사가 붙어 있으면
+    (예: '뭔 생각하냐', '만날 생각해') 명사와 '하'를 띄어 준다. 관형사·관형형은
+    반드시 '명사'를 꾸미므로, 뒤의 'X하다'는 관형어의 수식을 받는 명사 X와
+    동사 '하다'로 나뉘어야 한다(뭔 생각 하냐 / 만날 생각 해). 이 판정은 문맥과
+    무관하게 통사적으로 하나뿐인 정답이라 자동 교정한다.
+
+    적용 조건(전부 만족할 때만):
+    - '명사(NNG) + 하(XSV)'가 공백 없이 한 어절로 붙어 있다('생각하').
+    - 그 명사 바로 앞(공백 하나 사이)에 관형사(MM) 또는 관형형 어미(ETM)로
+      끝나는 말이 온다. → 관형어가 이 명사를 직접 꾸민다.
+    부사(예: '잘/MAG')가 앞에 오면 동사 '생각하다'를 수식하는 것이므로 나누지
+    않는다. 관형어가 다른 명사를 꾸미는 경우('그 사람 사랑한다'의 '그'는 '사람'을
+    꾸밈)도 대상이 아니다(명사 앞 토큰이 관형사/관형형이 아님).
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    cuts = []  # '하'(XSV)가 시작하는 위치 = 여기에 공백을 넣는다
+    for i in range(2, len(tokens)):
+        hae, noun, adnom = tokens[i], tokens[i - 1], tokens[i - 2]
+        if hae.tag != "XSV" or hae.form != "하":
+            continue
+        if noun.tag != "NNG":
+            continue
+        if noun.start + noun.len != hae.start:
+            continue  # '명사'와 '하'가 이미 떨어져 있으면 대상 아님
+        if adnom.tag != "MM" and adnom.tag != "ETM":
+            continue  # 관형사/관형형이 아니면(부사 등) 나누지 않는다
+        if text[adnom.start + adnom.len : noun.start] not in (" ", ""):
+            continue  # 관형어가 이 명사 바로 앞이 아니면 수식 관계가 아님
+        cuts.append(hae.start)
+    if not cuts:
+        return text, []
+    corrected = text
+    for pos in sorted(set(cuts), reverse=True):
+        corrected = corrected[:pos] + " " + corrected[pos:]
+    return corrected, [_localized_change(text, corrected)]
+
+
 def _localized_change(original: str, corrected: str) -> str:
     """한 줄 전체를 다시 적는 대신, 실제로 바뀐 부분만 추려 '원문조각 -> 교정조각'
     형태로 돌려준다. 긴 대사에서 어디가 자동 교정됐는지 한눈에 보이게 하기 위함
@@ -1909,6 +1948,7 @@ def correct_entries(
 
         corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
         corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
+        corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
         corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
@@ -1921,6 +1961,7 @@ def correct_entries(
             f"[{e.index}] {fix}"
             for fix in applied_fixes
             + particle_fixes
+            + adnominal_fixes
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes

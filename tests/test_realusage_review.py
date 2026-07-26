@@ -215,3 +215,18 @@ def test_common_dialect_endings_to_standard():
     assert convert_dialect("방이라믄서", "충청도", "to_standard") == "방이라면서"
     # 역방향(표준어→사투리)에는 넣지 않아 '화면'의 '면'을 건드리지 않는다.
     assert convert_dialect("화면", "전라도", "to_dialect") == "화면"
+
+
+def test_adnominal_noun_verb_split():
+    # 관형사/관형형 + '명사+하다'는 명사와 '하'를 띄운다(관형어는 명사를 꾸미므로).
+    def out(t):
+        e = SubtitleEntry(index=1, start="0", end="1", text=t, speaker=None)
+        return correct_entries([e])[0][0].text
+    assert out("뭔 생각하냐?") == "뭔 생각 하냐?"
+    # '만날'은 문맥이 있어야 관형형('만나+ㄹ')으로 태깅된다(단독이면 부사 '매일'로 봄).
+    assert out("수더분한 여자 만날 생각해") == "수더분한 여자 만날 생각 해"
+    assert out("이런 생각하다") == "이런 생각 하다"
+    # 제외: 부사 수식, 다른 명사 수식, 이미 띄어진 경우, 관형어 없음
+    assert out("잘 생각한다") == "잘 생각한다"
+    assert out("그 사람 사랑한다") == "그 사람 사랑한다"
+    assert out("공부한다") == "공부한다"
