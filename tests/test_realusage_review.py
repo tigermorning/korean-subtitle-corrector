@@ -133,6 +133,22 @@ def test_e_prose_keeps_periods():
     assert not any("쉼표" in f.reason for f in flags)
 
 
+def test_e_subtitle_bracket_gets_one_space():
+    # 자막 관례: '[...]' 뒤에는 항상 한 칸을 띄운다(자동 교정).
+    c1, _f, _l = _run_mode_full("[민수]안녕하세요", "subtitle")
+    assert c1[0].text == "[민수] 안녕하세요"
+    c2, _f2, _l2 = _run_mode_full("[민수]  안녕하세요", "subtitle")
+    assert c2[0].text == "[민수] 안녕하세요"
+    # 효과음처럼 브래킷만 있는 줄은 건드리지 않는다.
+    c3, _f3, _l3 = _run_mode_full("[문 여는 소리]", "subtitle")
+    assert c3[0].text == "[문 여는 소리]"
+
+
+def test_e_prose_bracket_untouched():
+    c, _f, _l = _run_mode_full("[민수]안녕", "prose")
+    assert c[0].text == "[민수]안녕"
+
+
 def test_e_default_mode_is_subtitle():
     # doc_type 인자를 생략하면 자막 모드 — 끝 마침표를 자동 제거한다.
     corrected, _flags, _log = correct_entries(

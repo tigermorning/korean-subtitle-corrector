@@ -592,6 +592,22 @@ def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
     return corrected, ["문장 끝 마침표 제거 (자막)"]
 
 
+_BRACKET_CLOSE_RESPACE_RE = re.compile(r"\]\s*(?=\S)")
+
+
+def correct_subtitle_bracket_spacing(text: str) -> tuple[str, list[str]]:
+    """자막 관례상 화자·지문 표시 '[...]' 뒤에는 항상 한 칸을 띄운다. 닫는
+    ']' 바로 뒤에 대사가 붙어 있거나 공백이 여러 칸이면 정확히 한 칸으로
+    맞춘다(정답이 하나뿐이라 자동 교정). 브래킷만 있고 뒤에 대사가 없는 줄
+    (효과음 등)은 건드리지 않는다.
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    corrected = _BRACKET_CLOSE_RESPACE_RE.sub("] ", text)
+    if corrected != text:
+        return corrected, ["'[ ]' 뒤 한 칸 띄움 (자막)"]
+    return text, []
+
+
 def check_subtitle_internal_period(index: int, text: str) -> FlagItem | None:
     """자막에서 한 줄에 두 문장이 이어질 때, 문장 사이의 마침표는 쉼표(,)로
     바꾸는 것이 관례다. 문장 종결 마침표 뒤에 공백을 두고 다른 문장이 이어지는
@@ -1943,6 +1959,8 @@ def correct_entries(
         # check_subtitle_internal_period()가 확인 플래그로 제안한다. 일반 글
         # 모드는 구두점을 허용하므로 둘 다 하지 않는다.
         if doc_type == "subtitle":
+            corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text)
+            applied_log.extend(f"[{e.index}] {m}" for m in bracket_log)
             corrected_text, period_log = correct_subtitle_final_period(corrected_text)
             applied_log.extend(f"[{e.index}] {m}" for m in period_log)
 
