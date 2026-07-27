@@ -8,6 +8,8 @@
 
 **최근 완료 (2026-07-26):** 실사용 감수 8건(A·B·C, §31) + 리포트 축약(D) + 사용목적 모드(E, §32) 구현·검증·커밋 완료. 정답표 테스트 `tests/test_realusage_review.py`. 남은 것: `search_dialect`(지역어 API 서버 500 장애 — 서버측 문제, `docs/KNOWN_LIMITATIONS.md` 참고).
 
+**다음 세션 첫 작업(2026-07-27, 사용자가 최우선으로 지정):** 유사 판례 검색의 실측 감수 — 구현은 끝났지만 `PRECEDENTS`가 비어 있어 실제 판례로 한 번도 돌려보지 못했다. 기본 임계값 `min_similarity=0.5`가 잠정치이므로 실제 분포를 보고 조정해야 한다. 절차와 지킬 선은 `PRD.md` "세션 인계 노트"의 **바로 다음 할 일 ①** 참고. 다른 작업을 먼저 시작하기 전에 사용자에게 이 항목을 먼저 알릴 것.
+
 **유사 판례 검색(`subtitle_corrector/precedent_search.py`)은 감수자 보조 전용이다.** 문장 임베딩 코사인 유사도는 규범 근거가 아니므로 교정 판정 경로(`word_exists`, `check_precedent`)에 절대 연결하지 마라. 의존성은 `requirements-optional.txt`이며 배포용 `requirements.txt`에는 넣지 않는다(메모리 한계).
 
 ## 사투리 처리 원칙
