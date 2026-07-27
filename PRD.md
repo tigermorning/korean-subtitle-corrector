@@ -71,6 +71,16 @@
 12. **`docs/IMPLEMENTATION_LOG.md:177` 낡은 줄 수정** — "리포트 UX(D)와 사용목적 모드(E)는 미착수"라고 적혀 있으나 둘 다 2026-07-26에 구현 완료(E는 `api.py:103`, 테스트 `tests/test_realusage_review.py:109`에서 2026-07-27 확인). 이 줄을 믿고 중복 구현하지 말 것 — PRD가 "미착수"라고 말할 때도 코드를 먼저 확인하는 원칙(PRD/코드 드리프트 사건과 같은 유형)이 여기에도 적용된다.
 13. **AGENTS.md가 참조하는 `§31`·`§32`가 `PRD.md`에 없음** — 2026-07-24 모듈화 때 옮겨간 번호로 보인다. 실제 위치를 확인해 참조를 고칠 것.
 14. **회고 섹션 작성** — `docs/Review.md:40` 제안. 과제 평가 항목과 연결됨.
+15. **`engine.py` 모듈 분할 (2,222줄 / 121,524자)** — 이 프로젝트에서 세션 토큰이 크게 나가는 첫 번째 원인은 이 파일 하나다(참고로 kiwipiepy는 로컬 C++ 분석기라 토큰을 전혀 쓰지 않는다 — 310MB는 메모리 비용이고 토큰과 무관하다. 2026-07-27 확인). 공개 함수는 `correct_*`/`check_*` 22개 + `correct_entries`(2010행)이고, 이미 기능별로 뭉쳐 있어 경계가 뚜렷하다. 제안하는 분할:
+    - `kiwi_adapter.py` — `_kiwi` 싱글턴, `register_custom_words`, `_straddling_tokens`/`_token_containing`/`_tokenization_unstable_near` 등 토큰 조회 도구
+    - `spacing.py` — `_mechanical_respace`, `correct_particle_spacing`, `correct_compound_spacing`, `correct_aux_verb_spacing`, `_protect_unfounded_joining`
+    - `replacements.py` — `correct_always_wrong`, `correct_nonstandard_terms`, `correct_discriminatory_terms`, `correct_former_terms`, `_apply_replacements`, 조사 이형태 처리
+    - `spelling.py` — `check_spelling`과 그 판정 도구(`_tensified_headword_variant`, `_is_reduplication`, `_is_native_compound`, `_unknown_content_words`)
+    - `loanwords.py` / `subtitle.py` / `dialect.py` — 외래어, 자막 전용 부호 규칙, 사투리 모드
+    - `engine.py` — `correct_entries` 오케스트레이션만 남긴다
+    - **반드시 지킬 것 ①**: 순수 이동만 한다. 로직을 함께 손보면 150건 테스트가 회귀를 잡아주는 효과가 사라진다. 이동 후 전체 테스트가 그대로 통과해야 하고, 통과하지 않으면 이동이 잘못된 것이다.
+    - **반드시 지킬 것 ②**: `_kiwi`는 프로세스에 **하나만** 있어야 한다. 모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고(§10 배포 한도와 직결), `register_custom_words()`로 등록한 고유명사가 다른 모듈에 전달되지 않아 "kiwi가 이름을 쪼개는" 버그가 되살아난다. 반드시 `kiwi_adapter.py` 하나에서 만들고 나머지는 import만 한다.
+    - **기대 효과의 한계**: 엔진 전체를 봐야 하는 작업에서는 토큰이 줄지 않는다. 한 영역만 건드리는 작업(예: 띄어쓰기 규칙 하나 추가)에서 파일 하나만 읽으면 되는 것이 이득이다.
 
 ### 이 목록에 넣지 않은 것 (v2 로드맵·정책, §9/§10)
 
