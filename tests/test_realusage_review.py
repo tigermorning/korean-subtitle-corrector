@@ -244,3 +244,14 @@ def test_interjection_vocative_comma():
     assert out("거 참") == "거 참"
     assert out("먹어, 준희야") == "먹어, 준희야"
     assert out("뭐 하냐") == "뭐 하냐"
+
+
+def test_e_subtitle_removes_final_period_every_line():
+    # 여러 줄 자막: 각 행의 끝 마침표를 모두 자동 제거하고, 행 중간 마침표만 쉼표 플래그.
+    corrected, flags, _log = _run_mode_full("안녕하세요.\n반갑습니다.", "subtitle")
+    assert corrected[0].text == "안녕하세요\n반갑습니다"
+    assert not any("쉼표" in f.reason for f in flags)
+    # 행 중간 마침표는 여전히 플래그, 행 끝은 자동 제거
+    c2, f2, _l2 = _run_mode_full("네. 그래.\n알겠어.", "subtitle")
+    assert c2[0].text == "네. 그래\n알겠어"
+    assert any(f.suggested_fix == "네, 그래\n알겠어" for f in f2)

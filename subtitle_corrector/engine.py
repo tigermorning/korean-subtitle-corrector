@@ -744,19 +744,28 @@ def _is_sentence_period(text: str, i: int) -> bool:
 
 
 def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
-    """자막 관례상 줄 맨 끝(문장 종결)의 마침표는 쓰지 않는다 — 이건 정답이
-    하나뿐이라 자동으로 제거한다. 소수점·말줄임표는 건드리지 않는다.
+    """자막 관례상 '각 행'의 맨 끝(문장 종결) 마침표는 쓰지 않는다 — 정답이
+    하나뿐이라 자동으로 제거한다. 여러 줄 자막이면 줄바꿈(\\n)으로 구분되는
+    모든 행의 끝 마침표를 각각 제거한다. 소수점·말줄임표는 건드리지 않는다.
 
     반환값: (마침표를 뺀 텍스트, 적용 로그)."""
-    stripped = text.rstrip()
-    trailing_ws = text[len(stripped) :]
-    if not stripped.endswith(".") or stripped.endswith(".."):
-        return text, []  # 마침표로 안 끝나거나 말줄임표(...)면 건드리지 않는다
-    i = len(stripped) - 1
-    if not _is_sentence_period(stripped, i):
+    new_lines = []
+    changed = False
+    for line in text.split("\n"):
+        stripped = line.rstrip()
+        trailing_ws = line[len(stripped) :]
+        if (
+            stripped.endswith(".")
+            and not stripped.endswith("..")
+            and _is_sentence_period(stripped, len(stripped) - 1)
+        ):
+            new_lines.append(stripped[:-1] + trailing_ws)
+            changed = True
+        else:
+            new_lines.append(line)
+    if not changed:
         return text, []
-    corrected = stripped[:i] + trailing_ws
-    return corrected, ["문장 끝 마침표 제거 (자막)"]
+    return "\n".join(new_lines), ["문장 끝 마침표 제거 (자막)"]
 
 
 _BRACKET_CLOSE_RESPACE_RE = re.compile(r"\]\s*(?=\S)")
@@ -786,8 +795,11 @@ def check_subtitle_internal_period(index: int, text: str) -> FlagItem | None:
         if ch != "." or not _is_sentence_period(text, i):
             continue
         nxt = text[i + 1] if i + 1 < len(text) else ""
-        if nxt.isspace() and text[i + 1 :].strip():
-            positions.append(i)  # 뒤에 공백 + 이어지는 문장 = 내부 문장 경계
+        # '행 중간'의 문장 경계만 플래그한다: 마침표 뒤가 (줄바꿈이 아닌) 공백이고
+        # 같은 행에 문장이 더 이어질 때. 행 끝 마침표(줄바꿈 앞 또는 텍스트 끝)는
+        # correct_subtitle_final_period()가 이미 자동으로 제거한다.
+        if nxt == " " and text[i + 1 :].strip():
+            positions.append(i)
     if not positions:
         return None
     drop = set(positions)
