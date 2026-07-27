@@ -49,9 +49,7 @@ description: 실제 텍스트(뉴스·블로그 등)로 이 교정기를 돌려 
      남긴 뒤 새 섹션을 추가한다. 이 작업 자체는 파일을 자르는 것뿐이니 별도로
      PRD.md를 갱신할 필요는 없다.
 6. **세션 종료 관례**: `PRD.md`와 방금 수정한 `docs/*.md`(주로
-   `docs/IMPLEMENTATION_LOG.md`, 필요하면 `docs/KNOWN_LIMITATIONS.md`), 그리고
-   미러 파일 `C:\Users\user\Documents\자막_맞춤법교정_PRD.md`(PRD.md 본문만
-   미러링하면 됨, docs/ 하위 파일은 저장소 안에 있으므로 미러링 대상 아님)를
-   동기화한 뒤, 이 프로젝트는 완료 시 자동 커밋 관례이므로 git commit한다(단,
+   `docs/IMPLEMENTATION_LOG.md`, 필요하면 `docs/KNOWN_LIMITATIONS.md`)를 갱신하고,
+   밀린 작업이 바뀌었으면 `docs/BACKLOG.md`도 함께 고친 뒤, 이 프로젝트는 완료 시 자동 커밋 관례이므로 git commit한다(단,
    무인 예약 작업 결과를 검토하는 경우라면 그 예약 작업 파일의 지시를 따른다
    — 예: `gananda-precedent-research`는 사람 리뷰 전 커밋 금지).
