@@ -1,0 +1,11 @@
+# 선택 의존성 — 로컬 감수 작업용. 웹 배포 환경에는 설치하지 마라.
+#
+# sentence-transformers는 모델 파일 약 500MB를 내려받고 메모리에 올린다.
+# kiwipiepy 모델(약 310MB)만으로도 Render 무료 티어 512MB 한계에 걸린 기록이
+# 있으므로(docs/KNOWN_LIMITATIONS.md), 배포용 requirements.txt에는 넣지 않는다.
+#
+# 용도: subtitle_corrector/precedent_search.py — 축적된 온라인가나다 판례 중
+# 의미가 비슷한 것을 감수자에게 제시하는 보조 검색. 교정 판정에는 쓰지 않는다.
+#
+#   pip install -r requirements-optional.txt
+sentence-transformers>=5.0
