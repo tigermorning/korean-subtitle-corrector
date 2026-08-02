@@ -1565,18 +1565,26 @@ def resolve_dialect_mode(
     speaker: str | None,
     dialect_map: dict[str, str] | None,
     dialect_modes: dict[str, str] | None,
+    document_region: str | None = None,
+    document_mode: str | None = None,
 ) -> tuple[str | None, str | None]:
     """화자의 사투리 (지역, 모드)를 결정한다.
 
+    화자별 지정이 우선이고, 없으면 문서 전체 설정으로 내려간다. 자막처럼 화자가
+    갈리는 문서는 화자별로, 소설처럼 글 전체가 한 사투리인 문서(예: 박경리 '토지'를
+    표준어로 바꾸는 경우)는 문서 전체 설정으로 다루기 위해서다. 일반 글에는 화자
+    표기 자체가 없어서, 문서 전체 설정이 없으면 사투리 기능이 아예 걸리지 않는다.
+
     반환값:
-        - 화자가 dialect_map에 있으면 (지역, 정규화된 모드).
-        - 그 외(사투리 미지정 화자)는 (None, None).
+        - 화자가 dialect_map에 있으면 (그 화자의 지역, 정규화된 모드).
+        - 아니고 document_region이 있으면 (문서 전체 지역, 정규화된 문서 전체 모드).
+        - 둘 다 없으면 (None, None) — 사투리 미지정.
     """
-    if not dialect_map or not speaker or speaker not in dialect_map:
-        return None, None
-    region = dialect_map[speaker]
-    mode = normalize_dialect_mode((dialect_modes or {}).get(speaker))
-    return region, mode
+    if dialect_map and speaker and speaker in dialect_map:
+        return dialect_map[speaker], normalize_dialect_mode((dialect_modes or {}).get(speaker))
+    if document_region:
+        return document_region, normalize_dialect_mode(document_mode)
+    return None, None
 
 
 def check_dialect(
@@ -2228,6 +2236,8 @@ def correct_entries(
     dialect_modes: dict[str, str] | None = None,
     doc_type: str = "subtitle",
     spacing_mode: str = "principle",
+    dialect_region: str | None = None,
+    dialect_mode: str | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2250,12 +2260,22 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
+
+    dialect_region/dialect_mode는 문서 전체 사투리 설정이다. 화자별 지정이 없는
+    줄에 이 값이 적용되므로, 화자 표기가 없는 일반 글(소설 등) 전체를 한 사투리로
+    다룰 수 있다. 화자별 지정이 있으면 그쪽이 우선한다.
     """
     corrected_entries = []
     flags = []
     applied_log = []
     protected_indices: set[int] = set()
     spacing_mode = normalize_spacing_mode(spacing_mode)
+    if dialect_region:
+        applied_log.append(
+            f"[사투리 기준] 문서 전체를 '{dialect_region}' 사투리로 보고 "
+            f"'{normalize_dialect_mode(dialect_mode)}' 모드로 처리합니다"
+            " (화자별 지정이 있으면 그 화자는 화자별 설정을 따릅니다)."
+        )
     if spacing_mode == "allowance":
         # 기본값(원칙)이 아닌 쪽을 골랐을 때만 남긴다 — 문서 전체가 어떤 기준으로
         # 통일됐는지 결과만 보고도 알 수 있어야 하기 때문이다.
@@ -2273,7 +2293,9 @@ def correct_entries(
         # 이 화자의 대사를 건드려도 되는지 판단해야 하기 때문이다. 대본 속
         # 사투리는 대부분 작가의 의도이므로, 지정된 화자의 기본값(protect)은
         # 어떤 교정·플래그도 하지 않고 원문을 그대로 둔다.
-        region, mode = resolve_dialect_mode(e.speaker, dialect_map, dialect_modes)
+        region, mode = resolve_dialect_mode(
+            e.speaker, dialect_map, dialect_modes, dialect_region, dialect_mode
+        )
 
         # protect — 원문을 완전히 그대로 둔다. 표준화 교정도, 외래어/고유명사
         # 검토 플래그도, 맞춤법/순화어/띄어쓰기 검사도 전부 건너뛴다.

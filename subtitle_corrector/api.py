@@ -46,6 +46,8 @@ def correct_subtitle(
     dialect_modes: str = Form(""),
     doc_type: str = Form("subtitle"),
     spacing_mode: str = Form("principle"),
+    dialect_region: str = Form(""),
+    dialect_mode: str = Form(""),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -115,12 +117,24 @@ def correct_subtitle(
         # 않게 한다. 그 외 값은 principle로 정규화한다.
         normalized_spacing_mode = normalize_spacing_mode(spacing_mode)
 
+        # 문서 전체 사투리 설정(화자 표기가 없는 일반 글용). 지원하지 않는 지역
+        # 이름은 무시한다 — 오타 하나로 글 전체가 엉뚱한 지역 기준으로 처리되면
+        # 안 되고, 미지정(None)이 안전한 기본값이다.
+        normalized_dialect_region = dialect_region.strip() or None
+        if normalized_dialect_region not in DIALECT_MARKERS:
+            normalized_dialect_region = None
+        normalized_dialect_mode = (
+            normalize_dialect_mode(dialect_mode) if normalized_dialect_region else None
+        )
+
         corrected_entries, flags, applied_log = correct_entries(
             entries,
             dialect_map=parsed_dialect_map,
             dialect_modes=parsed_dialect_modes,
             doc_type=normalized_doc_type,
             spacing_mode=normalized_spacing_mode,
+            dialect_region=normalized_dialect_region,
+            dialect_mode=normalized_dialect_mode,
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른

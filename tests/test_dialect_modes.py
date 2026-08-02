@@ -66,6 +66,60 @@ class TestResolveDialectMode:
         ) == ("경상도", "assist")
 
 
+class TestDocumentLevelDialect:
+    """문서 전체 사투리 설정 — 화자 표기가 없는 일반 글(소설 등)용.
+
+    화자별 지정이 우선이고, 없는 줄에만 문서 전체 설정이 적용된다.
+    """
+
+    def test_document_setting_applies_to_speakerless_line(self):
+        assert resolve_dialect_mode(
+            None, None, None, "경상도", "to_standard"
+        ) == ("경상도", "to_standard")
+
+    def test_document_mode_defaults_to_protect(self):
+        """모드를 안 주면 보호 — 글 전체를 말없이 표준어로 바꿔 버리면 안 된다."""
+        assert resolve_dialect_mode(None, None, None, "전라도") == ("전라도", "protect")
+
+    def test_speaker_setting_wins_over_document(self):
+        assert resolve_dialect_mode(
+            "민수", {"민수": "제주도"}, {"민수": "assist"}, "경상도", "to_standard"
+        ) == ("제주도", "assist")
+
+    def test_document_setting_applies_to_unassigned_speaker(self):
+        """화자 이름은 있지만 화자별 지정이 없는 줄도 문서 전체 설정을 따른다."""
+        assert resolve_dialect_mode(
+            "영희", {"민수": "제주도"}, {}, "충청도", "assist"
+        ) == ("충청도", "assist")
+
+    def test_no_document_setting_keeps_previous_behavior(self):
+        assert resolve_dialect_mode("영희", {"민수": "제주도"}, {}) == (None, None)
+
+    def test_prose_document_is_converted_to_standard(self):
+        """화자 표기가 없는 일반 글도 문서 전체 설정만으로 표준어 변환이 걸린다."""
+        corrected, _, applied_log = correct_entries(
+            [SubtitleEntry(index=1, start="", end="", text="이거 아이가 마이시 좋다")],
+            doc_type="prose",
+            dialect_region="경상도",
+            dialect_mode="to_standard",
+        )
+        assert any("[사투리 기준]" in line for line in applied_log)
+        # 화자 표기가 전혀 없는 줄인데도 문서 전체 설정만으로 변환이 걸린다
+        assert "아이가" not in corrected[0].text
+        assert "그래" in corrected[0].text
+
+    def test_document_setting_is_logged(self):
+        _, _, applied_log = correct_entries(
+            [_entry(1, "밥 무라")], dialect_region="경상도", dialect_mode="to_standard"
+        )
+        assert any("경상도" in line and "to_standard" in line for line in applied_log)
+
+    def test_without_document_setting_prose_is_untouched_by_dialect(self):
+        """설정이 없으면 예전처럼 사투리 처리가 걸리지 않는다."""
+        _, _, applied_log = correct_entries([_entry(1, "밥 무라")], doc_type="prose")
+        assert not any("[사투리 기준]" in line for line in applied_log)
+
+
 class TestProtectMode:
     """protect: 대사를 완전히 그대로 둔다 — 어떤 교정도, 어떤 플래그도 없다."""
 

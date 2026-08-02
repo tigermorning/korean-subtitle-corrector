@@ -126,7 +126,19 @@
         </div>
 
         <div class="dialect-section" id="dialectSection">
-          <span class="opt-label">[선택사항] 화자별 사투리 설정</span>
+          <span class="opt-label">[선택사항] 사투리 설정</span>
+          <div class="dialect-row" style="margin-bottom:12px">
+            <label style="min-width:auto">문서 전체</label>
+            <select id="documentDialectRegion">
+              <option value="">설정 안함</option>
+            </select>
+            <select id="documentDialectMode">
+              <option value="protect">그대로 보호 (교정·플래그 안 함)</option>
+              <option value="assist">사투리로 고쳐주기 제안</option>
+              <option value="to_standard">표준어로 자동 변환</option>
+            </select>
+          </div>
+          <p class="opt-note" style="margin:0 0 10px">글 전체가 한 사투리인 문서(소설 등)에 씁니다. 화자 표기가 없는 일반 글은 이 설정으로만 사투리를 다룰 수 있습니다. 아래 화자별 지정이 있으면 그 화자는 화자별 설정을 따릅니다.</p>
           <p class="opt-note" style="margin:0 0 10px">
             화자에게 사투리를 지정하고, 반영 수준을 선택할 수 있습니다.<br>
             <b>플래그만</b>: 사투리 감지 → 확인 플래그만 남김 (텍스트 변경 없음)<br>
@@ -194,6 +206,10 @@ let currentSpeakers = [];
     }
   } catch {}
   document.getElementById('dialectSection').style.display = 'block';
+  // 문서 전체 사투리 지역 드롭다운도 같은 목록을 쓴다.
+  const docRegionSelect = document.getElementById('documentDialectRegion');
+  docRegionSelect.innerHTML = '<option value="">설정 안함</option>' +
+    dialectRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
   buildDialectRows(currentSpeakers);  // 초기 안내문 표시(자동 감지 없음)
 })();
 
@@ -279,13 +295,17 @@ function updateOptionSummary() {
   const nameCount = document.getElementById('namesInput').value
     .split('\n').filter(l => l.trim()).length;
 
+  const docRegion = document.getElementById('documentDialectRegion').value;
+
   const parts = [docLabel, spacingLabel];
+  if (docRegion) parts.push(`문서 전체 ${docRegion} 사투리`);
   if (dialectCount) parts.push(`사투리 ${dialectCount}명`);
   if (nameCount) parts.push(`고유명사 ${nameCount}개`);
 
   const el = document.getElementById('optionSummary');
   el.textContent = '· ' + parts.join(' · ');
-  const changed = docLabel !== '자막' || spacingLabel !== '원칙(띄어 씀)' || dialectCount > 0 || nameCount > 0;
+  const changed = docLabel !== '자막' || spacingLabel !== '원칙(띄어 씀)'
+    || !!docRegion || dialectCount > 0 || nameCount > 0;
   el.classList.toggle('changed', changed);
 }
 
@@ -341,6 +361,11 @@ submitBtn.addEventListener('click', async () => {
     form.append('doc_type', docType ? docType.value : 'subtitle');
     const spacingMode = document.querySelector('input[name="spacingMode"]:checked');
     form.append('spacing_mode', spacingMode ? spacingMode.value : 'principle');
+    const docRegion = document.getElementById('documentDialectRegion').value;
+    if (docRegion) {
+      form.append('dialect_region', docRegion);
+      form.append('dialect_mode', document.getElementById('documentDialectMode').value);
+    }
     const dialectMap = getDialectMap();
     const dialectModes = getDialectModes();
     if (Object.keys(dialectMap).length > 0) {

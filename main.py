@@ -7,6 +7,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
     apply_report_fixes,
     correct_entries,
@@ -41,6 +42,16 @@ def correct(
         "--spacing",
         help="보조 용언 띄어쓰기 기준(제47항): principle=원칙(띄어 씀, 기본값), allowance=허용(붙여 씀). 문서 전체에 하나만 적용됩니다.",
     ),
+    dialect_region: str = typer.Option(
+        None,
+        "--dialect-region",
+        help="문서 전체 사투리 지역(경상도/제주도/전라도/충청도). 화자 표기가 없는 일반 글에 씁니다.",
+    ),
+    dialect_mode: str = typer.Option(
+        "protect",
+        "--dialect-mode",
+        help="문서 전체 사투리 처리 모드: protect(기본, 그대로 보호) / assist(사투리 제안 플래그) / to_standard(표준어로 자동 변환). --dialect-region과 함께 씁니다.",
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -56,10 +67,19 @@ def correct(
     spacing_mode = normalize_spacing_mode(spacing)
     if spacing_mode != spacing.strip().lower():
         typer.echo(f"알 수 없는 --spacing 값 '{spacing}' -> 원칙(principle)으로 진행합니다.")
+    region = (dialect_region or "").strip() or None
+    if region and region not in DIALECT_MARKERS:
+        typer.echo(
+            f"알 수 없는 --dialect-region 값 '{region}' -> 사투리 미지정으로 진행합니다. "
+            f"(지원: {', '.join(DIALECT_MARKERS)})"
+        )
+        region = None
     corrected_entries, flags, applied_log = correct_entries(
         entries,
         doc_type="prose" if prose else "subtitle",
         spacing_mode=spacing_mode,
+        dialect_region=region,
+        dialect_mode=dialect_mode if region else None,
     )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
