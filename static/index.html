@@ -107,7 +107,27 @@
         <span class="opt-label">사용 목적</span>
         <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="docType" value="subtitle" checked> 자막</label>
         <label style="font-size:0.9em"><input type="radio" name="docType" value="prose"> 일반 글</label>
-        <p class="opt-note">자막은 문장 끝 마침표를 오류로 표시하고, 일반 글은 구두점을 그대로 둡니다.</p>
+        <p class="opt-note">자막은 각 줄 끝 마침표를 없애고 문장 사이 마침표를 쉼표로 바꾸며 말줄임표를 온점 세 개로 통일합니다. 일반 글은 구두점을 그대로 둡니다.</p>
+      </div>
+
+      <div class="opt-group" id="markerOptions">
+        <span class="opt-label">자막 편집 표지<span class="opt-label-sub">자막 모드에만 적용 · 여기 적은 표지는 교정하지 않습니다</span></span>
+        <div class="dialect-row">
+          <label style="min-width:150px">화면자막 표기</label>
+          <input type="text" id="screenTextMarker" placeholder="&quot;  또는  @" style="width:120px">
+          <span class="opt-note" style="margin:0">짝이 있는 문자(따옴표·괄호)면 감싸인 구간만, 짝이 없는 문자(@·#)면 그 줄 전체를 제외합니다.</span>
+        </div>
+        <div class="dialect-row">
+          <label style="min-width:150px">줄바꿈 표기</label>
+          <input type="text" id="lineBreakMarker" placeholder="|" style="width:120px">
+          <span class="opt-note" style="margin:0">교정할 때만 실제 줄바꿈으로 봅니다(줄 끝 마침표 규칙이 화면과 같게 적용됩니다). 결과에는 표기가 그대로 남습니다.</span>
+        </div>
+        <div class="dialect-row">
+          <label style="min-width:150px">자막 위치 표기</label>
+          <input type="text" id="positionMarker" placeholder="{\an8}" style="width:120px">
+          <span class="opt-note" style="margin:0">제어 코드라 통째로 보호합니다.</span>
+        </div>
+        <p class="opt-note">업계 공통 규칙이 없어 작업자·편집기마다 다릅니다. 쓰시는 표기를 그때그때 적어 주세요. 비워 두면 그 표지는 쓰지 않는 것으로 봅니다.</p>
       </div>
 
       <div class="opt-group">
@@ -327,6 +347,13 @@ submitBtn.addEventListener('click', async () => {
     form.append('names', document.getElementById('namesInput').value);
     const docType = document.querySelector('input[name="docType"]:checked');
     form.append('doc_type', docType ? docType.value : 'subtitle');
+    // 자막 편집 표지는 자막 모드에서만 의미가 있다. 일반 글에서는 보내지 않는다 —
+    // 보내 봐야 서버가 무시하지만, 무엇이 적용되는지 요청만 봐도 분명해야 한다.
+    if (!docType || docType.value === 'subtitle') {
+      form.append('screen_text_marker', document.getElementById('screenTextMarker').value);
+      form.append('line_break_marker', document.getElementById('lineBreakMarker').value);
+      form.append('position_marker', document.getElementById('positionMarker').value);
+    }
     const spacingMode = document.querySelector('input[name="spacingMode"]:checked');
     form.append('spacing_mode', spacingMode ? spacingMode.value : 'principle');
     const docRegion = document.getElementById('documentDialectRegion').value;

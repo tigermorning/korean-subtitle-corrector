@@ -36,6 +36,7 @@
 import difflib
 import re
 from collections import Counter
+from typing import NamedTuple
 
 from kiwipiepy import Kiwi
 
@@ -2246,6 +2247,292 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     return None
 
 
+# 자막 편집 표지. 업계 공통 규칙이 없어 작업자·편집기마다 다르므로 값을 하드코딩하지
+# 않고 그때그때 설정으로 받는다(사용자 지정 2026-08-02). 여기 지정된 표지는 어문
+# 규범의 대상이 아니라 기술적 표지이므로 교정에서 제외한다.
+#
+#   screen_text — 화면자막 표기. 짝이 있는 문자('"', "'", '「' 등)를 주면 감싸인
+#                 구간만, 짝이 없는 문자('@', '#' 등)를 주면 그 줄 전체를 제외한다.
+#   line_break  — 줄바꿈 표기('|' 등). 교정할 때만 실제 줄바꿈으로 취급해 줄 끝
+#                 마침표 규칙 등이 화면과 같게 적용되도록 하고, 결과에는 표지를
+#                 그대로 되돌린다.
+#   position    — 자막 위치 표기('{\\an8}' 등). 제어 코드라 통째로 보호한다.
+_MARKER_PAIRS = {
+    '"': '"', "'": "'", "“": "”", "‘": "’",
+    "「": "」", "『": "』", "《": "》", "〈": "〉",
+    "(": ")", "[": "]", "<": ">", "{": "}",
+}
+
+
+class SubtitleMarkers(NamedTuple):
+    screen_text: str = ""
+    line_break: str = ""
+    position: str = ""
+
+    @property
+    def any_set(self) -> bool:
+        return bool(self.screen_text or self.line_break or self.position)
+
+
+def normalize_subtitle_markers(
+    screen_text: str | None = None,
+    line_break: str | None = None,
+    position: str | None = None,
+) -> SubtitleMarkers:
+    """설정에서 받은 표지 문자열을 정규화한다.
+
+    공백만 있는 값은 미설정으로 본다 — 표지가 공백이면 문서 전체가 보호 구간이
+    되어 교정이 통째로 멈춘다.
+    """
+    return SubtitleMarkers(
+        (screen_text or "").strip(),
+        (line_break or "").strip(),
+        (position or "").strip(),
+    )
+
+
+def _screen_text_spans(text: str, marker: str) -> list[tuple[int, int]]:
+    """화면자막 표지가 가리키는 보호 구간 [(시작, 끝)]을 돌려준다.
+
+    짝이 있는 문자면 여는 표지와 닫는 표지 사이(표지 포함)를, 짝이 없는 문자면
+    표지가 나온 자리부터 줄 끝까지를 보호한다. 닫는 짝을 못 찾으면 줄 끝까지로
+    본다 — 열어 놓고 안 닫은 경우 그 뒤는 화면자막일 가능성이 높고, 교정하지
+    않는 쪽이 덜 위험하다.
+    """
+    if not marker:
+        return []
+    closing = _MARKER_PAIRS.get(marker)
+    spans = []
+    pos = 0
+    while True:
+        start = text.find(marker, pos)
+        if start == -1:
+            return spans
+        if closing is None:
+            spans.append((start, len(text)))  # 짝 없는 표지 -> 그 뒤 전체
+            return spans
+        end = text.find(closing, start + len(marker))
+        if end == -1:
+            spans.append((start, len(text)))
+            return spans
+        end += len(closing)
+        spans.append((start, end))
+        pos = end
+
+
+def _split_by_marker(text: str, marker: str) -> list[str]:
+    """표지를 구분자로 쪼개되 표지 자체도 조각으로 남긴다(복원용)."""
+    if not marker:
+        return [text]
+    parts = []
+    for i, chunk in enumerate(text.split(marker)):
+        if i:
+            parts.append(marker)
+        parts.append(chunk)
+    return parts
+
+
+def _correct_line_with_markers(
+    index: int,
+    text: str,
+    doc_type: str,
+    spacing_mode: str,
+    markers: SubtitleMarkers | None = None,
+) -> tuple[str, list[FlagItem], list[str]]:
+    """자막 편집 표지를 지킨 채로 교정한다.
+
+    표지가 없거나 자막 모드가 아니면 그냥 _correct_line()이다. 표지가 있으면:
+      1. 위치 표지·화면자막 구간을 보호 조각으로 떼어 두고,
+      2. 줄바꿈 표지는 실제 줄바꿈으로 바꿔 교정한 뒤,
+      3. 교정이 끝나면 표지를 원래 문자로 되돌린다.
+
+    플래그의 original_text/suggested_fix는 구간이 아니라 **줄 전체**로 다시 맞춘다.
+    그렇게 하지 않으면 리포트에 조각만 보이고, apply-report가 그 조각으로 줄
+    전체를 덮어써서 나머지 대사를 지워 버린다.
+    """
+    markers = markers or SubtitleMarkers()
+    if doc_type != "subtitle" or not markers.any_set:
+        return _correct_line(index, text, doc_type, spacing_mode)
+
+    # 1. 보호 조각(위치 표지 / 화면자막 구간)과 교정 대상 조각으로 나눈다.
+    pieces: list[tuple[str, bool]] = []  # (조각, 보호 여부)
+    for chunk in _split_by_marker(text, markers.position):
+        if markers.position and chunk == markers.position:
+            pieces.append((chunk, True))
+            continue
+        cursor = 0
+        for start, end in _screen_text_spans(chunk, markers.screen_text):
+            if start > cursor:
+                pieces.append((chunk[cursor:start], False))
+            pieces.append((chunk[start:end], True))
+            cursor = end
+        if cursor < len(chunk):
+            pieces.append((chunk[cursor:], False))
+
+    # 2. 교정 대상 조각만 돌린다. 줄바꿈 표지는 교정하는 동안만 실제 줄바꿈이 된다 —
+    #    그래야 줄 끝 마침표 규칙이 화면에 보이는 줄과 같은 기준으로 적용된다.
+    out_parts = []
+    flags: list[FlagItem] = []
+    applied: list[str] = []
+    for piece, protected in pieces:
+        if protected or not piece.strip():
+            out_parts.append(piece)
+            continue
+        target = piece.replace(markers.line_break, "\n") if markers.line_break else piece
+        fixed, piece_flags, piece_applied = _correct_line(index, target, doc_type, spacing_mode)
+        if markers.line_break:
+            fixed = fixed.replace("\n", markers.line_break)
+            piece_flags = [
+                FlagItem(
+                    line_index=f.line_index,
+                    original_text=f.original_text.replace("\n", markers.line_break),
+                    reason=f.reason,
+                    suggested_fix=(f.suggested_fix or "").replace("\n", markers.line_break),
+                )
+                for f in piece_flags
+            ]
+        out_parts.append(fixed)
+        flags.extend((piece, f) for f in piece_flags)
+        applied.extend(piece_applied)
+
+    corrected = "".join(out_parts)
+
+    # 3. 플래그를 줄 전체 기준으로 되돌린다.
+    whole_flags = []
+    for original_piece, f in flags:
+        suggested = f.suggested_fix
+        if suggested:
+            suggested = corrected.replace(f.original_text, suggested, 1) if f.original_text in corrected else None
+        whole_flags.append(
+            FlagItem(
+                line_index=f.line_index,
+                original_text=text,
+                reason=f.reason,
+                suggested_fix=suggested or "",
+            )
+        )
+    return corrected, whole_flags, applied
+
+
+def _correct_line(
+    index: int, text: str, doc_type: str, spacing_mode: str
+) -> tuple[str, list[FlagItem], list[str]]:
+    """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
+
+    correct_entries()의 줄 단위 본문을 **그대로 떼어낸 것**이다(순수 이동, 로직 변경
+    없음). 자막 편집 표지(화면자막·줄바꿈·위치)를 다루려면 한 줄을 여러 구간으로
+    쪼개 "보호할 구간은 건너뛰고 나머지만" 교정해야 하는데, 파이프라인이
+    correct_entries 안에 박혀 있으면 그렇게 부를 수 없어서 분리했다.
+
+    반환값: (교정된 텍스트, 플래그, 자동 교정 로그 메시지 — 줄 번호 접두사 없음)
+    """
+    flags: list[FlagItem] = []
+    applied: list[str] = []
+    corrected_text = text
+
+    corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
+    corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
+    corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
+    corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
+    corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
+    corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
+    corrected_text, aux_verb_fixes, aux_verb_blocked = _aux_verb_spacing(
+        corrected_text, spacing_mode
+    )
+    applied.extend(f"[붙임 불가] {note}" for note in aux_verb_blocked)
+    corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+    corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
+    corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
+    corrected_text, former_term_fixes, former_term_flags = correct_former_terms(
+        index, corrected_text
+    )
+    applied.extend(
+        applied_fixes
+        + particle_fixes
+        + adnominal_fixes
+        + affix_fixes
+        + comma_fixes
+        + compound_fixes
+        + aux_verb_fixes
+        + always_wrong_fixes
+        + nonstandard_fixes
+        + discriminatory_fixes
+        + former_term_fixes
+    )
+    flags.extend(former_term_flags)
+
+    for fix, context in review_fixes:
+        flags.append(
+            FlagItem(
+                line_index=index,
+                original_text=corrected_text,
+                reason=(
+                    f"인명/지명 표기 자동 적용됨 ({fix}, 참고: {context}) — "
+                    "원지음 표기 원칙에 따른 추정치이므로 실제 발음 확인 필요"
+                ),
+            )
+        )
+
+    for fix, context in proper_noun_fixes:
+        original_token, _, replacement_token = fix.partition(" -> ")
+        flags.append(
+            FlagItem(
+                line_index=index,
+                original_text=corrected_text,
+                reason=(
+                    f"고유명사 외래어 표기 확인 필요 ({fix}, 참고: {context or '국립국어원 확정 표기'}) — "
+                    "인명·지명은 표기 규칙을 따라야 하지만, 작품 제목처럼 고유하게 "
+                    "고정된 표기일 수 있어 자동 반영하지 않음. 실제 대상이 규칙을 "
+                    "따라야 하는 경우에만 반영할 것"
+                ),
+                suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
+            )
+        )
+
+    # 사투리는 작업자가 직접 지정한다 — 미지정 화자에 대한 사투리 자동 감지
+    # '추천' 플래그는 띄우지 않는다('늘어지며'·'피식' 같은 지문이 화자로
+    # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
+    # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
+
+    # 자막 모드 구두점 규칙(사용자 지정 2026-08-02). 일반 글 모드는 구두점을
+    # 그대로 두므로 하나도 적용하지 않는다. 순서가 중요하다 — 말줄임표를 먼저
+    # 온점 세 개로 통일해야 그 뒤의 마침표 규칙이 '...'을 문장 종결 마침표로
+    # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
+    # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
+    if doc_type == "subtitle":
+        corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text)
+        applied.extend(bracket_log)
+        corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
+        applied.extend(ellipsis_log)
+        corrected_text, internal_log = correct_subtitle_internal_period(corrected_text)
+        applied.extend(internal_log)
+        corrected_text, period_log = correct_subtitle_final_period(corrected_text)
+        applied.extend(period_log)
+
+    # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
+    # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
+    # '백 배나'로 제안) 하나만 남긴다.
+    seen_fixes = set()
+    checks = [
+        check_spelling(index, corrected_text),
+        check_purified_terms(index, corrected_text),
+        check_colloquial_loanword(index, corrected_text),
+        check_ambiguous_compound(index, corrected_text),
+        check_ambiguous_particle(index, corrected_text),
+        check_spacing(index, corrected_text),
+    ]
+    for f in checks:
+        if not f:
+            continue
+        if f.suggested_fix and f.suggested_fix in seen_fixes:
+            continue
+        if f.suggested_fix:
+            seen_fixes.add(f.suggested_fix)
+        flags.append(f)
+
+    return corrected_text, flags, applied
+
+
 def correct_entries(
     entries: list[SubtitleEntry],
     dialect_map: dict[str, str] | None = None,
@@ -2254,6 +2541,7 @@ def correct_entries(
     spacing_mode: str = "principle",
     dialect_region: str | None = None,
     dialect_mode: str | None = None,
+    markers: SubtitleMarkers | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2276,6 +2564,9 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
+
+    markers는 자막 편집 표지(화면자막·줄바꿈·위치)다. 지정된 표지는 어문 규범의
+    대상이 아니라 기술적 표지이므로 교정에서 제외한다. 자막 모드에서만 쓴다.
 
     dialect_region/dialect_mode는 문서 전체 사투리 설정이다. 화자별 지정이 없는
     줄에 이 값이 적용되므로, 화자 표기가 없는 일반 글(소설 등) 전체를 한 사투리로
@@ -2353,106 +2644,11 @@ def correct_entries(
             if corrected_text != e.text:
                 applied_log.append(f"[{e.index}] 사투리→표준어 변환: {corrected_text}")
 
-        corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
-        corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
-        corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
-        corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
-        corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
-        corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
-        corrected_text, aux_verb_fixes, aux_verb_blocked = _aux_verb_spacing(
-            corrected_text, spacing_mode
+        corrected_text, line_flags, line_applied = _correct_line_with_markers(
+            e.index, corrected_text, doc_type, spacing_mode, markers
         )
-        applied_log.extend(f"[{e.index}] [붙임 불가] {note}" for note in aux_verb_blocked)
-        corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
-        corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
-        corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
-        corrected_text, former_term_fixes, former_term_flags = correct_former_terms(
-            e.index, corrected_text
-        )
-        applied_log.extend(
-            f"[{e.index}] {fix}"
-            for fix in applied_fixes
-            + particle_fixes
-            + adnominal_fixes
-            + affix_fixes
-            + comma_fixes
-            + compound_fixes
-            + aux_verb_fixes
-            + always_wrong_fixes
-            + nonstandard_fixes
-            + discriminatory_fixes
-            + former_term_fixes
-        )
-        flags.extend(former_term_flags)
-
-        for fix, context in review_fixes:
-            flags.append(
-                FlagItem(
-                    line_index=e.index,
-                    original_text=corrected_text,
-                    reason=(
-                        f"인명/지명 표기 자동 적용됨 ({fix}, 참고: {context}) — "
-                        "원지음 표기 원칙에 따른 추정치이므로 실제 발음 확인 필요"
-                    ),
-                )
-            )
-
-        for fix, context in proper_noun_fixes:
-            original_token, _, replacement_token = fix.partition(" -> ")
-            flags.append(
-                FlagItem(
-                    line_index=e.index,
-                    original_text=corrected_text,
-                    reason=(
-                        f"고유명사 외래어 표기 확인 필요 ({fix}, 참고: {context or '국립국어원 확정 표기'}) — "
-                        "인명·지명은 표기 규칙을 따라야 하지만, 작품 제목처럼 고유하게 "
-                        "고정된 표기일 수 있어 자동 반영하지 않음. 실제 대상이 규칙을 "
-                        "따라야 하는 경우에만 반영할 것"
-                    ),
-                    suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
-                )
-            )
-
-        # 사투리는 작업자가 직접 지정한다 — 미지정 화자에 대한 사투리 자동 감지
-        # '추천' 플래그는 띄우지 않는다('늘어지며'·'피식' 같은 지문이 화자로
-        # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
-        # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
-
-        # 자막 모드 구두점 규칙(사용자 지정 2026-08-02). 일반 글 모드는 구두점을
-        # 그대로 두므로 하나도 적용하지 않는다. 순서가 중요하다 — 말줄임표를 먼저
-        # 온점 세 개로 통일해야 그 뒤의 마침표 규칙이 '...'을 문장 종결 마침표로
-        # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
-        # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
-        if doc_type == "subtitle":
-            corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text)
-            applied_log.extend(f"[{e.index}] {m}" for m in bracket_log)
-            corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
-            applied_log.extend(f"[{e.index}] {m}" for m in ellipsis_log)
-            corrected_text, internal_log = correct_subtitle_internal_period(corrected_text)
-            applied_log.extend(f"[{e.index}] {m}" for m in internal_log)
-            corrected_text, period_log = correct_subtitle_final_period(corrected_text)
-            applied_log.extend(f"[{e.index}] {m}" for m in period_log)
-
-        # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
-        # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
-        # '백 배나'로 제안) 하나만 남긴다.
-        seen_fixes = set()
-        checks = [
-            check_spelling(e.index, corrected_text),
-            check_purified_terms(e.index, corrected_text),
-            check_colloquial_loanword(e.index, corrected_text),
-            check_ambiguous_compound(e.index, corrected_text),
-            check_ambiguous_particle(e.index, corrected_text),
-            check_spacing(e.index, corrected_text),
-        ]
-        for f in checks:
-            if not f:
-                continue
-            if f.suggested_fix and f.suggested_fix in seen_fixes:
-                continue
-            if f.suggested_fix:
-                seen_fixes.add(f.suggested_fix)
-            flags.append(f)
+        flags.extend(line_flags)
+        applied_log.extend(f"[{e.index}] {m}" for m in line_applied)
 
         corrected_entries.append(
             SubtitleEntry(

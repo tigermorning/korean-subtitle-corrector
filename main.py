@@ -11,6 +11,7 @@ from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
     apply_report_fixes,
     correct_entries,
+    normalize_subtitle_markers,
     normalize_spacing_mode,
     register_custom_words,
 )
@@ -52,6 +53,19 @@ def correct(
         "--dialect-mode",
         help="문서 전체 사투리 처리 모드: protect(기본, 그대로 보호) / assist(사투리 제안 플래그) / to_standard(표준어로 자동 변환). --dialect-region과 함께 씁니다.",
     ),
+    screen_text_marker: str = typer.Option(
+        "",
+        "--screen-text-marker",
+        help="자막 모드 전용. 화면자막 표기(예: 큰따옴표 또는 @). 짝이 있는 문자면 감싸인 구간만, 짝이 없는 문자면 그 줄 전체를 교정에서 제외합니다.",
+    ),
+    line_break_marker: str = typer.Option(
+        "", "--line-break-marker", help="자막 모드 전용. 줄바꿈 표기(예: |). 교정할 때만 실제 줄바꿈으로 취급하고 결과에는 그대로 되돌립니다."
+    ),
+    position_marker: str = typer.Option(
+        "",
+        "--position-marker",
+        help=r"자막 모드 전용. 자막 위치 표기(예: {\an8}). 제어 코드라 통째로 보호합니다.",
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -80,6 +94,9 @@ def correct(
         spacing_mode=spacing_mode,
         dialect_region=region,
         dialect_mode=dialect_mode if region else None,
+        markers=normalize_subtitle_markers(
+            screen_text_marker, line_break_marker, position_marker
+        ),
     )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
