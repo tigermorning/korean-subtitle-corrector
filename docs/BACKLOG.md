@@ -10,19 +10,19 @@
 
 아래 목록은 문서 기록이 아니라 **코드를 직접 확인해서** 상태를 매긴 것이다. 확인 과정에서 문서가 낡아 있던 3건을 찾아 해당 줄을 그 자리에서 정정했다(`docs/IMPLEMENTATION_LOG.md:100`, 같은 파일 `:177`, `PRD.md` §8 체크리스트). **문서가 "미구현"이라고 말해도 코드를 먼저 확인할 것** — 이 확인만으로 완료된 작업 1건과 부분 완료 2건이 드러났다.
 
-**열려 있는 항목: 8건** (2026-08-02 기준. 8·20·21번은 사용자 결정으로 종결, 15·18·19번은 같은 날 해결. 1번은 21번 결정으로 착수 불가 고정.)
+**열려 있는 항목: 8건** (2026-08-02 기준. 8·20·21번은 사용자 결정으로 종결, 14·15·18·19번은 같은 날 해결. 1번은 21번 결정으로 착수 불가 고정.)
 
 | 성격 | 건수 | 항목 |
 |---|---|---|
 | 코드 작업 | 6 | 2, 3, 4, 6, 7(21번 결정과 맞물림 — 확인 필요), 16 |
 | 착수 불가 고정 | 1 | 1 (판례 스터디 중단으로 선행 작업 없어짐) |
 | 부분 완료 — 보탤 일 | 1 | 9 (테스트셋 확대) |
-| 리팩터링 | 1 | 14 (`engine.py` 분할) |
 | 선행 결정 대기(LLM 연동) | 1 | 17 (교정 강도 선택) |
+| 문서 정리 | 1 | 22 (`docs/IMPLEMENTATION_LOG.md` 3회차 아카이브 — 임계 초과) |
 
 **지금 바로 착수 가능한 코드 작업은 5건**(2·3·4·6·7)이다. 1번은 `PRECEDENTS`가 0건이라 판례를 채우는 선행 작업이 끝나야 시작할 수 있다.
 
-2026-07-27에 처리·정리한 것: 5번(지역어 API 장애 확진 — 서버측이라 우리 작업 없음), 10번(회고 "아쉬운 점" 작성), 11번(로그 아카이브 2회차), 12번(§31·§32 참조 수정), 13번(낡은 기록 3곳 정정). 이미 완료라 목록에서 제거한 것: 구 6번 지역어 API 파이프라인 연결(`engine.py:52` import, `engine.py:1570` 호출 확인).
+2026-07-27에 처리·정리한 것: 5번(지역어 API 장애 확진 — 서버측이라 우리 작업 없음), 10번(회고 "아쉬운 점" 작성), 11번(로그 아카이브 2회차), 12번(§31·§32 참조 수정), 13번(낡은 기록 3곳 정정). 이미 완료라 목록에서 제거한 것: 구 6번 지역어 API 파이프라인 연결(당시 `engine.py:52` import, `engine.py:1570` 호출 확인 — 2026-08-02 분할 후에는 `engine/dialect.py`의 `check_dialect` 안에 있다).
 
 ### 착수 가능 (근거 확보됨, 코드만 남음)
 
@@ -76,16 +76,10 @@
 
 ### 리팩터링
 
-14. **`engine.py` 모듈 분할 (2,222줄 / 121,524자)** — 이 프로젝트에서 세션 토큰이 크게 나가는 첫 번째 원인은 이 파일 하나다(참고로 kiwipiepy는 로컬 C++ 분석기라 토큰을 전혀 쓰지 않는다 — 310MB는 메모리 비용이고 토큰과 무관하다. 2026-07-27 확인). 공개 함수는 `correct_*`/`check_*` 22개 + `correct_entries`(2010행)이고, 이미 기능별로 뭉쳐 있어 경계가 뚜렷하다. 제안하는 분할:
-    - `kiwi_adapter.py` — `_kiwi` 싱글턴, `register_custom_words`, `_straddling_tokens`/`_token_containing`/`_tokenization_unstable_near` 등 토큰 조회 도구
-    - `spacing.py` — `_mechanical_respace`, `correct_particle_spacing`, `correct_compound_spacing`, `correct_aux_verb_spacing`, `_protect_unfounded_joining`
-    - `replacements.py` — `correct_always_wrong`, `correct_nonstandard_terms`, `correct_discriminatory_terms`, `correct_former_terms`, `_apply_replacements`, 조사 이형태 처리
-    - `spelling.py` — `check_spelling`과 그 판정 도구(`_tensified_headword_variant`, `_is_reduplication`, `_is_native_compound`, `_unknown_content_words`)
-    - `loanwords.py` / `subtitle.py` / `dialect.py` — 외래어, 자막 전용 부호 규칙, 사투리 모드
-    - `engine.py` — `correct_entries` 오케스트레이션만 남긴다
-    - **반드시 지킬 것 ①**: 순수 이동만 한다. 로직을 함께 손보면 150건 테스트가 회귀를 잡아주는 효과가 사라진다. 이동 후 전체 테스트가 그대로 통과해야 하고, 통과하지 않으면 이동이 잘못된 것이다.
-    - **반드시 지킬 것 ②**: `_kiwi`는 프로세스에 **하나만** 있어야 한다. 모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고(§10 배포 한도와 직결), `register_custom_words()`로 등록한 고유명사가 다른 모듈에 전달되지 않아 "kiwi가 이름을 쪼개는" 버그가 되살아난다. 반드시 `kiwi_adapter.py` 하나에서 만들고 나머지는 import만 한다.
-    - **기대 효과의 한계**: 엔진 전체를 봐야 하는 작업에서는 토큰이 줄지 않는다. 한 영역만 건드리는 작업(예: 띄어쓰기 규칙 하나 추가)에서 파일 하나만 읽으면 되는 것이 이득이다.
+14. **`engine.py` 모듈 분할 — 완료(2026-08-02)** — 3,172줄 한 파일을 `subtitle_corrector/engine/` 패키지 16개 모듈로 나눴다. 상세는 `docs/IMPLEMENTATION_LOG.md` §46. 지킬 것으로 적어 뒀던 두 조건 모두 지켰다: 순수 이동만 했고(최상위 심볼 136개의 AST가 분할 전후 동일, pytest 276건 그대로 통과), `_kiwi`는 `engine/kiwi_adapter.py` 하나에만 있다. 호출부(`main.py`·`api.py`·테스트)는 한 줄도 고치지 않았다 — `engine/__init__.py`가 기존 공개 API를 그대로 재수출한다.
+    - **다음에 이 영역을 건드릴 때**: 규칙을 새로 넣을 자리는 규칙 모듈(`spacing.py`·`replacements.py` 등)이고 `pipeline.py`에는 호출 순서만 둔다. 새 공개 함수는 `engine/__init__.py`의 `__all__`에도 추가해야 기존 import 경로로 보인다.
+
+22. **`docs/IMPLEMENTATION_LOG.md` 3회차 아카이브** — §46·§47을 더하면서 파일이 다시 30KB 임계를 넘었다(약 40KB). 규칙대로 오래된 섹션(§31~)부터 `docs/log-archive/`로 옮길 것. **옮긴 섹션을 가리키는 다른 문서의 참조도 함께 고쳐야 한다** — 2회차 때 22곳이 있었다.
 
 ### 이 목록에 넣지 않은 것 (v2 로드맵·정책, §9/§10)
 

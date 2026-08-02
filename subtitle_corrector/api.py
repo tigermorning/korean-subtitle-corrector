@@ -2,10 +2,18 @@
 
 PRD.md §4의 아키텍처 원칙("교정 로직은 CLI와 분리된 순수 라이브러리 모듈로 설계")을
 그대로 활용한다. 여기서는 engine/parsers를 호출만 하고, 새 교정 로직은 추가하지 않는다.
+
+이 파일이 하는 일은 세 가지뿐이다: (1) 업로드를 검증해 임시 파일로 실체화,
+(2) 폼 문자열을 엔진이 받는 설정값으로 정규화, (3) 결과를 JSON으로 직렬화.
+교정 규칙에 해당하는 판단은 한 줄도 여기 두지 않는다.
 """
 
 import io
+import json
 import tempfile
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict
 from urllib.parse import quote
 from pathlib import Path
@@ -18,6 +26,7 @@ from . import store
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS
 from .engine import (
+    SubtitleEntry,
     correct_entries,
     normalize_punctuation_style,
     normalize_subtitle_markers,
@@ -25,7 +34,6 @@ from .engine import (
     normalize_spacing_mode,
     register_custom_words,
 )
-from .parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 
 app = FastAPI(title="한국어 자막 교정 API")
 
@@ -46,6 +54,77 @@ _MAX_PDF_BYTES = 30_000_000
 
 def _split_words(raw: str) -> list[str]:
     return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _read_upload(file: UploadFile) -> tuple[str, bytes]:
+    """업로드를 검증하고 (확장자, 원본 바이트)를 돌려준다.
+
+    확장자·크기 검증은 파일을 받는 모든 엔드포인트가 똑같이 해야 하는 일이라
+    여기 한곳에 둔다 — 엔드포인트마다 따로 쓰면 한쪽만 고쳐져 "업로드 화면에서는
+    막히는데 다른 경로로는 통과한다" 같은 구멍이 생긴다.
+
+    크기 제한은 한도 + 1바이트까지만 읽어서 판정한다. 먼저 통째로 읽고 나서
+    길이를 재면 거부할 파일도 일단 메모리에 다 올리게 된다.
+    """
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            400,
+            "지원하지 않는 형식입니다. 지원 형식: " + ", ".join(sorted(_ALLOWED_EXTENSIONS)),
+        )
+    size_limit = _MAX_PDF_BYTES if ext == ".pdf" else _MAX_UPLOAD_BYTES
+    raw = file.file.read(size_limit + 1)
+    if len(raw) > size_limit:
+        raise HTTPException(
+            413, f"파일이 너무 큽니다. 최대 {size_limit // 1_000_000}MB까지 지원합니다."
+        )
+    return ext, raw
+
+
+@contextmanager
+def _materialized(ext: str, raw: bytes) -> Iterator[Path]:
+    """업로드 바이트를 임시 파일로 만들어 경로를 넘긴다.
+
+    파서·저장 함수가 모두 경로를 받는다(ASS/SAMI/TTML은 저장할 때 원본 파일에서
+    대사 외의 내용을 그대로 가져와야 해서 경로가 반드시 필요하다).
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        in_path = Path(tmp) / f"input{ext}"
+        in_path.write_bytes(raw)
+        yield in_path
+
+
+def _parse_entries(ext: str, path: Path) -> list[SubtitleEntry]:
+    entries = parse_file(path)
+
+    # 스캔본 PDF(글자가 이미지)면 텍스트가 하나도 안 나온다. 조용히 빈 결과를
+    # 돌려주면 사용자는 도구가 고장 난 줄 안다 — 무엇이 문제인지 알린다.
+    # OCR은 넣지 않는다(2026-08-02 사용자 결정): 실측에서 '초코렛을 좋아해요'가
+    # '조 코 렛 을 좋 아 해 요'로 읽혔고, 그런 오독이 리포트를 뒤덮으면 정작
+    # 봐야 할 교정 항목이 묻힌다. OCR 품질은 우리가 통제할 수 없는 변수다.
+    if ext == ".pdf" and not any(e.text.strip() for e in entries):
+        raise HTTPException(
+            400,
+            "이 PDF에는 텍스트 레이어가 없습니다(글자가 이미지인 스캔본). "
+            "이 도구는 글자를 추정해 읽지 않습니다 — 다른 OCR 도구로 텍스트를 "
+            "먼저 뽑은 뒤 .txt나 .docx로 올려 주세요.",
+        )
+    return entries
+
+
+def _parse_json_object(raw: str) -> dict:
+    """폼으로 온 JSON 문자열을 dict로 읽는다. 깨졌으면 빈 dict.
+
+    설정값 하나가 깨졌다고 교정 요청 전체를 400으로 돌려보내지 않는다 — 이
+    값들은 전부 "지정하지 않음"이라는 안전한 기본값이 있는 선택 항목이다.
+    """
+    if not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 @app.post("/api/correct")
@@ -70,12 +149,7 @@ def correct_subtitle(
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
     # 요청(health check 포함)도 응답을 못 받는다. sync def로 두면 FastAPI가
     # 자동으로 스레드풀에서 돌려서 이 문제를 피한다.
-    ext = Path(file.filename).suffix.lower()
-    if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            400,
-            "지원하지 않는 형식입니다. 지원 형식: " + ", ".join(sorted(_ALLOWED_EXTENSIONS)),
-        )
+    ext, raw = _read_upload(file)
 
     # 번역가가 이 파일에 나오는 고유명사·요리/음료 이름을 미리 알려주면,
     # kiwi가 이후 이 단어를 절대 잘못 쪼개지 않는다(engine.register_custom_words).
@@ -87,64 +161,21 @@ def correct_subtitle(
     # 범용 엔진이다(engine.correct_entries). .srt는 타임코드 구조를 보존해야
     # 하고, 일반 텍스트는 줄 구성만 보존하면 되므로 파일 형식에 따라
     # 파서/저장 함수만 갈아 끼운다 — 교정 로직 자체는 완전히 동일하다.
-    size_limit = _MAX_PDF_BYTES if ext == ".pdf" else _MAX_UPLOAD_BYTES
-    raw = file.file.read(size_limit + 1)
-    if len(raw) > size_limit:
-        raise HTTPException(413, f"파일이 너무 큽니다. 최대 {size_limit // 1_000_000}MB까지 지원합니다.")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        in_path = Path(tmp) / f"input{ext}"
-        in_path.write_bytes(raw)
-
-        entries = parse_file(in_path)
-
-        # 스캔본 PDF(글자가 이미지)면 텍스트가 하나도 안 나온다. 조용히 빈 결과를
-        # 돌려주면 사용자는 도구가 고장 난 줄 안다 — 무엇이 문제인지 알린다.
-        # OCR은 넣지 않는다(2026-08-02 사용자 결정): 실측에서 '초코렛을 좋아해요'가
-        # '조 코 렛 을 좋 아 해 요'로 읽혔고, 그런 오독이 리포트를 뒤덮으면 정작
-        # 봐야 할 교정 항목이 묻힌다. OCR 품질은 우리가 통제할 수 없는 변수다.
-        if ext == ".pdf" and not any(e.text.strip() for e in entries):
-            raise HTTPException(
-                400,
-                "이 PDF에는 텍스트 레이어가 없습니다(글자가 이미지인 스캔본). "
-                "이 도구는 글자를 추정해 읽지 않습니다 — 다른 OCR 도구로 텍스트를 "
-                "먼저 뽑은 뒤 .txt나 .docx로 올려 주세요.",
-            )
-
-        # dialect_map 파싱: JSON 문자열 → dict
-        parsed_dialect_map: dict[str, str] = {}
-        if dialect_map.strip():
-            import json
-            try:
-                parsed_dialect_map = json.loads(dialect_map)
-            except json.JSONDecodeError:
-                pass
+    with _materialized(ext, raw) as in_path:
+        entries = _parse_entries(ext, in_path)
 
         # dialect_modes 파싱: JSON 문자열 → dict.
         # 허용 모드: protect(기본값, 사투리 보호) / assist(사투리 제안) /
         # to_standard(표준어 자동 변환). 하위 호환 별칭 flag_only→protect,
         # to_dialect→assist도 받는다. 그 외 값이나 미지정은 protect로 정규화한다.
-        parsed_dialect_modes: dict[str, str] = {}
-        if dialect_modes.strip():
-            import json
-            try:
-                raw_modes = json.loads(dialect_modes)
-                if isinstance(raw_modes, dict):
-                    parsed_dialect_modes = {
-                        speaker: normalize_dialect_mode(mode)
-                        for speaker, mode in raw_modes.items()
-                    }
-            except json.JSONDecodeError:
-                pass
+        parsed_dialect_modes = {
+            speaker: normalize_dialect_mode(mode)
+            for speaker, mode in _parse_json_object(dialect_modes).items()
+        }
 
         # 사용목적 모드: subtitle(기본, 문장 끝 마침표를 오류로 플래그) /
         # prose(일반 글, 구두점 허용). 그 외 값은 subtitle로 정규화한다.
         normalized_doc_type = doc_type if doc_type == "prose" else "subtitle"
-
-        # 띄어쓰기 기준(제47항 보조 용언): principle(기본, 띄어 씀) /
-        # allowance(붙여 씀). 한 문서에 하나만 적용해 원칙과 허용이 섞이지
-        # 않게 한다. 그 외 값은 principle로 정규화한다.
-        normalized_spacing_mode = normalize_spacing_mode(spacing_mode)
 
         # 문서 전체 사투리 설정(화자 표기가 없는 일반 글용). 지원하지 않는 지역
         # 이름은 무시한다 — 오타 하나로 글 전체가 엉뚱한 지역 기준으로 처리되면
@@ -152,18 +183,20 @@ def correct_subtitle(
         normalized_dialect_region = dialect_region.strip() or None
         if normalized_dialect_region not in DIALECT_MARKERS:
             normalized_dialect_region = None
-        normalized_dialect_mode = (
-            normalize_dialect_mode(dialect_mode) if normalized_dialect_region else None
-        )
 
         corrected_entries, flags, applied_log = correct_entries(
             entries,
-            dialect_map=parsed_dialect_map,
+            dialect_map=_parse_json_object(dialect_map),
             dialect_modes=parsed_dialect_modes,
             doc_type=normalized_doc_type,
-            spacing_mode=normalized_spacing_mode,
+            # 띄어쓰기 기준(제47항 보조 용언): principle(기본, 띄어 씀) /
+            # allowance(붙여 씀). 한 문서에 하나만 적용해 원칙과 허용이 섞이지
+            # 않게 한다. 그 외 값은 principle로 정규화한다.
+            spacing_mode=normalize_spacing_mode(spacing_mode),
             dialect_region=normalized_dialect_region,
-            dialect_mode=normalized_dialect_mode,
+            dialect_mode=(
+                normalize_dialect_mode(dialect_mode) if normalized_dialect_region else None
+            ),
             # 자막 편집 표지. 업계 공통 규칙이 없어 값을 고정하지 않고 그때그때
             # 받는다. 자막 모드에서만 쓰이며, 지정된 표지는 교정에서 제외된다.
             # 구두점 표기 방식(말줄임표·따옴표). 납품처마다 달라 설정으로 받는다.
@@ -176,7 +209,7 @@ def correct_subtitle(
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
         # 일반 텍스트와 동일하게 결과를 순수 텍스트로 돌려준다.
-        out_path = Path(tmp) / f"output{output_suffix(file.filename)}"
+        out_path = in_path.with_name(f"output{output_suffix(file.filename or '')}")
         write_file(corrected_entries, out_path, in_path)
         corrected_text = out_path.read_text(encoding="utf-8")
 
@@ -186,23 +219,9 @@ def correct_subtitle(
             original_text = "\n".join(e.text for e in entries) + "\n"
         else:
             original_text = raw.decode("utf-8-sig")
-    # 저장(Supabase)이 실패해도 이미 완료된 교정 결과 자체는 그대로 돌려준다 —
-    # 저장 실패와 교정 실패는 서로 다른 문제다. 저장 실패는 흔히 일시적이거나
-    # (무료 티어 슬립/네트워크 지연) 설정 문제이지 교정 로직의 결함이 아닌데,
-    # 여기서 예외를 그대로 던지면 이미 성공한 교정 결과까지 통째로 사라지고
-    # 사용자는 그냥 "서버 오류"만 보게 된다. 저장 실패는 "공유 링크를 만들지
-    # 못했다"는 사실만 알려주고, 나머지 결과는 정상적으로 응답한다.
-    try:
-        report_id = store.save_report(
-            original_srt=original_text,
-            corrected_srt=corrected_text,
-            flags=flags,
-            applied_log=applied_log,
-        )
-    except (RuntimeError, requests.RequestException):
-        report_id = None
+
     return {
-        "id": report_id,
+        "id": _try_save_report(original_text, corrected_text, flags, applied_log),
         "original_srt": original_text,
         "corrected_srt": corrected_text,
         "flags": [asdict(f) for f in flags],
@@ -215,6 +234,29 @@ def correct_subtitle(
             for e in corrected_entries
         ],
     }
+
+
+def _try_save_report(
+    original_text: str, corrected_text: str, flags: list, applied_log: list[str]
+) -> str | None:
+    """저장(Supabase)을 시도하고, 실패하면 None을 돌려준다.
+
+    저장이 실패해도 이미 완료된 교정 결과 자체는 그대로 돌려준다 — 저장 실패와
+    교정 실패는 서로 다른 문제다. 저장 실패는 흔히 일시적이거나(무료 티어
+    슬립/네트워크 지연) 설정 문제이지 교정 로직의 결함이 아닌데, 여기서 예외를
+    그대로 던지면 이미 성공한 교정 결과까지 통째로 사라지고 사용자는 그냥
+    "서버 오류"만 보게 된다. 저장 실패는 "공유 링크를 만들지 못했다"는 사실만
+    알려주고, 나머지 결과는 정상적으로 응답한다.
+    """
+    try:
+        return store.save_report(
+            original_srt=original_text,
+            corrected_srt=corrected_text,
+            flags=flags,
+            applied_log=applied_log,
+        )
+    except (RuntimeError, requests.RequestException):
+        return None
 
 
 @app.post("/api/export/docx")
@@ -244,7 +286,20 @@ def export_docx(text: str = Form(""), filename: str = Form("교정본")):
 
 @app.get("/api/reports/{report_id}")
 def get_report(report_id: str):
-    row = store.get_report(report_id)
+    # id는 저장할 때 uuid4로 만든 값이다(store.save_report). 그 형식이 아니면
+    # 조회 자체를 하지 않는다 — 이 값은 PostgREST 필터 문자열("id=eq.{...}")에
+    # 그대로 들어가므로, 쉼표 같은 문자가 섞이면 의도하지 않은 질의가 된다.
+    try:
+        uuid.UUID(report_id)
+    except ValueError:
+        raise HTTPException(404, "해당 id의 리포트를 찾을 수 없습니다.")
+
+    # 저장소 장애(네트워크·무료 티어 슬립)는 "없는 리포트"와 다른 상황이라
+    # 502로 구분해 알린다. 그대로 두면 스택 트레이스와 함께 500이 나간다.
+    try:
+        row = store.get_report(report_id)
+    except requests.RequestException:
+        raise HTTPException(502, "리포트 저장소에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.")
     if not row:
         raise HTTPException(404, "해당 id의 리포트를 찾을 수 없습니다.")
     return row
@@ -256,24 +311,11 @@ def get_speakers(file: UploadFile):
 
     SDH 브래킷([이름])이나 "speaker: value" 형식에서 화자를 추출한다.
     """
-    ext = Path(file.filename).suffix.lower()
-    if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            400,
-            "지원하지 않는 형식입니다. 지원 형식: " + ", ".join(sorted(_ALLOWED_EXTENSIONS)),
-        )
-
-    raw = file.file.read(_MAX_UPLOAD_BYTES + 1)
-    if len(raw) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "파일이 너무 큽니다.")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        in_path = Path(tmp) / f"input{ext}"
-        in_path.write_bytes(raw)
+    ext, raw = _read_upload(file)
+    with _materialized(ext, raw) as in_path:
         entries = parse_file(in_path)
 
-    speakers = sorted({e.speaker for e in entries if e.speaker})
-    return {"speakers": speakers}
+    return {"speakers": sorted({e.speaker for e in entries if e.speaker})}
 
 
 @app.get("/api/dialect-regions")

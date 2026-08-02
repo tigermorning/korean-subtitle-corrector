@@ -4,6 +4,10 @@
 
 핵심 한 줄: 이 프로젝트는 "확률적 추측이 아닌 권위 있는 규범 근거 기반, 애매하면 반드시 사람에게 확인"을 최우선 원칙으로 삼는다. 이 원칙과 충돌하는 자동화는 제안하지 마라.
 
+**코드 구조(2026-08-02 분할):** 교정 엔진은 `subtitle_corrector/engine/` 패키지다(구 `engine.py` 3,172줄을 나눈 것, `docs/IMPLEMENTATION_LOG.md` §46). 의존 방향은 단방향이다 — `text_utils` → `kiwi_adapter`/`options` → `lexicon`/`markers` → 규칙 모듈(`spacing`·`replacements`·`spelling`·`loanwords`·`affix`·`punctuation`·`subtitle_rules`·`dialect`·`consistency`) → `spacing_guards` → `pipeline`. **규칙은 규칙 모듈에 넣고 `pipeline.py`에는 호출 순서만 둔다.** `_kiwi` 인스턴스는 `kiwi_adapter.py`에만 있어야 한다(모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고 등록한 고유명사가 전달되지 않는다). 새 공개 함수는 `engine/__init__.py`의 `__all__`에도 추가해야 `from subtitle_corrector.engine import ...`로 보인다.
+
+사전 조회도 같은 날 `subtitle_corrector/dictionary/` 패키지로 나눴다(§48): `clients.py`(요청만, 판정 안 함) / `headwords.py`("사전에 있는가") / `terms.py`("무엇으로 바꿔야 하는가") / `dialect.py`. **API 호출을 새로 추가하면 `clients.py`, 그 응답으로 무엇을 결론지을지는 `headwords.py`·`terms.py`에 쓴다** — 원리 4(조회 로직 버그)는 거의 전부 판정 쪽에서 나므로 둘을 섞지 않는다.
+
 **오탐·과교정 리포트를 받으면 `docs/DESIGN_PRINCIPLES.md`를 먼저 읽어라.** 대부분의 버그는 4가지 원리(조각 대조 / 모호할 때 자동 교정 / 우연한 사전 충돌 / 조회 로직 버그)의 반복이므로, 인스턴스별 패치가 아니라 공유 가드를 고쳐 부류 전체를 커버한다.
 
 **최근 완료 (2026-07-26):** 실사용 감수 8건(A·B·C, `docs/IMPLEMENTATION_LOG.md` §31) + 리포트 축약(D) + 사용목적 모드(E, 같은 파일 §32) 구현·검증·커밋 완료. 정답표 테스트 `tests/test_realusage_review.py`. — **§31·§32는 `PRD.md`가 아니라 `docs/IMPLEMENTATION_LOG.md`의 섹션 번호다**(2026-07-24 모듈화 때 옮겨간 번호. 2026-07-27 §22~§30 아카이브 후에도 §31 이후는 그 파일에 남아 있다).

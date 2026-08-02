@@ -1,0 +1,101 @@
+"""맞춤법·순화어 검사. 자동 교정하지 않고 플래그만 남긴다 —
+사전에 없다는 사실만으로는 무엇이 맞는 표기인지 알 수 없기 때문이다.
+"""
+
+from ..dictionary import (
+    appears_in_standard_headword,
+    get_purified_terms,
+    search_kornorms,
+    usage_examples,
+    word_exists,
+)
+from ..report import FlagItem
+from .text_utils import _bracket_spans, _inside_any_span
+from .kiwi_adapter import _SPELLING_CHECK_TAGS, _kiwi
+from .lexicon import (
+    _covered_by_larger_dictionary_unit,
+    _is_productive_demonym_compound,
+    _is_verb_stem_mistagged_as_noun,
+)
+
+def _unknown_content_words(text: str) -> list[str]:
+    """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
+    조각내는 경우의 오탐은 _covered_by_larger_dictionary_unit()(원리 1 공유 가드)로
+    걸러낸다."""
+    brackets = _bracket_spans(text)
+    tokens = _kiwi.tokenize(text)
+    unknown = []
+    for i, t in enumerate(tokens):
+        if t.tag not in _SPELLING_CHECK_TAGS:
+            continue
+        if _inside_any_span(t.start, brackets):
+            continue
+        lemma = t.lemma
+        if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
+            continue
+        if appears_in_standard_headword(lemma):
+            continue  # 단독 표제어는 없어도 국립국어원 표제어의 구성 요소로 쓰이는 말
+        if _is_verb_stem_mistagged_as_noun(tokens, i):
+            continue
+        if _covered_by_larger_dictionary_unit(text, tokens, i):
+            continue
+        unknown.append(lemma)
+    return unknown
+
+
+def check_spelling(index: int, text: str) -> FlagItem | None:
+    """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
+    있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,
+    번역가 교육자료가 권장하는 실제 검증 방법(국립국어원 용례, 발음기호
+    사전, 한글라이즈)으로 직접 확인하라고 안내만 한다."""
+    unknown = _unknown_content_words(text)
+    if unknown:
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"사전에 없는 단어: {', '.join(unknown)} — 외국어 음차·고유명사일 수 있음. "
+                "국립국어원 용례, 발음기호(Longman/Collins 등), 한글라이즈(hangulize.org)로 "
+                "직접 확인 필요. 반복 등장하는 이름·요리명이면 위쪽의 고유명사/요리명 목록에 "
+                "추가하면 이후 잘못 쪼개지지 않습니다."
+            ),
+        )
+    return None
+
+
+def _usage_note(words: list[str]) -> str:
+    """여러 단어에 대해 우리말샘 실제 용례를 모아 플래그 사유에 덧붙일 참고
+    문구를 만든다. 번역가가 사전을 따로 찾아보지 않고도 각 단어가 실제
+    문장에서 어떻게 쓰이는지 바로 비교해 볼 수 있게 하기 위함이다. 용례를
+    하나도 못 찾으면 빈 문자열을 돌려주고(플래그 자체는 그대로 유지됨),
+    이미 처리한 단어는 중복 조회하지 않는다."""
+    notes = []
+    seen = set()
+    for word in words:
+        if word in seen:
+            continue
+        seen.add(word)
+        examples = usage_examples(word, limit=1)
+        if examples:
+            notes.append(f"{word}: '{examples[0]}'")
+    return " / ".join(notes)
+
+
+def check_purified_terms(index: int, text: str) -> FlagItem | None:
+    """일반 순화어(예: 반팔->반소매)가 등장하면 확인 플래그한다. 차별적
+    표현과 달리 관례적 표현이 여전히 널리 쓰이는 경우가 있어(예: 유모차는
+    공식 순화어 유아차보다 압도적으로 많이 쓰임) 자동으로 바꾸지 않는다.
+
+    온용어(K-term) API에서 "다듬은 말"을 동적으로 조회하고, 정적
+    목록(PURIFIED_TERMS)과 통합해 사용한다 — API가 실패하면 정적 목록만으로
+    동작한다."""
+    purified = get_purified_terms()
+    matched = [word for word in purified if word in text]
+    if not matched:
+        return None
+    suggestions = ", ".join(f"{word}->{purified[word]}" for word in matched)
+    reason = f"순화어 확인 필요: {suggestions} (관례적 표현이 더 적절할 수도 있음)"
+    note = _usage_note(matched + [purified[word] for word in matched])
+    if note:
+        reason += f" | 우리말샘 용례) {note}"
+    return FlagItem(line_index=index, original_text=text, reason=reason)

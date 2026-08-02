@@ -95,7 +95,7 @@
 
 ### 아키텍처 원칙 (향후 확장 대비)
 
-교정 로직(사전/규범 조회, 판단, 플래그 생성)은 **CLI와 분리된 순수 라이브러리 모듈**로 설계한다. CLI(Typer)는 이 라이브러리를 호출하는 얇은 인터페이스로만 둔다. 이렇게 하면 §9의 백엔드 확장 시 동일한 교정 엔진을 API 서버에서 그대로 재사용할 수 있다 (CLI 코드를 뜯어고칠 필요 없음). v1 시점에 백엔드를 직접 구현하지는 않는다 — 지금 만드는 건 어디까지나 로컬 CLI 도구다.
+교정 로직(사전/규범 조회, 판단, 플래그 생성)은 **CLI와 분리된 순수 라이브러리 모듈**로 설계한다. CLI(Typer)는 이 라이브러리를 호출하는 얇은 인터페이스로만 둔다. (2026-08-02: 그 라이브러리가 3,172줄 한 파일로 커져 `subtitle_corrector/engine/` 패키지 16개 모듈로 나눴다 — 계층과 규칙은 `AGENTS.md`, 경위는 `docs/IMPLEMENTATION_LOG.md` §46.) 이렇게 하면 §9의 백엔드 확장 시 동일한 교정 엔진을 API 서버에서 그대로 재사용할 수 있다 (CLI 코드를 뜯어고칠 필요 없음). v1 시점에 백엔드를 직접 구현하지는 않는다 — 지금 만드는 건 어디까지나 로컬 CLI 도구다.
 
 ## 5. 교정 판단 엔진 (핵심 설계)
 
@@ -198,7 +198,7 @@
 - **문서 전체 사투리 설정(2026-08-02 추가)**: 화자별 지정이 없는 줄에 적용되는 문서 단위 (지역, 모드). 소설처럼 글 전체가 한 사투리인 문서를 다루기 위한 것이다(예: 박경리 '토지'를 현대 표준어로). **일반 글에는 화자 표기 자체가 없어서, 이 설정이 없으면 사투리 기능이 아예 걸리지 않았다.** 화자별 지정이 있으면 그쪽이 우선한다(`resolve_dialect_mode`의 fallback). 모드 기본값은 여전히 protect — 글 전체를 말없이 표준어로 바꿔 버리면 안 되기 때문이다. 노출: `correct_entries(dialect_region=, dialect_mode=)`, `/api/correct`의 `dialect_region`·`dialect_mode` Form(지원하지 않는 지역명은 무시), `main.py --dialect-region/--dialect-mode`, 웹 UI의 "문서 전체" 드롭다운.
   - **한계**: 변환 품질은 `convert_dialect()`의 정적 매핑에 달려 있고 지역어 API는 서버 장애로 멈춰 있다(`docs/BACKLOG.md` 5번). 실측(2026-08-02): "이거 아이가 마이시 좋다" -> "이거 그래 많이 좋다"는 되지만 "밥은 뭇나 안 뭇나"는 그대로다. **문학 사투리 전면 표준어화는 아직 부분적으로만 된다.**
 - **미지정 화자**: 기존 동작 유지. 표준화 파이프라인을 돌리고, 이름이 있으면 자동으로 사투리 패턴을 감지해(비율 >= 0.15) 플래그만 남긴다(사투리 지정을 권유). 자동교정은 하지 않는다.
-- **구현**: `dictionary.py`(DIALECT_MARKERS, detect_dialect_ratio, convert_dialect, search_dialect), `engine.py`(normalize_dialect_mode, resolve_dialect_mode, check_dialect, correct_entries에서 모드 우선 게이팅), `api.py`(/api/speakers, /api/dialect-regions, dialect_map·dialect_modes 파라미터, 모드 검증/정규화), `static/index.html`(화자별 지역·모드 드롭다운). 테스트: `tests/test_dialect_modes.py`.
+- **구현**: `dictionary.py`(DIALECT_MARKERS, detect_dialect_ratio, convert_dialect, search_dialect), `engine/options.py`(normalize_dialect_mode, resolve_dialect_mode)·`engine/dialect.py`(check_dialect)·`engine/pipeline.py`(correct_entries에서 모드 우선 게이팅), `api.py`(/api/speakers, /api/dialect-regions, dialect_map·dialect_modes 파라미터, 모드 검증/정규화), `static/index.html`(화자별 지역·모드 드롭다운). 테스트: `tests/test_dialect_modes.py`.
 - **알려진 한계**: 지역어 종합 정보 API(dialect.korean.go.kr)가 현재 JSON이 아닌 응답을 돌려주어 `search_dialect()`는 사실상 빈 결과를 반환한다. assist 제안은 정적 `convert_dialect` 매핑에 의존한다.
 
 ## 13. 띄어쓰기 기준 선택 — 원칙 / 허용 (구현 완료, 2026-08-02)
@@ -213,8 +213,8 @@
   - 본용언이 3음절 이상 사전 등재 합성어(`덤벼들어 보아라`) — 제47항 단서상 항상 띄어 쓴다.
   - 의존명사+하다/싶다 조합이 사전에 없는 경우(`만싶다`) — 붙임 근거가 없어 그대로 둔다.
 - **자동 통일의 적용 범위는 제47항 보조 용언뿐이다**(사용자 결정, 2026-08-02). 제49항(고유명사)·제50항(전문 용어)은 자동 통일 대신 혼용 감지로 처리한다 — §14 참고. 제46항(단음절 단어 연속)은 미착수다.
-  - **정정(2026-08-02)**: 이 절에 처음 "제50항은 판정 로직 자체가 없다"고 적었는데 부정확했다. `_TERM_COMPOUND_TAGS`(`engine.py`)가 이미 있고, 붙여 쓴 전문 용어·고유명사를 kiwi가 쪼개자고 제안할 때 되돌려 **보호**한다. 없는 것은 "선택한 기준으로 통일하는" 로직이다.
-- **구현**: `engine.py`(`SPACING_MODES`, `normalize_spacing_mode`, `_aux_verb_spacing(text, mode)` — 기존 `correct_aux_verb_spacing`은 원칙 전용 얇은 래퍼로 남김, `correct_entries(spacing_mode=...)`), `api.py`(`/api/correct`의 `spacing_mode` Form), `main.py`(`--spacing principle|allowance`), `static/index.html`(띄어쓰기 기준 라디오). 테스트: `tests/test_engine.py::TestAuxVerbSpacingAllowanceMode`(10건).
+  - **정정(2026-08-02)**: 이 절에 처음 "제50항은 판정 로직 자체가 없다"고 적었는데 부정확했다. `_TERM_COMPOUND_TAGS`(`engine/kiwi_adapter.py`)가 이미 있고, 붙여 쓴 전문 용어·고유명사를 kiwi가 쪼개자고 제안할 때 되돌려 **보호**한다. 없는 것은 "선택한 기준으로 통일하는" 로직이다.
+- **구현**: `engine/options.py`(`SPACING_MODES`, `normalize_spacing_mode`)·`engine/spacing.py`(`_aux_verb_spacing(text, mode)` — 기존 `correct_aux_verb_spacing`은 원칙 전용 얇은 래퍼로 남김, `correct_entries(spacing_mode=...)`), `api.py`(`/api/correct`의 `spacing_mode` Form), `main.py`(`--spacing principle|allowance`), `static/index.html`(띄어쓰기 기준 라디오). 테스트: `tests/test_engine.py::TestAuxVerbSpacingAllowanceMode`(10건).
 - **검증**(2026-08-02): 전체 스위트 160건 통과. `examples/sample.srt` 회귀 — 두 기준의 결과 차이는 `그 일은 할 만하다`/`그 일은 할만하다` 한 줄뿐이고 나머지 자동교정·플래그 3건은 동일. 허용 기준으로 붙인 형태가 `check_spacing`에서 다시 "확인 필요"로 뜨지 않는 것도 확인(`_normalize_aux_verb_spacing`이 원문 기준으로 kiwi 제안을 되돌리므로 기준과 무관하게 동작한다).
 - **번역본 PRD 미반영**: `PRD.en.md` 등 6개 언어 사본에는 이 절이 없다.
 
@@ -235,7 +235,7 @@
 - **의존명사(NNB) 제외**: `말한 대로`/`말한대로`는 제42항이 항상 띄어 쓰라고 정한 별개 규칙이라, 여기 섞으면 정당한 오류를 통일 문제로 오인하게 된다.
 - **통일 후보(`suggested_fix`) 우선순위**: 거리 이름 규칙을 어기지 않는 표기 → 문서에서 더 자주 쓴 표기 → 동률이면 원칙(공백이 많은 형태) → 사전순. 거리 이름 규칙을 넣은 이유는, `세종대로`/`세종 대로`가 1회씩일 때 단순 다수결로는 규정에 어긋나는 `세종 대로`를 제안하게 되기 때문이다.
 - **하지 않는 것**: `부분만 붙임` 자체를 오류로 판정하지 않는다(전문 용어에서는 금지, 고유명사에서는 허용이라 그 표기가 어느 쪽인지 알아야 갈리는데, 그 구분이 곧 추측이다). 거리 이름의 `대로/로/가`를 띄어 쓴 표기도 그 자체로는 플래그하지 않고 통일 후보 선택에만 쓴다.
-- **구현**: `engine.py`(`_term_runs`, `_violates_street_name_rule`, `check_term_spacing_consistency` — 줄 단위 파이프라인이 끝난 뒤 문서 전체를 한 번 훑는다), 사투리 protect 화자의 대사는 제외. 테스트: `tests/test_engine.py::TestTermSpacingConsistency`(8건).
+- **구현**: `engine/consistency.py`(`_term_runs`, `_violates_street_name_rule`, `check_term_spacing_consistency` — 줄 단위 파이프라인이 끝난 뒤 문서 전체를 한 번 훑는다), 사투리 protect 화자의 대사는 제외. 테스트: `tests/test_engine.py::TestTermSpacingConsistency`(8건).
 - **검증**(2026-08-02): 전체 스위트 168건 통과. `examples/sample.srt` 결과·리포트 모두 이전과 완전히 동일(새 플래그로 인한 노이즈 없음).
 
 ## 16. 자막 편집 표지 설정 (구현 완료, 2026-08-02)
@@ -284,4 +284,4 @@
 - 표시만 있고 뒤에 대사가 없는 줄(효과음 등)은 건드리지 않는다.
 - **설정에서 받은 부호만 표시로 본다.** 대괄호만 쓰는 원고에서 괄호까지 표시로 취급하면 정당한 표기를 망친다.
 - 위치 표기는 교정 파이프라인에서 보호 조각으로 먼저 떼어지므로, 인접 규칙은 조각을 **합친 뒤에** 한 번 더 적용한다. 그러지 않으면 조각 경계를 사이에 둔 공백(`{n8} [민수]`)을 볼 수 없다.
-- 구현: `engine.py`의 `_marker_unit_pattern`·`correct_subtitle_bracket_spacing`. 테스트: `tests/test_subtitle_markers.py::TestMarkerAdjacency`(6건).
+- 구현: `engine/markers.py`의 `_marker_unit_pattern`·`engine/subtitle_rules.py`의 `correct_subtitle_bracket_spacing`. 테스트: `tests/test_subtitle_markers.py::TestMarkerAdjacency`(6건).
