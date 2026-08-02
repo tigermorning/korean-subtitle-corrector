@@ -95,6 +95,8 @@
            border:2px solid #c9ced4;border-top-color:#2d3436;border-radius:50%;
            animation:spin 0.8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
+  .result-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0 4px}
+  .result-actions button{padding:10px 20px;font-size:0.95em}
 </style>
 </head>
 <body>
@@ -237,13 +239,22 @@
     <div class="share" id="shareBox"></div>
     <h3>교정된 결과</h3>
     <pre id="correctedSrt"></pre>
+    <div class="result-actions">
+      <button id="downloadBtn">교정 결과 내려받기</button>
+      <span class="opt-note" id="downloadNote" style="margin:0"></span>
+    </div>
     <h3>자동 교정 로그 (<span id="appliedCount">0</span>건)</h3>
     <ul id="appliedList"></ul>
     <h3>확인이 필요한 항목 (<span id="flagCount">0</span>건)</h3>
+    <p class="opt-note" style="margin-bottom:10px">제안을 채택할 항목만 체크한 뒤 아래 버튼을 누르면 결과에 반영됩니다. 반영하지 않은 항목은 원문 그대로 남습니다.</p>
     <table>
-      <thead><tr><th>줄</th><th>내용</th><th>이유</th><th>제안</th></tr></thead>
+      <thead><tr><th style="width:70px">채택</th><th style="width:50px">줄</th><th>내용</th><th>이유</th><th>제안</th></tr></thead>
       <tbody id="flagBody"></tbody>
     </table>
+    <div class="result-actions">
+      <button id="applyBtn">선택한 제안 반영하기</button>
+      <span class="opt-note" id="applyNote" style="margin:0"></span>
+    </div>
   </div>
 
 <script>
@@ -353,22 +364,34 @@ document.querySelectorAll('input[name="docType"]').forEach(radio => {
 });
 updateMarkerVisibility();
 
+// 교정 결과와 원본 파일명을 들고 있는다. 내려받기와 "제안 반영"이 이 상태를 고쳐 쓴다.
+// 서버를 다시 부르지 않는 이유: 반영은 사용자가 고른 문장을 그대로 갈아 끼우는
+// 일이라 교정 판단이 전혀 없다. 다시 교정을 돌리면 시간만 더 걸린다.
+let resultState = { text: '', filename: 'corrected.txt', flags: [] };
+
 function renderResult(data) {
   resultEl.classList.add('show');
+  resultState.text = data.corrected_srt;
+  resultState.flags = data.flags || [];
+  const source = document.getElementById('fileInput').files[0];
+  resultState.filename = suggestFilename(source ? source.name : '');
   document.getElementById('correctedSrt').textContent = data.corrected_srt;
+  document.getElementById('downloadNote').textContent = `파일 이름: ${resultState.filename}`;
+  document.getElementById('applyNote').textContent = '';
 
   const appliedList = document.getElementById('appliedList');
   appliedList.innerHTML = (data.applied_log || []).map(l => `<li>${escapeHtml(l)}</li>`).join('') || '<li style="color:#999">없음</li>';
   document.getElementById('appliedCount').textContent = (data.applied_log || []).length;
 
   const flagBody = document.getElementById('flagBody');
-  flagBody.innerHTML = (data.flags || []).map(f => `
+  flagBody.innerHTML = resultState.flags.map((f, i) => `
     <tr>
+      <td>${f.suggested_fix ? `<input type="checkbox" class="flag-pick" data-flag="${i}">` : '<span style="color:#aaa">—</span>'}</td>
       <td>${f.line_index}</td>
       <td>${escapeHtml(f.original_text)}</td>
       <td>${escapeHtml(f.reason)}</td>
       <td>${escapeHtml(f.suggested_fix || '')}</td>
-    </tr>`).join('') || '<tr><td colspan="4" style="color:#999">없음</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="5" style="color:#999">없음</td></tr>';
   document.getElementById('flagCount').textContent = (data.flags || []).length;
 
   const shareBox = document.getElementById('shareBox');
@@ -413,6 +436,60 @@ function stopProgress(message) {
   progressTimer = null;
   statusEl.textContent = message;
 }
+
+function suggestFilename(originalName) {
+  const dot = originalName.lastIndexOf('.');
+  const stem = dot > 0 ? originalName.slice(0, dot) : (originalName || 'corrected');
+  // .srt는 자막 형식 그대로, 나머지(.txt/.docx)는 순수 텍스트로 돌려받는다
+  // (서버가 그렇게 만들어 준다 — 여기서 확장자만 맞춘다).
+  const ext = originalName.toLowerCase().endsWith('.srt') ? '.srt' : '.txt';
+  return `${stem}_교정본${ext}`;
+}
+
+function downloadResult() {
+  // BOM을 붙인다. 윈도우 메모장·엑셀이 UTF-8 파일을 열 때 BOM이 없으면 한글이
+  // 깨져 보이는 경우가 있어, 받는 쪽에서 손대지 않아도 되게 한다.
+  const blob = new Blob(['﻿' + resultState.text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = resultState.filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+// 선택한 제안을 결과 텍스트에 반영한다. 플래그의 original_text/suggested_fix는
+// 줄 전체이므로(자막 편집 표지 처리에서 그렇게 맞춰 두었다) 그 줄을 통째로
+// 갈아 끼우면 된다. 한 줄에 제안이 여러 개면 앞의 반영 결과 위에 다음 반영을
+// 얹는다 — 그래서 비교 대상은 원문이 아니라 '현재 줄'이다.
+function applySelectedFixes() {
+  const picked = [...document.querySelectorAll('.flag-pick:checked')]
+    .map(box => resultState.flags[Number(box.dataset.flag)]);
+  if (!picked.length) {
+    document.getElementById('applyNote').textContent = '반영할 항목을 먼저 체크하세요.';
+    return;
+  }
+  let applied = 0;
+  let missed = 0;
+  for (const flag of picked) {
+    if (resultState.text.includes(flag.original_text)) {
+      resultState.text = resultState.text.replace(flag.original_text, flag.suggested_fix);
+      applied++;
+    } else {
+      missed++;  // 앞선 반영으로 그 줄이 이미 바뀐 경우
+    }
+  }
+  document.getElementById('correctedSrt').textContent = resultState.text;
+  document.getElementById('applyNote').textContent =
+    `${applied}건 반영했습니다.` +
+    (missed ? ` ${missed}건은 같은 줄이 이미 바뀌어 건너뛰었습니다 — 위 결과를 확인하세요.` : '') +
+    ' 위 "교정 결과 내려받기"로 반영된 파일을 받으세요.';
+}
+
+document.getElementById('downloadBtn').addEventListener('click', downloadResult);
+document.getElementById('applyBtn').addEventListener('click', applySelectedFixes);
 
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
