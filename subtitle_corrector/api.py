@@ -4,19 +4,20 @@ PRD.md §4의 아키텍처 원칙("교정 로직은 CLI와 분리된 순수 라�
 그대로 활용한다. 여기서는 engine/parsers를 호출만 하고, 새 교정 로직은 추가하지 않는다.
 """
 
+import io
 import tempfile
 from dataclasses import asdict
+from urllib.parse import quote
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS
 from .engine import (
-    SUBTITLE_MAX_CPS,
     correct_entries,
     normalize_subtitle_markers,
     normalize_dialect_mode,
@@ -56,8 +57,6 @@ def correct_subtitle(
     position_marker: str = Form(""),
     speaker_bracket: str = Form(""),
     tone_bracket: str = Form(""),
-    max_cps: float = Form(SUBTITLE_MAX_CPS),
-    max_line_chars: int = Form(0),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -149,9 +148,6 @@ def correct_subtitle(
                 screen_text_marker, line_break_marker, position_marker,
                 speaker_bracket, tone_bracket,
             ),
-            # 음수는 0(검사 끔)으로 접는다 — 읽기 속도 상한이 음수인 상태는 없다.
-            max_cps=max(0.0, max_cps),
-            max_line_chars=max(0, max_line_chars),
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
@@ -193,6 +189,31 @@ def correct_subtitle(
             for e in corrected_entries
         ],
     }
+
+
+@app.post("/api/export/docx")
+def export_docx(text: str = Form(""), filename: str = Form("교정본")):
+    """교정 결과를 Word 문서(.docx)로 만들어 돌려준다.
+
+    .docx는 ZIP 안에 XML이 들어 있는 형식이라 브라우저에서 만들기 번거롭다.
+    서버에는 이미 python-docx가 있으므로(문서 읽기에 쓴다) 여기서 만든다.
+
+    문단 구분만 살린 순수 텍스트 문서다 — 서식·스타일을 넣지 않는 이유는 원본
+    서식을 되살리는 것이 이 도구의 범위가 아니기 때문이다(parse_docx와 같은 입장).
+    """
+    from docx import Document
+
+    document = Document()
+    for line in text.splitlines() or [""]:
+        document.add_paragraph(line)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    safe_name = quote((filename or "교정본") + ".docx")
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
+    )
 
 
 @app.get("/api/reports/{report_id}")

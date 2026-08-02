@@ -247,3 +247,43 @@ class TestPdf:
         doc.save(str(path))
         doc.close()
         assert [e for e in parse_file(path) if e.text.strip()] == []
+
+
+class TestDocxExport:
+    """교정 결과를 워드 문서로 내려받는 경로 (사용자 요청 2026-08-02).
+
+    .docx는 ZIP 안에 XML이 들어 있어 브라우저에서 만들기 번거롭다. 서버에 이미
+    python-docx가 있으므로(문서 읽기에 쓴다) 거기서 만들어 내려보낸다.
+    """
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+
+        from subtitle_corrector.api import app
+
+        return TestClient(app)
+
+    def test_returns_docx_with_text(self):
+        import io
+        import zipfile
+
+        response = self._client().post(
+            "/api/export/docx", data={"text": "첫 문단입니다\n둘째 문단입니다", "filename": "테스트본"}
+        )
+        assert response.status_code == 200
+        archive = zipfile.ZipFile(io.BytesIO(response.content))
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+        assert "첫 문단입니다" in document_xml
+        assert "둘째 문단입니다" in document_xml
+
+    def test_korean_filename_is_encoded(self):
+        """한글 파일명은 헤더에 그대로 넣을 수 없어 UTF-8로 인코딩해 보낸다."""
+        response = self._client().post(
+            "/api/export/docx", data={"text": "본문", "filename": "교정본"}
+        )
+        assert "filename*=UTF-8''" in response.headers["content-disposition"]
+
+    def test_empty_text_still_produces_a_file(self):
+        response = self._client().post("/api/export/docx", data={"text": ""})
+        assert response.status_code == 200
+        assert len(response.content) > 0

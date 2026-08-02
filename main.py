@@ -9,7 +9,6 @@ if sys.platform == "win32":
 
 from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
-    SUBTITLE_MAX_CPS,
     apply_report_fixes,
     correct_entries,
     normalize_subtitle_markers,
@@ -78,16 +77,6 @@ def correct(
         "--tone-bracket",
         help="자막 모드 전용. 어조·지문 표기 부호(예: [] 또는 ()). 기본값은 대괄호.",
     ),
-    max_cps: float = typer.Option(
-        SUBTITLE_MAX_CPS,
-        "--max-cps",
-        help=f"자막 읽기 속도 상한(글자 수 ÷ 표시 시간, 기본 {SUBTITLE_MAX_CPS:g}자/초, 아동물은 13 권장, 0이면 검사 안 함). 타임코드가 있는 자막에만 적용됩니다.",
-    ),
-    max_line_chars: int = typer.Option(
-        0,
-        "--max-line-chars",
-        help="자막 한 줄 최대 글자 수(0이면 검사 안 함). 매체마다 기준이 달라 기본값을 두지 않습니다.",
-    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -113,8 +102,6 @@ def correct(
             screen_text_marker, line_break_marker, position_marker,
             speaker_bracket, tone_bracket,
         ),
-        max_cps=max(0.0, max_cps),
-        max_line_chars=max(0, max_line_chars),
     )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반

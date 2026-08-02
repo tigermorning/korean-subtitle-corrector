@@ -883,160 +883,57 @@ def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
     return "\n".join(new_lines), ["문장 끝 마침표 제거 (자막)"]
 
 
+def _marker_unit_pattern(markers: "SubtitleMarkers | None") -> str:
+    """한 덩어리로 취급할 '표시'의 정규식. 자막 위치·화자명·어조 표기를 모은다.
+
+    이 셋은 대사가 아니라 편집·전달용 표시다. 서로 붙여 쓰고 대사와만 한 칸을
+    띄운다(사용자 지정 2026-08-02).
+    """
+    markers = markers or SubtitleMarkers()
+    units = []
+    if markers.position:
+        units.append(re.escape(markers.position))
+    for pair in (markers.speaker, markers.tone):
+        if pair and len(pair) >= 2:
+            open_ch, close_ch = re.escape(pair[0]), re.escape(pair[-1])
+            units.append(f"{open_ch}[^{close_ch}]*{close_ch}")
+    # 중복 제거(화자명과 어조를 같은 부호로 쓰는 경우), 순서 유지
+    return "|".join(dict.fromkeys(units))
+
+
 def correct_subtitle_bracket_spacing(
-    text: str, closers: tuple[str, ...] = ("]",)
+    text: str, markers: "SubtitleMarkers | None" = None
 ) -> tuple[str, list[str]]:
-    """자막 관례상 화자명·어조 표시 뒤에는 항상 한 칸을 띄운다.
+    """자막 표시의 띄어쓰기를 관례에 맞춘다(사용자 지정 2026-08-02).
 
-    닫는 부호 바로 뒤에 대사가 붙어 있거나 공백이 여러 칸이면 정확히 한 칸으로
-    맞춘다(정답이 하나뿐이라 자동 교정). 표시만 있고 뒤에 대사가 없는 줄
-    (효과음 등)은 건드리지 않는다.
+    두 규칙뿐이고 둘 다 정답이 하나라 자동 교정한다:
+      1. **표시끼리는 붙여 쓴다.** 자막 위치·화자명·어조 표기가 연달아 오면
+         사이에 공백이 없어야 한다 — `{\\an8} [민수]`는 `{\\an8}[민수]`로.
+      2. **표시와 말자막 사이는 정확히 한 칸.** 붙어 있거나 여러 칸이면 한 칸으로
+         맞춘다 — `[민수]안녕`은 `[민수] 안녕`으로.
 
-    closers는 설정된 화자명·어조 부호의 닫는 쪽이다. OTT마다 대괄호와 괄호가
-    갈려서 고정하지 않는다(기본값은 지금까지의 동작인 대괄호).
+    표시만 있고 뒤에 대사가 없는 줄(효과음 등)은 건드리지 않는다. 어떤 부호를 쓰는지는
+    작업마다 다르므로 설정에서 받은 것만 표시로 본다.
 
     반환값: (교정된 텍스트, 적용 로그)."""
-    # 표시가 연달아 오는 경우([♪ 음악][대수] 처럼)는 붙여 쓴다. 한 칸을 띄우는
-    # 것은 표시와 **대사** 사이지, 표시끼리가 아니다(사용자 지정 2026-08-02).
-    openers = "".join(
-        re.escape(opener) for opener, close in _MARKER_PAIRS.items() if close in closers
-    )
-    lookahead = rf"(?=[^\s{openers}])" if openers else r"(?=\S)"
-    corrected = text
-    for closer in closers:
-        corrected = re.sub(re.escape(closer) + r"\s*" + lookahead, closer + " ", corrected)
-    if corrected != text:
-        return corrected, ["화자명·어조 표시 뒤 한 칸 띄움 (자막)"]
-    return text, []
+    unit = _marker_unit_pattern(markers)
+    if not unit:
+        return text, []
 
+    joined = re.sub(rf"({unit})[ \t]+(?={unit})", r"\1", text)  # 규칙 1
+    spaced = re.sub(rf"({unit})[ \t]*(?=[^\s])", r"\1 ", joined)  # 규칙 2
+    # 규칙 2는 표시 뒤 모든 비공백에 한 칸을 넣으므로, 규칙 1로 붙여 놓은 표시
+    # 경계까지 다시 벌어진다. 표시가 이어지는 자리만 도로 붙인다.
+    corrected = re.sub(rf"({unit})[ \t]+(?={unit})", r"\1", spaced)
 
-# 읽기 속도(CPS, characters per second) 기본 상한. 업계에서 널리 쓰이는 성인 기준은
-# 17자/초, 아동물은 13자/초이고 20자/초를 넘으면 사실상 읽을 수 없다고 본다.
-# 글자 수 상한(배급사마다 다름)과 달리 이건 사람이 글을 읽는 속도라 기준이 수렴한다.
-# 0 이하를 주면 검사하지 않는다.
-SUBTITLE_MAX_CPS = 17.0
-
-_TIMECODE_RE = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
-
-
-def _timecode_seconds(value: str) -> float | None:
-    """'00:00:01,000' 형태의 타임코드를 초로 바꾼다. 형식이 아니면 None."""
-    match = _TIMECODE_RE.fullmatch((value or "").strip())
-    if not match:
-        return None
-    hours, minutes, seconds, millis = match.groups()
-    return (
-        int(hours) * 3600
-        + int(minutes) * 60
-        + int(seconds)
-        + int(millis.ljust(3, "0")) / 1000
-    )
-
-
-def _displayed_length(text: str, markers: "SubtitleMarkers | None" = None) -> int:
-    """화면에 실제로 보이는 글자 수. 공백은 세고 줄바꿈과 제어 표기는 빼낸다.
-
-    공백을 세는 이유는 화면에서 자리를 차지하고 읽는 시간에도 영향을 주기 때문이다
-    (업계 CPS 계산도 공백을 포함한다). 반대로 줄바꿈 표기(`|`)와 자막 위치
-    표기(`{\\an8}`)는 편집용 기호라 시청자에게 보이지 않으므로 뺀다. 화자명·어조
-    표기는 SDH에서 실제로 화면에 나오므로 뺀 것이 아니라 그대로 센다.
-    """
-    visible = text
-    if markers:
-        if markers.position:
-            visible = visible.replace(markers.position, "")
-        if markers.line_break:
-            visible = visible.replace(markers.line_break, "")
-    return len(visible.replace("\n", ""))
-
-
-def check_line_length(
-    index: int,
-    text: str,
-    max_line_chars: int,
-    markers: "SubtitleMarkers | None" = None,
-) -> FlagItem | None:
-    """자막 한 줄의 글자 수가 사용자가 정한 상한을 넘는지 확인한다(사용자 요청).
-
-    읽기 속도(CPS)와 달리 한 줄 글자 수 상한은 배급사·매체마다 다르므로 기본값을
-    두지 않고 **사용자가 지정할 때만** 검사한다(0이면 검사 안 함).
-
-    세는 기준은 읽기 속도와 같다 — 공백은 세고(화면에서 자리를 차지한다), 줄바꿈
-    표기·자막 위치 표기 같은 편집 기호는 빼고, 화자명·어조 표기는 화면에 나오므로
-    센다. 줄바꿈 표기가 지정돼 있으면 그것도 줄 경계로 본다.
-
-    자동으로 고치지 않는다 — 줄을 어디서 나눌지는 의미 단위(구·절 경계) 판단이고,
-    글자를 줄이는 것은 번역 자체를 고치는 일이라 둘 다 사람 몫이다.
-    """
-    if max_line_chars <= 0:
-        return None
-    body = text
-    if markers and markers.position:
-        body = body.replace(markers.position, "")
-    if markers and markers.line_break:
-        body = body.replace(markers.line_break, chr(10))
-    over = []
-    lines = body.split(chr(10))
-    for number, line in enumerate(lines, start=1):
-        length = len(line.rstrip())
-        if length > max_line_chars:
-            where = f"{number}번째 줄" if len(lines) > 1 else "한 줄"
-            over.append(f"{where} {length}자")
-    if not over:
-        return None
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=(
-            f"한 줄 글자 수 초과: {', '.join(over)} (상한 {max_line_chars}자) — "
-            "줄을 나눌 위치나 표현을 줄이는 방법은 의미 단위 판단이 필요해 "
-            "자동으로 고치지 않습니다."
-        ),
-    )
-
-
-def check_reading_speed(
-    index: int,
-    text: str,
-    start: str,
-    end: str,
-    max_cps: float = SUBTITLE_MAX_CPS,
-    markers: "SubtitleMarkers | None" = None,
-) -> FlagItem | None:
-    """자막 한 장의 읽기 속도(글자 수 ÷ 표시 시간)가 기준을 넘는지 확인한다.
-
-    어문 규범이 아니라 **사람이 읽는 속도**라는 물리적 제약이다. 글자 수 상한과
-    달리 이 값은 배급사가 달라도 크게 벌어지지 않는다(성인 17, 아동 13, 20을 넘으면
-    사실상 못 읽음).
-
-    자동으로 고치지 않는다 — 해결 방법은 표현을 줄이거나 표시 시간을 늘리는 것인데,
-    전자는 번역을 고치는 일이고 후자는 타임코드를 바꾸는 일이라 둘 다 사람 몫이다.
-
-    타임코드가 없거나(일반 텍스트) 형식이 아니면 검사하지 않는다.
-    """
-    if max_cps <= 0:
-        return None
-    start_seconds, end_seconds = _timecode_seconds(start), _timecode_seconds(end)
-    if start_seconds is None or end_seconds is None:
-        return None
-    duration = end_seconds - start_seconds
-    if duration <= 0:
-        return None
-    length = _displayed_length(text, markers)
-    if not length:
-        return None
-    cps = length / duration
-    if cps <= max_cps:
-        return None
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=(
-            f"읽기 속도 초과: {cps:.1f}자/초 (기준 {max_cps:g}자/초) — "
-            f"{duration:.1f}초 동안 {length}자입니다. 표현을 줄이거나 표시 시간을 "
-            "늘려야 하며, 어느 쪽이든 사람이 판단할 일이라 자동으로 고치지 않습니다."
-        ),
-    )
+    if corrected == text:
+        return text, []
+    logs = []
+    if joined != text:
+        logs.append("연달아 오는 자막 표시 사이 공백 제거 (자막)")
+    if corrected != joined:
+        logs.append("자막 표시와 대사 사이 한 칸 띄움 (자막)")
+    return corrected, logs
 
 
 def correct_subtitle_internal_period(text: str) -> tuple[str, list[str]]:
@@ -2669,12 +2566,6 @@ class SubtitleMarkers(NamedTuple):
     def any_set(self) -> bool:
         return bool(self.screen_text or self.line_break or self.position)
 
-    @property
-    def tag_closers(self) -> tuple[str, ...]:
-        """화자명·어조 표기의 닫는 부호(뒤에 한 칸을 띄워야 하는 자리)."""
-        closers = [pair[-1] for pair in (self.speaker, self.tone) if pair]
-        return tuple(dict.fromkeys(closers))  # 중복 제거, 순서 유지
-
 
 def _normalize_bracket_pair(value: str | None) -> str:
     """'[', '[]', '(' 처럼 들어온 값을 '여는+닫는' 두 글자로 맞춘다.
@@ -2773,7 +2664,7 @@ def _correct_line_with_markers(
     """
     markers = markers or SubtitleMarkers()
     if doc_type != "subtitle" or not markers.any_set:
-        return _correct_line(index, text, doc_type, spacing_mode, markers.tag_closers)
+        return _correct_line(index, text, doc_type, spacing_mode, markers)
 
     # 1. 보호 조각(위치 표지 / 화면자막 구간)과 교정 대상 조각으로 나눈다.
     pieces: list[tuple[str, bool]] = []  # (조각, 보호 여부)
@@ -2801,7 +2692,7 @@ def _correct_line_with_markers(
             continue
         target = piece.replace(markers.line_break, "\n") if markers.line_break else piece
         fixed, piece_flags, piece_applied = _correct_line(
-            index, target, doc_type, spacing_mode, markers.tag_closers
+            index, target, doc_type, spacing_mode, markers
         )
         if markers.line_break:
             fixed = fixed.replace("\n", markers.line_break)
@@ -2819,6 +2710,13 @@ def _correct_line_with_markers(
         applied.extend(piece_applied)
 
     corrected = "".join(out_parts)
+
+    # 표시 인접 규칙은 조각을 합친 **뒤에** 한 번 더 본다. 위치 표기는 보호 조각으로
+    # 먼저 떼어지므로, 조각 안에서만 보면 '{n8} [민수]'처럼 조각 경계를 사이에 둔
+    # 공백을 볼 수 없다.
+    if doc_type == "subtitle":
+        corrected, adjacency_log = correct_subtitle_bracket_spacing(corrected, markers)
+        applied.extend(adjacency_log)
 
     # 3. 플래그를 줄 전체 기준으로 되돌린다.
     whole_flags = []
@@ -2842,7 +2740,7 @@ def _correct_line(
     text: str,
     doc_type: str,
     spacing_mode: str,
-    tag_closers: tuple[str, ...] = ("]",),
+    markers: "SubtitleMarkers | None" = None,
 ) -> tuple[str, list[FlagItem], list[str]]:
     """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
 
@@ -2927,9 +2825,7 @@ def _correct_line(
     # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
     # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
     if doc_type == "subtitle":
-        corrected_text, bracket_log = correct_subtitle_bracket_spacing(
-            corrected_text, tag_closers
-        )
+        corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text, markers)
         applied.extend(bracket_log)
         corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
         applied.extend(ellipsis_log)
@@ -2971,8 +2867,6 @@ def correct_entries(
     dialect_region: str | None = None,
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
-    max_cps: float = SUBTITLE_MAX_CPS,
-    max_line_chars: int = 0,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2995,12 +2889,6 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
-
-    max_line_chars는 자막 한 줄 글자 수 상한이다. 매체마다 기준이 달라 기본값을 두지
-    않고(0=검사 안 함) 사용자가 지정할 때만 본다.
-
-    max_cps는 자막 읽기 속도 상한(글자 수 ÷ 표시 시간)이다. 자막 모드에서 타임코드가
-    있는 항목에만 적용하며, 0 이하면 검사하지 않는다.
 
     markers는 자막 편집 표지(화면자막·줄바꿈·위치)다. 지정된 표지는 어문 규범의
     대상이 아니라 기술적 표지이므로 교정에서 제외한다. 자막 모드에서만 쓴다.
@@ -3076,17 +2964,6 @@ def correct_entries(
         )
         flags.extend(line_flags)
         applied_log.extend(f"[{e.index}] {m}" for m in line_applied)
-
-        # 읽기 속도는 타임코드가 있어야 계산할 수 있어 줄 단위 파이프라인 밖에서 본다.
-        if doc_type == "subtitle":
-            speed_flag = check_reading_speed(
-                e.index, corrected_text, e.start, e.end, max_cps, markers
-            )
-            if speed_flag:
-                flags.append(speed_flag)
-            length_flag = check_line_length(e.index, corrected_text, max_line_chars, markers)
-            if length_flag:
-                flags.append(length_flag)
 
         # dataclasses.replace로 만들면 형식별 원문 조각(raw_prefix/raw_suffix,
         # original_text)이 그대로 따라온다 — 필드를 하나 늘릴 때마다 여기를 고치는

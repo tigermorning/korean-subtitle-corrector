@@ -83,11 +83,13 @@ class TestLineBreakMarker:
 class TestPositionMarker:
     def test_control_code_is_protected(self):
         out, _flags, _log = _run("{\\an8}안녕하세요.", QUOTE)
-        assert out == "{\\an8}안녕하세요"
+        # 제어 코드 자체는 손대지 않는다. 다만 뒤에 말자막이 붙어 있으면 한 칸을 띄운다
+        # (2026-08-02 사용자 지정 — 표시와 말자막 사이는 정확히 한 칸).
+        assert out == "{\\an8} 안녕하세요"
 
     def test_text_after_marker_is_still_corrected(self):
         out, _flags, _log = _run("{\\an8}초코렛 좋아", QUOTE)
-        assert out == "{\\an8}초콜릿 좋아"
+        assert out == "{\\an8} 초콜릿 좋아"
 
 
 class TestScope:
@@ -139,7 +141,7 @@ class TestSpeakerToneBrackets:
 
     def test_both_brackets_can_differ(self):
         markers = normalize_subtitle_markers(speaker="[", tone="(")
-        assert markers.tag_closers == ("]", ")")
+        assert (markers.speaker, markers.tone) == ("[]", "()")
 
 
 class TestQuotedCommandComma:
@@ -162,3 +164,39 @@ class TestQuotedCommandComma:
         assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"
         assert _run("싫다면 뭐.")[0] == "싫다면, 뭐"
         assert _run("먹어 준희야.")[0] == "먹어, 준희야"
+
+
+class TestMarkerAdjacency:
+    """표시끼리는 붙여 쓰고, 말자막과는 정확히 한 칸 (사용자 지정 2026-08-02).
+
+    자막 위치·화자명·어조 표기는 대사가 아니라 편집·전달용 표시다. 서로 붙여 쓰고
+    말자막과만 띄운다. 둘 다 정답이 하나라 자동 교정한다.
+    """
+
+    MARKERS = normalize_subtitle_markers(position="{\an8}", speaker="[", tone="(")
+
+    def _out(self, text):
+        return _run(text, self.MARKERS)[0]
+
+    def test_space_between_markers_is_removed(self):
+        assert self._out("{\an8} [민수] 안녕하세요") == "{\an8}[민수] 안녕하세요"
+        assert self._out("[민수] (웃으며) 좋아") == "[민수](웃으며) 좋아"
+
+    def test_three_markers_in_a_row(self):
+        assert self._out("{\an8} (속삭이며) [민수] 이리 와") == "{\an8}(속삭이며)[민수] 이리 와"
+
+    def test_marker_glued_to_dialogue_gets_one_space(self):
+        assert self._out("{\an8}[민수]안녕하세요") == "{\an8}[민수] 안녕하세요"
+        assert self._out("[민수](웃으며)좋아") == "[민수](웃으며) 좋아"
+
+    def test_multiple_spaces_collapse_to_one(self):
+        assert self._out("[민수]   안녕") == "[민수] 안녕"
+
+    def test_marker_only_line_untouched(self):
+        """효과음처럼 표시만 있고 대사가 없는 줄은 건드리지 않는다."""
+        assert self._out("[문 여는 소리]") == "[문 여는 소리]"
+
+    def test_unset_markers_are_not_touched(self):
+        """설정하지 않은 부호는 표시로 보지 않는다."""
+        only_speaker = normalize_subtitle_markers(speaker="[")
+        assert _run("[민수] (웃으며) 좋아", only_speaker)[0] == "[민수] (웃으며) 좋아"
