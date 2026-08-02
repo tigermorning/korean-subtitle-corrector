@@ -936,7 +936,18 @@ def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
             new_lines.append(line)
     if not changed:
         return text, []
-    return "\n".join(new_lines), ["문장 끝 마침표 제거 (자막)"]
+    corrected_text = chr(10).join(new_lines)
+    return corrected_text, [
+        f"문장 끝 마침표 제거 (자막): {_localized_change(text, corrected_text)}"
+    ]
+
+
+def _is_marker_only_line(text: str, markers: "SubtitleMarkers | None") -> bool:
+    """표시(효과음·지문·화자명)만 있고 대사가 없는 줄인지."""
+    unit = _marker_unit_pattern(markers)
+    if not unit:
+        return False
+    return not re.sub(unit, "", text).strip()
 
 
 def _marker_unit_pattern(markers: "SubtitleMarkers | None") -> str:
@@ -986,9 +997,13 @@ def correct_subtitle_bracket_spacing(
         return text, []
     logs = []
     if joined != text:
-        logs.append("연달아 오는 자막 표시 사이 공백 제거 (자막)")
+        logs.append(
+            f"연달아 오는 자막 표시 사이 공백 제거 (자막): {_localized_change(text, joined)}"
+        )
     if corrected != joined:
-        logs.append("자막 표시와 대사 사이 한 칸 띄움 (자막)")
+        logs.append(
+            f"자막 표시와 대사 사이 한 칸 띄움 (자막): {_localized_change(joined, corrected)}"
+        )
     return corrected, logs
 
 
@@ -1014,7 +1029,64 @@ def correct_subtitle_internal_period(text: str) -> tuple[str, list[str]]:
         return text, []
     drop = set(positions)
     fixed = "".join("," if i in drop else ch for i, ch in enumerate(text))
-    return fixed, ["문장 사이 마침표를 쉼표로 (자막)"]
+    return fixed, [f"문장 사이 마침표를 쉼표로 (자막): {_localized_change(text, fixed)}"]
+
+
+# 구두점 표기 방식. 말줄임표와 따옴표를 어떤 글자로 쓸지는 어문 규범이 하나로
+# 정해 주지 않고 **납품처마다 다르다**(사용자 지정 2026-08-02). 기본값은 반각 기호와
+# 온점 세 개 — 자막 편집기·플레이어 호환이 가장 넓기 때문이다.
+#
+#   ellipsis: "dots" -> ...      / "char" -> …
+#   quotes:   "half" -> ' 와 "   / "full" -> ‘ ’ 와 “ ”
+ELLIPSIS_STYLES = ("dots", "char")
+QUOTE_STYLES = ("half", "full")
+
+
+class PunctuationStyle(NamedTuple):
+    ellipsis: str = "dots"
+    quotes: str = "half"
+
+
+def normalize_punctuation_style(ellipsis_style=None, quote_style=None) -> PunctuationStyle:
+    """설정값을 정규화한다. 모르는 값은 기본값(반각·온점 세 개)으로 떨어뜨린다."""
+    ellipsis_value = str(ellipsis_style or "").strip().lower()
+    quote_value = str(quote_style or "").strip().lower()
+    return PunctuationStyle(
+        ellipsis_value if ellipsis_value in ELLIPSIS_STYLES else "dots",
+        quote_value if quote_value in QUOTE_STYLES else "half",
+    )
+
+
+_STRAIGHT_TO_CURLY_OPEN = {'"': "“", "'": "‘"}
+_STRAIGHT_TO_CURLY_CLOSE = {'"': "”", "'": "’"}
+_CURLY_TO_STRAIGHT = {"“": '"', "”": '"', "‘": "'", "’": "'"}
+
+
+def correct_subtitle_quotes(text: str, style: PunctuationStyle | None = None) -> tuple[str, list[str]]:
+    """따옴표를 지정한 표기 방식으로 통일한다.
+
+    half(기본): 둥근따옴표를 곧은따옴표로 바꾼다. 어느 쪽이 여는 것인지 판단할 필요가
+    없어 안전하다.
+    full: 곧은따옴표를 둥근따옴표로 바꾼다. 여는 쪽인지 닫는 쪽인지는 **앞 글자**로
+    정한다 — 줄 시작이거나 앞이 공백·여는 괄호면 여는 따옴표, 그 밖에는 닫는 따옴표.
+    이건 추측이 아니라 표기 관례를 그대로 옮긴 것이다.
+    """
+    style = style or PunctuationStyle()
+    if style.quotes == "half":
+        fixed = "".join(_CURLY_TO_STRAIGHT.get(ch, ch) for ch in text)
+    else:
+        out = []
+        for i, ch in enumerate(text):
+            if ch in _STRAIGHT_TO_CURLY_OPEN:
+                prev = text[i - 1] if i else ""
+                opening = (not prev) or prev.isspace() or prev in "([{“‘"
+                out.append((_STRAIGHT_TO_CURLY_OPEN if opening else _STRAIGHT_TO_CURLY_CLOSE)[ch])
+            else:
+                out.append(ch)
+        fixed = "".join(out)
+    if fixed == text:
+        return text, []
+    return fixed, [f"따옴표 표기 통일 (자막): {_localized_change(text, fixed)}"]
 
 
 # 말줄임표. 한글 맞춤법은 가운뎃점 여섯(……)을 원칙으로 하고 셋(…)·마침표
@@ -1024,7 +1096,9 @@ _ELLIPSIS_CHAR_RE = re.compile(r"…+")
 _ELLIPSIS_DOTS_RE = re.compile(r"\.{4,}")
 
 
-def correct_subtitle_ellipsis(text: str) -> tuple[str, list[str]]:
+def correct_subtitle_ellipsis(
+    text: str, style: "PunctuationStyle | None" = None
+) -> tuple[str, list[str]]:
     """말줄임표를 온점 세 개(...)로 통일한다.
 
     바꾸는 것은 두 가지뿐이다: 말줄임표 문자(…, 연속이면 하나로)와 온점 네 개
@@ -1032,11 +1106,20 @@ def correct_subtitle_ellipsis(text: str) -> tuple[str, list[str]]:
     말줄임표로 단정할 근거가 없어 사람이 볼 영역이다.
 
     반환값: (통일된 텍스트, 적용 로그)."""
-    fixed = _ELLIPSIS_CHAR_RE.sub("...", text)
-    fixed = _ELLIPSIS_DOTS_RE.sub("...", fixed)
+    style = style or PunctuationStyle()
+    if style.ellipsis == "char":
+        # 온점 세 개 이상을 한 글자짜리 말줄임표로 모은다.
+        fixed = re.sub(r"\.{3,}", "…", text)
+        fixed = _ELLIPSIS_CHAR_RE.sub("…", fixed)
+    else:
+        fixed = _ELLIPSIS_CHAR_RE.sub("...", text)
+        fixed = _ELLIPSIS_DOTS_RE.sub("...", fixed)
     if fixed == text:
         return text, []
-    return fixed, ["말줄임표를 온점 세 개로 (자막)"]
+    # 무엇이 어떻게 바뀌었는지 함께 남긴다. '…'(U+2026)는 폰트에 따라 '...'와
+    # 구별되지 않아, 결과만 보면 왜 고쳤는지 알 수 없다 — 2026-08-02 사용자가
+    # "이미 온점 세 개인데 왜 로그가 뜨냐"고 물은 지점이다.
+    return fixed, [f"말줄임표를 온점 세 개로 (자막): {_localized_change(text, fixed)}"]
 
 
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
@@ -2709,6 +2792,7 @@ def _correct_line_with_markers(
     doc_type: str,
     spacing_mode: str,
     markers: SubtitleMarkers | None = None,
+    style: PunctuationStyle | None = None,
 ) -> tuple[str, list[FlagItem], list[str]]:
     """자막 편집 표지를 지킨 채로 교정한다.
 
@@ -2723,7 +2807,7 @@ def _correct_line_with_markers(
     """
     markers = markers or SubtitleMarkers()
     if doc_type != "subtitle" or not markers.any_set:
-        return _correct_line(index, text, doc_type, spacing_mode, markers)
+        return _correct_line(index, text, doc_type, spacing_mode, markers, style)
 
     # 1. 보호 조각(위치 표지 / 화면자막 구간)과 교정 대상 조각으로 나눈다.
     pieces: list[tuple[str, bool]] = []  # (조각, 보호 여부)
@@ -2751,7 +2835,7 @@ def _correct_line_with_markers(
             continue
         target = piece.replace(markers.line_break, "\n") if markers.line_break else piece
         fixed, piece_flags, piece_applied = _correct_line(
-            index, target, doc_type, spacing_mode, markers
+            index, target, doc_type, spacing_mode, markers, style
         )
         if markers.line_break:
             fixed = fixed.replace("\n", markers.line_break)
@@ -2800,6 +2884,7 @@ def _correct_line(
     doc_type: str,
     spacing_mode: str,
     markers: "SubtitleMarkers | None" = None,
+    style: "PunctuationStyle | None" = None,
 ) -> tuple[str, list[FlagItem], list[str]]:
     """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
 
@@ -2882,8 +2967,10 @@ def _correct_line(
     if doc_type == "subtitle":
         corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text, markers)
         applied.extend(bracket_log)
-        corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
+        corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text, style)
         applied.extend(ellipsis_log)
+        corrected_text, quote_log = correct_subtitle_quotes(corrected_text, style)
+        applied.extend(quote_log)
         corrected_text, internal_log = correct_subtitle_internal_period(corrected_text)
         applied.extend(internal_log)
         corrected_text, period_log = correct_subtitle_final_period(corrected_text)
@@ -2922,6 +3009,7 @@ def correct_entries(
     dialect_region: str | None = None,
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
+    style: PunctuationStyle | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2944,6 +3032,9 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
+
+    style은 구두점 표기 방식(말줄임표·따옴표)이다. 어문 규범이 하나로 정해 주지 않고
+    납품처마다 다르므로 설정으로 받는다. 기본값은 반각 기호와 온점 세 개.
 
     markers는 자막 편집 표지(화면자막·줄바꿈·위치)다. 지정된 표지는 어문 규범의
     대상이 아니라 기술적 표지이므로 교정에서 제외한다. 자막 모드에서만 쓴다.
@@ -2969,6 +3060,18 @@ def correct_entries(
         applied_log.append(
             "[띄어쓰기 기준] 제47항 허용(보조 용언 붙여 씀)으로 문서 전체를 통일합니다."
         )
+
+    # 자막에서 화자명이 없는 줄은 **직전 화자가 계속 말하는 것**이다(사용자 지정
+    # 2026-08-02). 사투리 설정을 화자별로 걸 때 이 승계가 없으면 같은 사람의 대사인데
+    # 첫 줄만 적용되고 나머지는 빠진다. 다만 대사 없이 표시만 있는 줄(효과음·지문)은
+    # 승계하지 않는다 — 그건 누구의 말도 아니다.
+    if doc_type == "subtitle":
+        last_speaker = None
+        for e in entries:
+            if e.speaker:
+                last_speaker = e.speaker
+            elif last_speaker and e.text.strip() and not _is_marker_only_line(e.text, markers):
+                e.speaker = last_speaker
 
     auto_detected = detect_recurring_unknown_words(entries)
     if auto_detected:
@@ -3015,7 +3118,7 @@ def correct_entries(
                 applied_log.append(f"[{e.index}] 사투리→표준어 변환: {corrected_text}")
 
         corrected_text, line_flags, line_applied = _correct_line_with_markers(
-            e.index, corrected_text, doc_type, spacing_mode, markers
+            e.index, corrected_text, doc_type, spacing_mode, markers, style
         )
         flags.extend(line_flags)
         applied_log.extend(f"[{e.index}] {m}" for m in line_applied)

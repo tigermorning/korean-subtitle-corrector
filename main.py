@@ -11,6 +11,7 @@ from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
     apply_report_fixes,
     correct_entries,
+    normalize_punctuation_style,
     normalize_subtitle_markers,
     normalize_spacing_mode,
     register_custom_words,
@@ -53,6 +54,16 @@ def correct(
         "protect",
         "--dialect-mode",
         help="문서 전체 사투리 처리 모드: protect(기본, 그대로 보호) / assist(사투리 제안 플래그) / to_standard(표준어로 자동 변환). --dialect-region과 함께 씁니다.",
+    ),
+    ellipsis_style: str = typer.Option(
+        "dots",
+        "--ellipsis",
+        help="자막 모드 전용. 말줄임표 표기: dots=온점 세 개(...), char=한 글자(…). 기본값 dots.",
+    ),
+    quote_style: str = typer.Option(
+        "half",
+        "--quotes",
+        help="자막 모드 전용. 따옴표 표기: half=곧은따옴표(' \"), full=둥근따옴표(‘ ’ “ ”). 기본값 half.",
     ),
     screen_text_marker: str = typer.Option(
         "",
@@ -98,6 +109,7 @@ def correct(
         spacing_mode=spacing_mode,
         dialect_region=region,
         dialect_mode=dialect_mode if region else None,
+        style=normalize_punctuation_style(ellipsis_style, quote_style),
         markers=normalize_subtitle_markers(
             screen_text_marker, line_break_marker, position_marker,
             speaker_bracket, tone_bracket,

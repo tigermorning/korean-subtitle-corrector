@@ -15,6 +15,7 @@ correct_subtitle_* 단위 테스트는 사전 API를 쓰지 않아 네트워크�
 
 from subtitle_corrector.engine import (
     correct_entries,
+    normalize_punctuation_style,
     correct_subtitle_ellipsis,
     correct_subtitle_final_period,
     correct_subtitle_internal_period,
@@ -101,3 +102,83 @@ class TestInPipeline:
     def test_prose_mode_keeps_all_punctuation(self):
         text, _flags, _log = self._run("보여 주세요. 궁금해요…", doc_type="prose")
         assert text == "보여 주세요. 궁금해요…"
+
+
+class TestPunctuationStyle:
+    """말줄임표·따옴표 표기 방식 선택 (사용자 지정 2026-08-02).
+
+    어문 규범이 하나로 정해 주지 않고 납품처마다 다르다. 기본값은 온점 세 개와
+    곧은따옴표 — 자막 편집기·플레이어 호환이 가장 넓다.
+    """
+
+    def _run(self, text, style=None):
+        corrected, _flags, log = correct_entries(
+            [SubtitleEntry(index=1, start="", end="", text=text)], style=style
+        )
+        return corrected[0].text, log
+
+    def test_default_is_dots_and_straight_quotes(self):
+        assert self._run("글쎄…")[0] == "글쎄..."
+        assert self._run("그가 “안녕”이라 했다")[0] == ' 그가 "안녕"이라 했다'.strip()
+
+    def test_char_style_collapses_dots(self):
+        style = normalize_punctuation_style("char", "half")
+        assert self._run("글쎄...", style)[0] == "글쎄…"
+        assert self._run("글쎄......", style)[0] == "글쎄…"
+
+    def test_full_quote_style(self):
+        style = normalize_punctuation_style("dots", "full")
+        assert self._run('그가 "안녕"이라 했다', style)[0] == "그가 “안녕”이라 했다"
+
+    def test_opening_or_closing_decided_by_previous_character(self):
+        """여는 쪽인지 닫는 쪽인지는 앞 글자로 정한다 — 표기 관례 그대로다."""
+        style = normalize_punctuation_style("dots", "full")
+        assert self._run('"시작"과 끝', style)[0] == "“시작”과 끝"
+
+    def test_unknown_value_falls_back_to_default(self):
+        style = normalize_punctuation_style("이상한값", "")
+        assert (style.ellipsis, style.quotes) == ("dots", "half")
+
+    def test_not_applied_in_prose_mode(self):
+        corrected, _flags, _log = correct_entries(
+            [SubtitleEntry(index=1, start="", end="", text="글쎄…")], doc_type="prose"
+        )
+        assert corrected[0].text == "글쎄…"
+
+
+class TestSpeakerInheritance:
+    """화자명이 없는 줄은 직전 화자가 계속 말하는 것으로 본다(사용자 지정 2026-08-02)."""
+
+    def _entries(self):
+        return [
+            SubtitleEntry(index=1, start="", end="", text="[달래] 밥은 묵었는가", speaker="달래"),
+            SubtitleEntry(index=2, start="", end="", text="얼른 오라고 혀라", speaker=None),
+            SubtitleEntry(index=3, start="", end="", text="[문 여는 소리]", speaker=None),
+            SubtitleEntry(index=4, start="", end="", text="뭣이 그리 급하당가", speaker=None),
+        ]
+
+    def test_speaker_carries_over(self):
+        corrected, _f, _l = correct_entries(self._entries())
+        assert [e.speaker for e in corrected] == ["달래", "달래", None, "달래"]
+
+    def test_marker_only_line_has_no_speaker(self):
+        """효과음·지문처럼 대사가 없는 줄은 누구의 말도 아니다."""
+        corrected, _f, _l = correct_entries(self._entries())
+        assert corrected[2].speaker is None
+
+    def test_inheritance_applies_dialect_setting(self):
+        """승계가 없으면 같은 화자의 대사인데 첫 줄만 보호된다."""
+        corrected, _f, _l = correct_entries(
+            self._entries(), dialect_map={"달래": "전라도"}, dialect_modes={"달래": "protect"}
+        )
+        assert [e.text for e in corrected] == [
+            "[달래] 밥은 묵었는가", "얼른 오라고 혀라", "[문 여는 소리]", "뭣이 그리 급하당가",
+        ]
+
+    def test_not_applied_in_prose_mode(self):
+        entries = [
+            SubtitleEntry(index=1, start="", end="", text="[달래] 안녕", speaker="달래"),
+            SubtitleEntry(index=2, start="", end="", text="또 만나", speaker=None),
+        ]
+        corrected, _f, _l = correct_entries(entries, doc_type="prose")
+        assert corrected[1].speaker is None

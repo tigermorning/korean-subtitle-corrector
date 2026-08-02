@@ -151,6 +151,25 @@
         <p class="opt-note">자막을 고르면 자막 편집 관례가 함께 적용됩니다. 일반 글은 원문의 구두점과 표기를 그대로 둡니다.</p>
       </div>
 
+      <div class="opt-group" id="punctuationOptions">
+        <span class="opt-label">구두점 표기<span class="opt-label-sub">자막 모드에만 적용 · 납품처 요구에 맞춰 고르세요</span></span>
+        <div class="dialect-row">
+          <label style="min-width:150px">말줄임표</label>
+          <select id="ellipsisStyle">
+            <option value="dots">온점 세 개 (...)</option>
+            <option value="char">한 글자 (…)</option>
+          </select>
+        </div>
+        <div class="dialect-row">
+          <label style="min-width:150px">따옴표</label>
+          <select id="quoteStyle">
+            <option value="half">곧은따옴표 ( ' " )</option>
+            <option value="full">둥근따옴표 ( ‘ ’ “ ” )</option>
+          </select>
+        </div>
+        <p class="opt-note">기본값은 온점 세 개와 곧은따옴표입니다 — 자막 편집기·플레이어 호환이 가장 넓습니다. 고른 표기로 문서 전체를 통일합니다.</p>
+      </div>
+
       <div class="opt-group" id="markerOptions">
         <span class="opt-label">자막 편집 표지<span class="opt-label-sub">자막 모드에만 적용 · 여기 적은 표지는 교정하지 않습니다</span></span>
         <div class="dialect-row">
@@ -368,7 +387,9 @@ function getDialectModes() {
 // 보이기만 하고 적용되지 않는 설정은 "적었는데 왜 안 되지"를 만든다.
 function updateMarkerVisibility() {
   const checked = document.querySelector('input[name="docType"]:checked');
-  document.getElementById('markerOptions').hidden = !!checked && checked.value !== 'subtitle';
+  const isProse = !!checked && checked.value !== 'subtitle';
+  document.getElementById('markerOptions').hidden = isProse;
+  document.getElementById('punctuationOptions').hidden = isProse;
 }
 
 document.querySelectorAll('input[name="docType"]').forEach(radio => {
@@ -715,6 +736,8 @@ submitBtn.addEventListener('click', async () => {
     // 자막 편집 표지는 자막 모드에서만 의미가 있다. 일반 글에서는 보내지 않는다 —
     // 보내 봐야 서버가 무시하지만, 무엇이 적용되는지 요청만 봐도 분명해야 한다.
     if (!docType || docType.value === 'subtitle') {
+      form.append('ellipsis_style', document.getElementById('ellipsisStyle').value);
+      form.append('quote_style', document.getElementById('quoteStyle').value);
       form.append('screen_text_marker', document.getElementById('screenTextMarker').value);
       form.append('line_break_marker', document.getElementById('lineBreakMarker').value);
       form.append('position_marker', document.getElementById('positionMarker').value);

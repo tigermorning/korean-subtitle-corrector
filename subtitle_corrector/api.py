@@ -19,6 +19,7 @@ from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS
 from .engine import (
     correct_entries,
+    normalize_punctuation_style,
     normalize_subtitle_markers,
     normalize_dialect_mode,
     normalize_spacing_mode,
@@ -57,6 +58,8 @@ def correct_subtitle(
     spacing_mode: str = Form("principle"),
     dialect_region: str = Form(""),
     dialect_mode: str = Form(""),
+    ellipsis_style: str = Form("dots"),
+    quote_style: str = Form("half"),
     screen_text_marker: str = Form(""),
     line_break_marker: str = Form(""),
     position_marker: str = Form(""),
@@ -163,6 +166,8 @@ def correct_subtitle(
             dialect_mode=normalized_dialect_mode,
             # 자막 편집 표지. 업계 공통 규칙이 없어 값을 고정하지 않고 그때그때
             # 받는다. 자막 모드에서만 쓰이며, 지정된 표지는 교정에서 제외된다.
+            # 구두점 표기 방식(말줄임표·따옴표). 납품처마다 달라 설정으로 받는다.
+            style=normalize_punctuation_style(ellipsis_style, quote_style),
             markers=normalize_subtitle_markers(
                 screen_text_marker, line_break_marker, position_marker,
                 speaker_bracket, tone_bracket,
