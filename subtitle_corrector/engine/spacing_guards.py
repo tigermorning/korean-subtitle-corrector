@@ -231,10 +231,16 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
             continue  # 금지 구성 확정 -> 이 공백 삽입은 정답이므로 되돌리지 않는다
         if before.tag.startswith("J") and after.tag == "VX":
             # 한글 맞춤법 제47항 단서: **앞말에 조사가 붙으면** 그 뒤의 보조 용언은
-            # 띄어 쓴다(붙임 허용 대상이 아니다). kiwi.space()는 '보기만 해도'를
-            # '보기만해도'로 붙이자고 제안했는데, '만'이 조사이므로 규정상 불가다
-            # (2026-08-02 실사용 보고). 사전 조회 이전에 규정으로 걸러낸다.
-            to_restore.append(insert_at)
+            # 띄어 쓴다(붙임 허용 대상이 아니다). 이 함수가 다루는 건 kiwi가
+            # **넣자고** 한 공백이므로, 이 자리의 삽입은 규정상 정답이다 — 되돌리지
+            # 않고 그대로 둔다('보고는싶다' -> '보고는 싶다'). 바로 위 '안 되다'
+            # 분기와 같은 처리다.
+            #
+            # 반대 방향(kiwi가 '보기만 해도'를 '보기만해도'로 붙이자고 하는 경우)은
+            # _protect_unfounded_joining()이 막는다. 2026-08-02에 그 규칙을 이 함수에도
+            # 넣으면서 저쪽 함수의 변수 이름(to_restore/insert_at)을 그대로 옮겨 적어
+            # 이 분기가 NameError로 터졌다 — 조사+보조용언을 붙여 쓴 줄('알고는있다')
+            # 하나가 파일 전체 교정을 무너뜨렸다. 2026-08-02 발견·수정.
             continue
         if before.tag == "NNG" and after.lemma == "받다" and (
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS

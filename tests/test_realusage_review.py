@@ -352,6 +352,28 @@ def test_particle_before_auxiliary_not_joined():
     assert not any("보기만해도" in (f.suggested_fix or "") for f in flags)
 
 
+def test_particle_before_auxiliary_split_is_kept():
+    """반대 방향 — 조사+보조용언을 붙여 쓴 줄에 kiwi가 공백을 넣자고 하는 경우.
+
+    제47항 단서상 이 공백은 정답이므로 되돌리지 않는다. 이 분기는 2026-08-02까지
+    다른 함수의 변수 이름을 잘못 옮겨 적어 NameError로 터졌다 — 이런 줄 하나가
+    파일 전체 교정을 무너뜨렸다. 크래시 회귀 고정.
+    """
+    for text, expected in (
+        ("보고는싶다", "보고는 싶다"),
+        ("알고는있다", "알고는 있다"),
+        ("먹고는싶다", None),  # _protect_unresolvable_splits가 '먹고는'을 사전으로 확인하지 못해 보류
+    ):
+        out, flags = _run(text)  # 크래시 회귀 고정 — 여기서 예외가 나면 안 된다
+        # 띄어쓰기는 자동 적용하지 않고 플래그로만 제안한다.
+        assert out == text
+        suggestions = [f.suggested_fix for f in flags if f.suggested_fix]
+        if expected is None:
+            assert text not in suggestions
+        else:
+            assert expected in suggestions, (text, suggestions)
+
+
 def test_component_of_standard_headword_not_unknown():
     """'빌리지'는 단독 표제어가 없지만 '빌리지 뱅가드'·'스마트 빌리지' 등
     표준 표제어의 구성 요소다. 비표준 안내가 붙은 표제어(스노우 체인)는 근거로
