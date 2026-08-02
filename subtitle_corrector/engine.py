@@ -1943,7 +1943,14 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
         if before.tag == "NNP" or after.tag == "NNP":
             to_remove.append((j1, j2))
             continue
-        if before.tag in _TERM_COMPOUND_TAGS and after.tag in _TERM_COMPOUND_TAGS:
+        if before.tag in _TERM_RUN_TAGS and after.tag in _TERM_RUN_TAGS:
+            # _TERM_COMPOUND_TAGS가 아니라 어근(XR)·명사 파생 접미사(XSN)까지
+            # 포함한 _TERM_RUN_TAGS로 본다. 이 둘이 빠져 있으면 '만성골수성백혈병'을
+            # '만성골수성 백혈병'으로, '강력팀'을 '강력 팀'으로 갈라 놓자는 제안이
+            # 보호를 못 받고 그대로 나간다 — 전문 용어는 붙이려면 전부 붙여야 하므로
+            # (제50항) 이건 규정에 어긋나는 부분 붙임을 사람에게 권하는 셈이 된다.
+            # XR·XSN은 어차피 앞말과 항상 붙는 형태소라 이 자리에 공백이 들어갈
+            # 근거 자체가 없다.
             to_remove.append((j1, j2))
             continue
         if before.tag in _NUMBER_SYMBOL_TAGS and after.tag in _NUMBER_SYMBOL_TAGS:
