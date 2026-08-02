@@ -84,6 +84,14 @@
      왼쪽 축을 유지한다 — 오른쪽으로 밀면 아래 입력칸까지 정렬 축이 세 번 바뀐다. */
   .opt-label-sub{display:block;font-weight:400;font-size:0.88em;color:#777;margin-top:3px}
   .opt-note{color:#666;font-size:0.85em;margin:6px 0 0;line-height:1.35}
+  .step-label{display:block;font-weight:600;color:#444;font-size:0.9em;margin-bottom:10px}
+  .run{border:1px solid #e3e6ea;border-radius:10px;background:#f8f9fb;padding:18px;margin-top:14px}
+  /* 교정은 문서 길이에 비례해 오래 걸린다. 멈춘 것과 계산 중인 것을 구분할 수
+     있도록 도는 표시와 경과 시간을 함께 보여준다 — 둘 다 살아 있다는 증거다. */
+  .spinner{display:inline-block;width:13px;height:13px;margin-right:8px;vertical-align:-2px;
+           border:2px solid #c9ced4;border-top-color:#2d3436;border-radius:50%;
+           animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -91,17 +99,19 @@
 
   <p class="intro-lead">업로드한 문서를 자동으로 교정합니다.</p>
 
+  <!-- 실행 버튼이 옵션보다 위에 있으면 읽는 순서와 조작 순서가 어긋나, 옵션을
+       정하기 전에 '교정하기'부터 누르게 된다(사용자 실사용 보고 2026-08-02).
+       파일 -> 옵션 -> 실행 순서로 내려오도록 번호를 붙이고 버튼을 맨 아래 둔다. -->
   <section>
     <div class="drop">
+      <span class="step-label">1단계 · 파일 선택</span>
       <input type="file" id="fileInput" accept=".srt,.txt,.docx">
-      <br>
-      <button id="submitBtn">교정하기</button>
+      <div class="opt-note" id="fileNote">.srt 자막, .docx 문서, .txt 일반 텍스트를 올릴 수 있습니다.</div>
     </div>
-    <div id="status"></div>
   </section>
 
   <details class="panel" id="optionsPanel">
-    <summary>교정 옵션</summary>
+    <summary>2단계 · 교정 옵션 <span class="summary-value">그대로 두어도 됩니다</span></summary>
     <div class="panel-body">
       <div class="opt-group">
         <span class="opt-label">사용 목적</span>
@@ -205,6 +215,12 @@
       </section>
     </div>
   </details>
+
+  <section class="run">
+    <span class="step-label">3단계 · 실행</span>
+    <button id="submitBtn">교정하기</button>
+    <div id="status"></div>
+  </section>
 
   <div id="result">
     <div class="share" id="shareBox"></div>
@@ -354,6 +370,39 @@ function renderResult(data) {
   }
 }
 
+// 교정 중 진행 표시. "몇 초"라고 예고하지 않는다 — 이 도구는 문장마다 국립국어원
+// 사전을 실시간으로 조회하므로 문서 길이에 비례해 오래 걸린다. 대신 도는 표시와
+// 경과 시간을 매초 갱신해, 멈춘 것과 계산 중인 것을 사용자가 구분할 수 있게 한다.
+// (타이머가 멈추면 화면이 굳은 것이고, 계속 올라가면 서버가 아직 도는 중이다.)
+let progressTimer = null;
+let progressStartedAt = 0;
+
+function elapsedText() {
+  const seconds = Math.floor((Date.now() - progressStartedAt) / 1000);
+  if (seconds < 60) return `${seconds}초 경과`;
+  return `${Math.floor(seconds / 60)}분 ${seconds % 60}초 경과`;
+}
+
+function renderProgress() {
+  statusEl.innerHTML =
+    '<span class="spinner"></span>' +
+    `<b>교정 중입니다 · ${escapeHtml(elapsedText())}</b><br>` +
+    '사전을 실시간으로 조회하기 때문에 시간이 다소 걸릴 수 있습니다. 창을 닫지 마세요.';
+}
+
+function startProgress() {
+  progressStartedAt = Date.now();
+  renderProgress();
+  clearInterval(progressTimer);
+  progressTimer = setInterval(renderProgress, 1000);
+}
+
+function stopProgress(message) {
+  clearInterval(progressTimer);
+  progressTimer = null;
+  statusEl.textContent = message;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -363,10 +412,7 @@ submitBtn.addEventListener('click', async () => {
   if (!file) { statusEl.textContent = '파일을 먼저 선택하세요.'; return; }
 
   submitBtn.disabled = true;
-  // "몇 초"라고 적으면 안 된다. 이 도구는 문장마다 국립국어원 사전을 실시간으로
-  // 조회하므로 문서 길이에 비례해 오래 걸리고, 실제로 몇 초에 끝나지 않는다.
-  // 걸리는 시간을 낙관적으로 적으면 사용자는 멈춘 줄 알고 새로고침한다.
-  statusEl.textContent = '교정 중입니다... 사전을 실시간으로 조회하기 때문에 시간이 다소 걸릴 수 있습니다. 창을 닫지 마세요.';
+  startProgress();
 
   try {
     const form = new FormData();
@@ -401,10 +447,10 @@ submitBtn.addEventListener('click', async () => {
     const res = await fetch('/api/correct', { method: 'POST', body: form });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
     const data = await res.json();
-    statusEl.textContent = '완료!';
+    stopProgress(`완료! (${elapsedText()})`);
     renderResult(data);
   } catch (err) {
-    statusEl.textContent = '오류: ' + err.message;
+    stopProgress('오류: ' + err.message);
   } finally {
     submitBtn.disabled = false;
   }
