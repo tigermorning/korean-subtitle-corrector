@@ -100,6 +100,12 @@
         <label style="margin-right:14px"><input type="radio" name="docType" value="subtitle" checked> 자막 (문장 끝 마침표를 오류로 표시)</label>
         <label><input type="radio" name="docType" value="prose"> 일반 글 (구두점 허용)</label>
       </div>
+      <div class="spacing-mode-row" style="margin:10px 0;font-size:0.9em">
+        <span style="font-weight:600;color:#444;margin-right:8px">띄어쓰기 기준:</span>
+        <label style="margin-right:14px"><input type="radio" name="spacingMode" value="principle" checked> 원칙 — 보조 용언을 띄어 씀 (해 보다, 올 듯하다)</label>
+        <label><input type="radio" name="spacingMode" value="allowance"> 허용 — 보조 용언을 붙여 씀 (해보다, 올듯하다)</label>
+        <div style="color:#666;margin-top:4px">한글 맞춤법 제47항은 둘 다 맞는 표기로 인정합니다. 다만 한 작품 안에서는 한쪽으로 통일해야 하므로, 선택한 기준이 문서 전체에 적용됩니다.</div>
+      </div>
       <button id="submitBtn">교정하기</button>
     </div>
     <div id="status"></div>
@@ -252,6 +258,8 @@ submitBtn.addEventListener('click', async () => {
     form.append('names', document.getElementById('namesInput').value);
     const docType = document.querySelector('input[name="docType"]:checked');
     form.append('doc_type', docType ? docType.value : 'subtitle');
+    const spacingMode = document.querySelector('input[name="spacingMode"]:checked');
+    form.append('spacing_mode', spacingMode ? spacingMode.value : 'principle');
     const dialectMap = getDialectMap();
     const dialectModes = getDialectModes();
     if (Object.keys(dialectMap).length > 0) {

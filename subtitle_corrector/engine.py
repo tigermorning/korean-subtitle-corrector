@@ -1073,6 +1073,25 @@ _AUX_NNB_FORMS = {"뻔", "만", "법", "듯", "성", "직", "척", "체", "양"}
 # "전해졌다"를 "전해 졌다"로 잘못 갈라놓을 위험이 있어, lemma로 구분해 제외한다.
 _ALWAYS_ATTACHED_AUX_LEMMAS = {"지다", "하다"}
 
+# 한글 맞춤법 제47항은 보조 용언을 "띄어 씀을 원칙으로 하되, 붙여 씀도 허용"한다.
+# 둘 다 맞는 표기이므로 어느 쪽을 쓸지는 규범이 아니라 작품의 선택이고, 대신
+# 한 작품 안에서는 한쪽으로 통일해야 한다(혼용은 그 자체가 교정 대상이다).
+# 그래서 이 값은 문서 단위로 한 번만 정하고 모든 줄에 같은 값을 적용한다.
+#   principle — 원칙: 붙여 쓴 것을 띄어 쓴다(기본값, 기존 동작)
+#   allowance — 허용: 띄어 쓴 것을 붙여 쓴다
+SPACING_MODES = ("principle", "allowance")
+
+
+def normalize_spacing_mode(mode: str | None) -> str:
+    """띄어쓰기 기준을 SPACING_MODES 중 하나로 정규화한다.
+
+    모르는 값·빈 값은 원칙(principle)으로 떨어뜨린다 — 제47항의 기본이 원칙이고,
+    입력이 잘못됐을 때 규범 기본값이 아닌 쪽으로 문서 전체를 바꿔 버리면
+    사용자가 의도하지 않은 표기가 조용히 통일되기 때문이다.
+    """
+    value = str(mode or "").strip().lower()
+    return value if value in SPACING_MODES else "principle"
+
 
 def _force_span(suggested: str, original_span: str, other_span: str) -> str:
     """suggested 안에서 other_span(kiwi가 밀어붙이려는 형태)을 original_span
@@ -1137,25 +1156,57 @@ def _normalize_aux_verb_spacing(text: str, suggested: str) -> str:
 
 
 def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
-    """한글 맞춤법 제47항: 보조 용언은 "띄어 씀을 원칙으로 하되, 붙여 씀도
-    허용"한다 — 원칙은 띄어쓰기, 붙여쓰기는 허용되는 예외일 뿐이다. 이
-    도구는 그 원칙 쪽을 기본값으로 삼아, 붙여 쓴 형태를 띄어 쓴 형태로
-    자동 통일한다. 사용자가 붙여쓰기를 선호한다는 별도 지시가 없는 한
-    항상 이 기본값(원칙)을 적용한다.
+    """제47항 원칙(띄어쓰기) 기준으로만 교정하는 얇은 래퍼.
 
-    _normalize_aux_verb_spacing()과 대상 패턴은 같지만 역할이 다르다 — 그쪽은
-    이미 붙여 쓴 형태를 "허용되는 정답"으로 보고 kiwi 제안을 원문에 맞춰
-    되돌리는(플래그 방지용) 함수였고, 이 함수는 원칙(띄어쓰기) 형태로
-    실제 텍스트 자체를 자동 교정한다.
-
-    단, 본용언이 3음절 이상의 사전 등재 합성어인 경우(예: 덤벼들어보아라)는
-    항상 띄어 써야 하는 별개의 예외라 이미 붙어 있을 수 없으므로(있다면 그건
-    이 함수의 대상이 아닌 다른 오류) 건드리지 않는다.
+    문서 전체의 기준을 고르는 경로는 _aux_verb_spacing()이다. 이 함수는 기준을
+    고를 필요가 없는 호출부(원칙이 곧 기본값인 경우)를 위해 남겨 둔다.
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
+    corrected, applied, _ = _aux_verb_spacing(text, "principle")
+    return corrected, applied
+
+
+def _surface_span(text: str, start: int, end: int) -> str:
+    """[start, end) 구간을 양쪽 어절 경계까지 넓혀 돌려준다.
+
+    토큰 경계는 형태소 단위라 그대로 보여주면 '덤벼들어 보'처럼 어절이 잘린
+    조각이 나온다. 사람이 읽는 안내문에는 어절 전체('덤벼들어 보아라')가 보여야
+    어디를 말하는지 알 수 있다.
+    """
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    while end < len(text) and not text[end].isspace():
+        end += 1
+    return text[start:end]
+
+
+def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str], list[str]]:
+    """한글 맞춤법 제47항: 보조 용언은 "띄어 씀을 원칙으로 하되, 붙여 씀도
+    허용"한다 — 둘 다 맞는 표기다. mode가 어느 쪽으로 통일할지 정한다.
+
+      principle(기본값) — 붙여 쓴 형태를 띄어 쓴 형태로 바꾼다.
+      allowance         — 띄어 쓴 형태를 붙여 쓴 형태로 바꾼다.
+
+    어느 쪽이든 대상 구간(패턴 1·2)은 같고 간격을 넣느냐 빼느냐만 갈린다.
+    문서 한 편에는 한 mode만 적용되므로 원칙과 허용이 섞이지 않는다.
+
+    _normalize_aux_verb_spacing()과 대상 패턴은 같지만 역할이 다르다 — 그쪽은
+    원문에서 이미 확정된 형태를 "정답"으로 보고 kiwi 제안을 원문에 맞춰
+    되돌리는(플래그 방지용) 함수라 mode와 무관하게 그대로 동작한다. 이 함수는
+    실제 텍스트 자체를 선택된 기준으로 자동 교정한다.
+
+    붙임이 규정상 불가능한 구간(본용언이 3음절 이상 합성어, 의존명사+하다
+    조합이 사전에 없음)은 allowance에서도 띄어 쓴다. 이건 기준 혼용이 아니라
+    제47항 자체의 예외이므로, 사용자가 오해하지 않도록 세 번째 반환값으로
+    사유를 돌려준다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록, 붙임 불가 구간 안내 목록)
+    """
+    joining = normalize_spacing_mode(mode) == "allowance"
     tokens = _kiwi.tokenize(text)
-    edits = set()  # {(gap_start, gap_end)}
+    edits = set()  # {(gap_start, gap_end, replacement)}
+    blocked: list[str] = []
 
     for i in range(1, len(tokens) - 1):
         prev, cur, nxt = tokens[i - 1], tokens[i], tokens[i + 1]
@@ -1171,9 +1222,24 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             and cur.form in _AUX_EC_FORMS
             and nxt.lemma not in _ALWAYS_ATTACHED_AUX_LEMMAS
         ):
+            gap_start, gap_end = cur.start + cur.len, nxt.start
+            gap = text[gap_start:gap_end]
+            span = _surface_span(text, prev.start, nxt.start + nxt.len)
+
             stem_len = (cur.start + cur.len) - prev.start
             if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
-                continue  # 항상 띄움 예외 -> 이미 붙어 있을 수 없음
+                # 항상 띄움 예외. 원칙에서는 이미 붙어 있을 수 없어 그냥 넘기고,
+                # 허용에서는 붙이면 안 되는 구간이므로 사유를 남긴다.
+                if joining and gap.strip() == "" and gap != "":
+                    blocked.append(
+                        f"'{span}': 본용언이 3음절 이상 합성어라 제47항 붙임 허용 대상이 "
+                        "아님 -> 허용 기준에서도 띄어 씀"
+                    )
+                continue
+            if joining:
+                if gap.strip() == "" and gap != "":
+                    edits.add((gap_start, gap_end, ""))
+                continue
             # 본용언-어/아 부분은 실제 표면 텍스트(축약형 그대로, 예: "여쭤")를
             # 쓰고 보조용언은 사전 기본형을 붙여 "여쭤보다" 같은 후보를 만든다.
             # 이게 사전에 이미 붙여 쓴 한 단어로 등재되어 있다면(예: 여쭤보다,
@@ -1184,9 +1250,8 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             candidate = text[prev.start : cur.start + cur.len] + nxt_citation
             if word_exists(candidate):
                 continue
-            gap_start, gap_end = cur.start + cur.len, nxt.start
-            if text[gap_start:gap_end] == "":
-                edits.add((gap_start, gap_end))
+            if gap == "":
+                edits.add((gap_start, gap_end, " "))
 
         # 패턴 2: 관형사형(ETM) + 의존명사(만/듯/척/체/법/양/성/직/뻔 등, NNB) +
         # 하다/싶다(XSA, XSV 또는 VX). 세 가지를 구분해야 한다.
@@ -1218,21 +1283,32 @@ def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
             if word_exists(whole_candidate):
                 continue  # (a) 전체가 통째로 하나의 표제어 -> 그대로 둔다
             lead_start, lead_end = prev.start + prev.len, cur.start
-            if text[lead_start:lead_end] == "":
-                edits.add((lead_start, lead_end))  # (b)
+            lead_gap = text[lead_start:lead_end]
             if not word_exists(cur.form + nxt_citation):
                 # 의존명사+하다/싶다 단독 조합조차 사전에 없는 예외적
                 # 경우 -> 붙여 쓴다고 단정하지 않고 그대로 둔다.
-                edits.discard((lead_start, lead_end))
-            # (c) 사전에 등재된 경우, 의존명사+하다/싶다 사이는 건드리지
-            # 않는다(위에서 (b) 간격만 edits에 추가했고, 트레일링 간격은
-            # 애초에 추가한 적이 없다).
+                if joining and lead_gap.strip() == "" and lead_gap != "":
+                    span = _surface_span(text, lead_word_start, nxt.start + nxt.len)
+                    blocked.append(
+                        f"'{span}': '{cur.form}{nxt_citation}'가 사전에 없어 붙임 근거가 "
+                        "없음 -> 허용 기준에서도 띄어 씀"
+                    )
+                continue
+            if joining:
+                # 허용: 관형사형+의존명사 사이를 붙인다(예: '올 듯하다' -> '올듯하다').
+                if lead_gap.strip() == "" and lead_gap != "":
+                    edits.add((lead_start, lead_end, ""))
+            elif lead_gap == "":
+                edits.add((lead_start, lead_end, " "))  # (b)
+            # (c) 의존명사+하다/싶다 사이는 어느 기준에서도 건드리지 않는다
+            # (사전 등재 형태라 항상 붙임 — 트레일링 간격은 애초에 edits에
+            # 추가한 적이 없다).
 
     corrected = text
-    for gap_start, gap_end in sorted(edits, key=lambda e: e[0], reverse=True):
-        corrected = corrected[:gap_start] + " " + corrected[gap_end:]
+    for gap_start, gap_end, replacement in sorted(edits, key=lambda e: e[0], reverse=True):
+        corrected = corrected[:gap_start] + replacement + corrected[gap_end:]
     applied = [_localized_change(text, corrected)] if corrected != text else []
-    return corrected, applied
+    return corrected, applied, blocked
 
 
 # 국가/지역명 뒤에 붙어 "그 나라의 -" 뜻을 만드는 생산적 접미사(한자어
@@ -2012,6 +2088,7 @@ def correct_entries(
     dialect_map: dict[str, str] | None = None,
     dialect_modes: dict[str, str] | None = None,
     doc_type: str = "subtitle",
+    spacing_mode: str = "principle",
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2030,10 +2107,21 @@ def correct_entries(
       - to_standard: 사투리→표준어 변환 후 표준화 파이프라인을 적용한다.
     사투리 미지정 화자는 기존대로 표준화 파이프라인을 돌리고, 이름이 있으면
     자동 감지 플래그(비율 >= 0.15)를 남긴다.
+
+    spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
+    (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
+    섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
     """
     corrected_entries = []
     flags = []
     applied_log = []
+    spacing_mode = normalize_spacing_mode(spacing_mode)
+    if spacing_mode == "allowance":
+        # 기본값(원칙)이 아닌 쪽을 골랐을 때만 남긴다 — 문서 전체가 어떤 기준으로
+        # 통일됐는지 결과만 보고도 알 수 있어야 하기 때문이다.
+        applied_log.append(
+            "[띄어쓰기 기준] 제47항 허용(보조 용언 붙여 씀)으로 문서 전체를 통일합니다."
+        )
 
     auto_detected = detect_recurring_unknown_words(entries)
     if auto_detected:
@@ -2092,7 +2180,10 @@ def correct_entries(
         corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
         corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
         corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
-        corrected_text, aux_verb_fixes = correct_aux_verb_spacing(corrected_text)
+        corrected_text, aux_verb_fixes, aux_verb_blocked = _aux_verb_spacing(
+            corrected_text, spacing_mode
+        )
+        applied_log.extend(f"[{e.index}] [붙임 불가] {note}" for note in aux_verb_blocked)
         corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
         corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
         corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)

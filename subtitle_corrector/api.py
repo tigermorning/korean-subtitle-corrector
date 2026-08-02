@@ -14,7 +14,12 @@ from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .dictionary import DIALECT_MARKERS
-from .engine import correct_entries, normalize_dialect_mode, register_custom_words
+from .engine import (
+    correct_entries,
+    normalize_dialect_mode,
+    normalize_spacing_mode,
+    register_custom_words,
+)
 from .parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 
 app = FastAPI(title="한국어 자막 교정 API")
@@ -40,6 +45,7 @@ def correct_subtitle(
     dialect_map: str = Form(""),
     dialect_modes: str = Form(""),
     doc_type: str = Form("subtitle"),
+    spacing_mode: str = Form("principle"),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -104,11 +110,17 @@ def correct_subtitle(
         # prose(일반 글, 구두점 허용). 그 외 값은 subtitle로 정규화한다.
         normalized_doc_type = doc_type if doc_type == "prose" else "subtitle"
 
+        # 띄어쓰기 기준(제47항 보조 용언): principle(기본, 띄어 씀) /
+        # allowance(붙여 씀). 한 문서에 하나만 적용해 원칙과 허용이 섞이지
+        # 않게 한다. 그 외 값은 principle로 정규화한다.
+        normalized_spacing_mode = normalize_spacing_mode(spacing_mode)
+
         corrected_entries, flags, applied_log = correct_entries(
             entries,
             dialect_map=parsed_dialect_map,
             dialect_modes=parsed_dialect_modes,
             doc_type=normalized_doc_type,
+            spacing_mode=normalized_spacing_mode,
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른

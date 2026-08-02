@@ -15,15 +15,19 @@
 """
 
 from subtitle_corrector.engine import (
+    SubtitleEntry,
+    _aux_verb_spacing,
     check_spacing,
     check_spelling,
     correct_always_wrong,
     correct_aux_verb_spacing,
+    correct_entries,
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_loanwords,
     correct_nonstandard_terms,
     correct_particle_spacing,
+    normalize_spacing_mode,
 )
 
 
@@ -79,6 +83,79 @@ class TestAuxVerbSpacingPattern2:
     def test_bolmanhada_whole_word_registered_untouched(self):
         """'볼만-하다'도 별도로 등재된 표제어(동사)라 그대로 둔다."""
         assert correct_aux_verb_spacing("볼만하다") == ("볼만하다", [])
+
+
+class TestAuxVerbSpacingAllowanceMode:
+    """제47항 허용 기준(spacing_mode='allowance') — 보조 용언을 붙여 쓴다.
+
+    원칙(띄어 씀)과 허용(붙여 씀)은 둘 다 맞는 표기이지만 한 작품 안에서
+    섞이면 안 되므로, 문서 전체가 선택된 한쪽으로 통일되는지 확인한다.
+    """
+
+    def test_pattern1_joins_spaced_form(self):
+        assert _aux_verb_spacing("해 보자", "allowance")[:2] == (
+            "해보자",
+            ["해 보자 -> 해보자"],
+        )
+
+    def test_pattern2_joins_leading_gap(self):
+        assert _aux_verb_spacing("올 듯하다", "allowance")[:2] == (
+            "올 듯하다".replace(" ", ""),
+            ["올 듯하다 -> 올듯하다"],
+        )
+
+    def test_already_joined_form_untouched(self):
+        assert _aux_verb_spacing("할만하다", "allowance")[:2] == ("할만하다", [])
+
+    def test_principle_mode_is_the_default(self):
+        """mode를 주지 않으면 기존 동작(원칙)이어야 한다 — 기본값이 바뀌면
+        기존 사용자의 결과가 조용히 달라진다."""
+        assert _aux_verb_spacing("할만하다")[:2] == correct_aux_verb_spacing("할만하다")
+
+    def test_compound_main_verb_stays_spaced_with_reason(self):
+        """본용언이 3음절 이상 합성어면 제47항 붙임 허용 대상이 아니다. 허용
+        기준을 골랐어도 띄어 쓰되, 왜 안 붙였는지 사유를 돌려준다."""
+        corrected, applied, blocked = _aux_verb_spacing("그가 덤벼들어 보아라", "allowance")
+        assert corrected == "그가 덤벼들어 보아라"
+        assert applied == []
+        assert len(blocked) == 1
+        assert "덤벼들어 보아라" in blocked[0]
+
+    def test_unregistered_aux_combination_stays_spaced_with_reason(self):
+        """의존명사+하다/싶다 조합이 사전에 없으면(만싶다) 붙임 근거가 없다."""
+        corrected, applied, blocked = _aux_verb_spacing("올 만싶다", "allowance")
+        assert corrected == "올 만싶다"
+        assert applied == []
+        assert len(blocked) == 1
+        assert "만싶다" in blocked[0]
+
+    def test_normalize_spacing_mode_falls_back_to_principle(self):
+        """모르는 값이 문서 전체를 허용으로 뒤집으면 안 된다."""
+        assert normalize_spacing_mode("allowance") == "allowance"
+        assert normalize_spacing_mode("ALLOWANCE") == "allowance"
+        assert normalize_spacing_mode("principle") == "principle"
+        for bad in ("", None, "허용", "joined", "principal"):
+            assert normalize_spacing_mode(bad) == "principle"
+
+    def test_document_is_uniform_across_lines(self):
+        """한 작품 안에서 원칙과 허용이 섞이지 않는지 — 원문이 줄마다 다르게
+        띄어 써 있어도 결과는 한쪽으로 통일되어야 한다."""
+        entries = [
+            SubtitleEntry(index=1, start="", end="", text="한번 해 보자"),
+            SubtitleEntry(index=2, start="", end="", text="한번 해보자"),
+        ]
+        joined, _, _ = correct_entries(entries, spacing_mode="allowance")
+        assert [e.text for e in joined] == ["한번 해보자", "한번 해보자"]
+
+    def test_allowance_choice_is_logged(self):
+        entries = [SubtitleEntry(index=1, start="", end="", text="비가 올 듯하다")]
+        _, _, applied_log = correct_entries(entries, spacing_mode="allowance")
+        assert any("[띄어쓰기 기준]" in line for line in applied_log)
+
+    def test_joined_form_is_not_flagged_for_spacing(self):
+        """허용 기준으로 붙인 형태를 kiwi가 다시 띄우자고 제안해 '확인 필요'
+        플래그가 뜨면, 사용자가 고른 기준이 매번 되물어지는 셈이 된다."""
+        assert check_spacing(0, "비가 올듯하다") is None
 
 
 class TestApplyReplacementsTokenBoundary:

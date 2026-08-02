@@ -197,3 +197,19 @@
 - **미지정 화자**: 기존 동작 유지. 표준화 파이프라인을 돌리고, 이름이 있으면 자동으로 사투리 패턴을 감지해(비율 >= 0.15) 플래그만 남긴다(사투리 지정을 권유). 자동교정은 하지 않는다.
 - **구현**: `dictionary.py`(DIALECT_MARKERS, detect_dialect_ratio, convert_dialect, search_dialect), `engine.py`(normalize_dialect_mode, resolve_dialect_mode, check_dialect, correct_entries에서 모드 우선 게이팅), `api.py`(/api/speakers, /api/dialect-regions, dialect_map·dialect_modes 파라미터, 모드 검증/정규화), `static/index.html`(화자별 지역·모드 드롭다운). 테스트: `tests/test_dialect_modes.py`.
 - **알려진 한계**: 지역어 종합 정보 API(dialect.korean.go.kr)가 현재 JSON이 아닌 응답을 돌려주어 `search_dialect()`는 사실상 빈 결과를 반환한다. assist 제안은 정적 `convert_dialect` 매핑에 의존한다.
+
+## 13. 띄어쓰기 기준 선택 — 원칙 / 허용 (구현 완료, 2026-08-02)
+
+**배경**: 한글 맞춤법 제47항은 보조 용언을 "띄어 씀을 원칙으로 하되, 붙여 씀도 허용"한다. 둘 다 맞는 표기이므로 어느 쪽을 쓸지는 규범이 아니라 **작품의 선택**이다. 다만 한 작품 안에서 두 기준이 섞이면 그 자체가 교정 대상이므로, 사용자가 기준을 고르면 문서 전체가 그 한쪽으로 통일되어야 한다. 기존에는 원칙(띄어 씀)만 지원했다.
+
+- **기준값**(`spacing_mode`, 문서 단위 — 줄마다 다르게 줄 수 없다):
+  - **principle** — 기본값. 붙여 쓴 보조 용언을 띄어 쓴다(`할만하다` -> `할 만하다`). 기존 동작과 동일하다.
+  - **allowance** — 띄어 쓴 보조 용언을 붙여 쓴다(`해 보자` -> `해보자`, `올 듯하다` -> `올듯하다`).
+  - 모르는 값·빈 값은 `principle`로 정규화한다(`normalize_spacing_mode`). 규범 기본값이 아닌 쪽으로 문서 전체가 조용히 바뀌면 안 되기 때문이다.
+- **붙임이 불가능한 구간**은 allowance에서도 띄어 쓴다. 이건 기준 혼용이 아니라 제47항 자체의 예외이므로, 사용자가 오해하지 않도록 자동 교정 로그에 `[붙임 불가]` 사유를 남긴다(사용자 결정, 2026-08-02).
+  - 본용언이 3음절 이상 사전 등재 합성어(`덤벼들어 보아라`) — 제47항 단서상 항상 띄어 쓴다.
+  - 의존명사+하다/싶다 조합이 사전에 없는 경우(`만싶다`) — 붙임 근거가 없어 그대로 둔다.
+- **적용 범위는 제47항 보조 용언뿐이다**(사용자 결정, 2026-08-02). 제46항(단음절 단어 연속)·제50항(전문 용어)도 붙임을 허용하지만, 현재 코드에는 두 항의 붙임/띄움 판정 로직 자체가 없어 경계 탐지부터 새로 만들어야 한다. 확장하려면 사전 근거 확보가 선행이다.
+- **구현**: `engine.py`(`SPACING_MODES`, `normalize_spacing_mode`, `_aux_verb_spacing(text, mode)` — 기존 `correct_aux_verb_spacing`은 원칙 전용 얇은 래퍼로 남김, `correct_entries(spacing_mode=...)`), `api.py`(`/api/correct`의 `spacing_mode` Form), `main.py`(`--spacing principle|allowance`), `static/index.html`(띄어쓰기 기준 라디오). 테스트: `tests/test_engine.py::TestAuxVerbSpacingAllowanceMode`(10건).
+- **검증**(2026-08-02): 전체 스위트 160건 통과. `examples/sample.srt` 회귀 — 두 기준의 결과 차이는 `그 일은 할 만하다`/`그 일은 할만하다` 한 줄뿐이고 나머지 자동교정·플래그 3건은 동일. 허용 기준으로 붙인 형태가 `check_spacing`에서 다시 "확인 필요"로 뜨지 않는 것도 확인(`_normalize_aux_verb_spacing`이 원문 기준으로 kiwi 제안을 되돌리므로 기준과 무관하게 동작한다).
+- **번역본 PRD 미반영**: `PRD.en.md` 등 6개 언어 사본에는 이 절이 없다.

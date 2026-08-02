@@ -7,7 +7,12 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-from subtitle_corrector.engine import apply_report_fixes, correct_entries, register_custom_words
+from subtitle_corrector.engine import (
+    apply_report_fixes,
+    correct_entries,
+    normalize_spacing_mode,
+    register_custom_words,
+)
 from subtitle_corrector.parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
 from subtitle_corrector.report import read_report, write_report
 
@@ -31,6 +36,11 @@ def correct(
     prose: bool = typer.Option(
         False, "--prose", help="일반 글 모드(구두점 허용). 기본은 자막 모드로, 문장 끝 마침표를 오류로 플래그합니다."
     ),
+    spacing: str = typer.Option(
+        "principle",
+        "--spacing",
+        help="보조 용언 띄어쓰기 기준(제47항): principle=원칙(띄어 씀, 기본값), allowance=허용(붙여 씀). 문서 전체에 하나만 적용됩니다.",
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -43,8 +53,13 @@ def correct(
         entries = parse_docx(input_file)
     else:
         entries = parse_plain_text(input_file)
+    spacing_mode = normalize_spacing_mode(spacing)
+    if spacing_mode != spacing.strip().lower():
+        typer.echo(f"알 수 없는 --spacing 값 '{spacing}' -> 원칙(principle)으로 진행합니다.")
     corrected_entries, flags, applied_log = correct_entries(
-        entries, doc_type="prose" if prose else "subtitle"
+        entries,
+        doc_type="prose" if prose else "subtitle",
+        spacing_mode=spacing_mode,
     )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반

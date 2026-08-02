@@ -57,6 +57,12 @@ copy .env.example .env
 .venv\Scripts\python main.py correct examples\sample.srt
 ```
 
+보조 용언 띄어쓰기 기준(한글 맞춤법 제47항)은 원칙(띄어 씀)이 기본값이고, 붙여 쓰는 허용 기준을 고를 수도 있습니다. 둘 다 맞는 표기지만 한 작품 안에서 섞이면 안 되므로, 고른 기준이 문서 전체에 적용됩니다.
+
+```powershell
+.venv\Scripts\python main.py correct examples\sample.srt --spacing allowance
+```
+
 ## 테스트
 
 ```
