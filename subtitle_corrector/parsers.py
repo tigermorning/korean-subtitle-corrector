@@ -111,3 +111,27 @@ def parse_docx(path: Path) -> list[SubtitleEntry]:
         SubtitleEntry(index=i, start="", end="", text=p.text, speaker=None, original_text=p.text)
         for i, p in enumerate(doc.paragraphs)
     ]
+
+
+def parse_pdf(path: Path) -> list[SubtitleEntry]:
+    """PDF에서 텍스트를 뽑아 한 줄씩 SubtitleEntry로 만든다.
+
+    도서 번역 원고 검토처럼 PDF로 받은 글을 교정하려는 경우를 위한 입력 경로다.
+    **텍스트 레이어가 있는 PDF만** 읽을 수 있다 — 스캔본(그림만 있는 PDF)은
+    글자가 이미지라 여기서 아무 텍스트도 나오지 않으며, 그런 경우 OCR이 선행되어야
+    한다. 빈 결과가 나오면 호출부가 그 사실을 사용자에게 알린다.
+
+    PDF는 서식·쪽 배치를 그대로 되돌릴 수 있는 형식이 아니므로(우리 범위 밖),
+    교정 결과는 다른 문서와 마찬가지로 순수 텍스트로 돌려준다.
+    """
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(path))
+    lines: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        lines.extend(text.splitlines())
+    return [
+        SubtitleEntry(index=i, start="", end="", text=line, speaker=None, original_text=line)
+        for i, line in enumerate(lines)
+    ]

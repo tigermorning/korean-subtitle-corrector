@@ -10,6 +10,7 @@ from . import formats
 from .parsers import (
     SubtitleEntry,
     parse_docx,
+    parse_pdf,
     parse_plain_text,
     parse_srt,
     write_plain_text,
@@ -35,10 +36,12 @@ _HANDLERS: dict[str, tuple] = {
     ".xml": (formats.parse_ttml, formats.write_ttml, True),
     ".txt": (parse_plain_text, write_plain_text, False),
     ".docx": (parse_docx, write_plain_text, False),
+    # PDF는 읽기 전용 입력이다. 서식·쪽 배치를 되돌릴 수 없어 결과는 텍스트로 준다.
+    ".pdf": (parse_pdf, write_plain_text, False),
 }
 
 SUBTITLE_EXTENSIONS = tuple(
-    ext for ext in _HANDLERS if ext not in (".txt", ".docx")
+    ext for ext in _HANDLERS if ext not in (".txt", ".docx", ".pdf")
 )
 SUPPORTED_EXTENSIONS = tuple(_HANDLERS)
 

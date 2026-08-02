@@ -185,6 +185,13 @@ def correct_subtitle(
         "corrected_srt": corrected_text,
         "flags": [asdict(f) for f in flags],
         "applied_log": applied_log,
+        # 항목별 타임코드까지 함께 준다. 화면에서 다른 자막 형식(.srt/.vtt/.smi)으로
+        # 바꿔 받으려면 시각 정보가 필요한데, 완성된 파일 텍스트만으로는 형식을
+        # 되짚어 파싱해야 해서 불필요하게 취약해진다.
+        "entries": [
+            {"index": e.index, "start": e.start, "end": e.end, "text": e.text}
+            for e in corrected_entries
+        ],
     }
 
 

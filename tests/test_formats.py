@@ -196,3 +196,54 @@ class TestTimecodeNormalization:
         assert formats._to_hms("01:02.500") == "00:01:02,500"
         assert formats._to_hms("0:00:04.00") == "00:00:04,000"
         assert formats._to_hms("이상한 값") == ""
+
+
+class TestPdf:
+    """PDF는 읽기 전용 입력이다(도서 번역 원고 검토 등).
+
+    텍스트 레이어가 있는 PDF만 읽을 수 있다 — 스캔본은 글자가 이미지라 아무것도
+    나오지 않으며, 그 경우 OCR이 선행되어야 한다.
+    """
+
+    def _make_pdf(self, tmp_path, lines):
+        import fitz  # PyMuPDF: 테스트용 PDF 생성
+
+        doc = fitz.open()
+        page = doc.new_page()
+        # insert_text는 줄바꿈을 렌더링하지 않으므로 줄마다 따로 찍는다.
+        for offset, line in enumerate(lines):
+            page.insert_text((72, 72 + offset * 24), line, fontsize=12)
+        path = tmp_path / "a.pdf"
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    def test_supported(self):
+        assert is_supported(".pdf")
+
+    def test_output_is_plain_text(self):
+        """서식·쪽 배치를 되돌릴 수 없으므로 결과는 텍스트로 준다."""
+        assert output_suffix("원고.pdf") == ".txt"
+
+    def test_extracts_text_lines(self, tmp_path):
+        """텍스트 레이어에서 줄을 뽑아 오는지 확인한다.
+
+        본문을 ASCII로 쓰는 이유는 우리 파서가 아니라 **테스트용 PDF를 만드는 쪽**의
+        한계 때문이다 — PyMuPDF 기본 폰트로 한글을 써 넣으면 글리프가 깨져 저장된다.
+        실제 원고 PDF는 한글 폰트가 임베드돼 있어 그대로 추출된다.
+        """
+        path = self._make_pdf(tmp_path, ["first line here", "second line here"])
+        entries = parse_file(path)
+        joined = chr(10).join(e.text for e in entries)
+        assert "first line here" in joined and "second line here" in joined
+
+    def test_scanned_pdf_yields_nothing(self, tmp_path):
+        """텍스트 레이어가 없으면 빈 결과 — 호출부가 이 사실을 사용자에게 알린다."""
+        import fitz
+
+        doc = fitz.open()
+        doc.new_page()
+        path = tmp_path / "scan.pdf"
+        doc.save(str(path))
+        doc.close()
+        assert [e for e in parse_file(path) if e.text.strip()] == []
