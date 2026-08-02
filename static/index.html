@@ -55,8 +55,27 @@
   .summary-value{font-weight:400;color:#777;font-size:0.9em}
   .summary-value.changed{color:#0b6bcb;font-weight:600}
   .panel-body{padding:0 18px 18px}
-  .panel-body .features,.panel-body .dialect-section{background:none;border:none;border-radius:0;padding:0;margin-top:0}
-  .opt-group{margin:18px 0 0;padding-top:16px;border-top:1px solid #e6e9ed}
+  /* 패널 안에서는 .features·.dialect-section의 카드 모양(배경·테두리·좌우 여백)만
+     걷어낸다. margin-top/padding-top까지 0으로 덮으면 .opt-group이 주는 그룹 간
+     간격이 사라져 앞 문단과 다음 제목이 붙어 버린다(.dialect-section 쪽이
+     선택자 우선순위가 높아 이긴다). */
+  .panel-body .features,.panel-body .dialect-section{background:none;border:none;border-radius:0;padding-left:0;padding-right:0;padding-bottom:0}
+  .panel-body .features{margin-top:0;padding-top:0}
+  .opt-group{margin:26px 0 0;padding-top:22px;border-top:1px solid #e6e9ed}
+  .wordlists textarea{margin-bottom:2px}
+  /* 고유명사 목록과 화자별 사투리는 둘 다 선택 사항이고 세로로 길어서, 나란히
+     두면 옵션 패널 전체 높이가 크게 줄어든다. 좁은 화면에서는 한 단으로 접는다. */
+  .opt-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px 32px;align-items:stretch}
+  /* 두 단의 내용 길이가 다르면 아래쪽이 들쭉날쭉해 보인다. 각 단을 세로 flex로
+     두고 왼쪽은 textarea가, 오른쪽은 화자 추가 줄 위 여백이 남는 높이를 채우게
+     해서 두 단의 아래 끝을 맞춘다. */
+  .opt-columns>*{display:flex;flex-direction:column;min-width:0}
+  .opt-columns .wordlists textarea{flex:1 1 auto;min-height:130px;height:auto}
+  .opt-columns .dialect-section .dialect-add{margin-top:auto;padding-top:10px}
+  @media (max-width:820px){
+    .opt-columns{grid-template-columns:1fr}
+    .opt-columns .wordlists textarea{flex:0 0 auto;height:80px}
+  }
   .opt-group:first-child{margin-top:0;padding-top:0;border-top:none}
   .opt-label{display:block;font-weight:600;color:#444;font-size:0.9em;margin-bottom:8px}
   .opt-note{color:#666;font-size:0.85em;margin:6px 0 0;line-height:1.35}
@@ -81,35 +100,38 @@
     <div class="panel-body">
       <div class="opt-group">
         <span class="opt-label">사용 목적</span>
-        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="docType" value="subtitle" checked> 자막 (문장 끝 마침표를 오류로 표시)</label>
-        <label style="font-size:0.9em"><input type="radio" name="docType" value="prose"> 일반 글 (구두점 허용)</label>
+        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="docType" value="subtitle" checked> 자막</label>
+        <label style="font-size:0.9em"><input type="radio" name="docType" value="prose"> 일반 글</label>
+        <p class="opt-note">자막은 문장 끝 마침표를 오류로 표시하고, 일반 글은 구두점을 그대로 둡니다.</p>
       </div>
 
       <div class="opt-group">
         <span class="opt-label">띄어쓰기 기준</span>
-        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="spacingMode" value="principle" checked> 원칙 — 보조 용언을 띄어 씀 (해 보다, 올 듯하다)</label>
-        <label style="font-size:0.9em"><input type="radio" name="spacingMode" value="allowance"> 허용 — 보조 용언을 붙여 씀 (해보다, 올듯하다)</label>
+        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="spacingMode" value="principle" checked> 원칙 — 보조 용언을 띄어 씀</label>
+        <label style="font-size:0.9em"><input type="radio" name="spacingMode" value="allowance"> 허용 — 보조 용언을 붙여 씀</label>
         <p class="opt-note">한글 맞춤법 제47항은 둘 다 맞는 표기로 인정합니다. 다만 한 작품 안에서는 한쪽으로 통일해야 하므로, 선택한 기준이 문서 전체에 적용됩니다.</p>
       </div>
 
-      <div class="opt-group wordlists">
-        <label class="opt-label" for="namesInput">고유명사·요리·음료 이름 (한 줄에 하나씩 — 선택)</label>
-        <textarea id="namesInput" placeholder="연실&#10;덱스&#10;탄두리치킨"></textarea>
-        <p class="opt-note">여기 적은 단어는 절대 잘못 쪼개지 않습니다. 문서에서 3번 이상 반복되는 단어는 적지 않아도 자동으로 인식됩니다.</p>
-      </div>
+      <div class="opt-group opt-columns">
+        <div class="wordlists">
+          <label class="opt-label" for="namesInput">[선택사항] 고유명사·요리·음료 이름 (한 줄에 하나씩 작성)</label>
+          <textarea id="namesInput" placeholder="연실&#10;덱스&#10;탄두리치킨"></textarea>
+          <p class="opt-note">여기 적은 단어는 절대 잘못 쪼개지 않습니다. 문서에서 3번 이상 반복되는 단어는 적지 않아도 자동으로 인식됩니다.</p>
+        </div>
 
-      <div class="opt-group dialect-section" id="dialectSection">
-        <span class="opt-label">화자별 사투리 설정 (선택)</span>
-        <p class="opt-note" style="margin:0 0 10px">
-          화자에게 사투리를 지정하고, 반영 수준을 선택할 수 있습니다.<br>
-          <b>플래그만</b>: 사투리 감지 → 확인 플래그만 남김 (텍스트 변경 없음)<br>
-          <b>사투리→표준어</b>: 사투리 텍스트를 표준어로 자동 변환<br>
-          <b>표준어→사투리</b>: 표준어 텍스트를 사투리로 자동 변환
-        </p>
-        <div id="dialectRows"></div>
-        <div class="dialect-add">
-          <input type="text" id="newSpeakerName" placeholder="화자 이름">
-          <button id="addSpeakerBtn">+ 화자 추가</button>
+        <div class="dialect-section" id="dialectSection">
+          <span class="opt-label">[선택사항] 화자별 사투리 설정</span>
+          <p class="opt-note" style="margin:0 0 10px">
+            화자에게 사투리를 지정하고, 반영 수준을 선택할 수 있습니다.<br>
+            <b>플래그만</b>: 사투리 감지 → 확인 플래그만 남김 (텍스트 변경 없음)<br>
+            <b>사투리→표준어</b>: 사투리 텍스트를 표준어로 자동 변환<br>
+            <b>표준어→사투리</b>: 표준어 텍스트를 사투리로 자동 변환
+          </p>
+          <div id="dialectRows"></div>
+          <div class="dialect-add">
+            <input type="text" id="newSpeakerName" placeholder="화자 이름">
+            <button id="addSpeakerBtn">+ 화자 추가</button>
+          </div>
         </div>
       </div>
     </div>
