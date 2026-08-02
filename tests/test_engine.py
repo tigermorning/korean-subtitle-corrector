@@ -19,6 +19,7 @@ from subtitle_corrector.engine import (
     _aux_verb_spacing,
     check_spacing,
     check_spelling,
+    check_term_spacing_consistency,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_entries,
@@ -156,6 +157,92 @@ class TestAuxVerbSpacingAllowanceMode:
         """허용 기준으로 붙인 형태를 kiwi가 다시 띄우자고 제안해 '확인 필요'
         플래그가 뜨면, 사용자가 고른 기준이 매번 되물어지는 셈이 된다."""
         assert check_spacing(0, "비가 올듯하다") is None
+
+
+class TestTermSpacingConsistency:
+    """제49항(고유명사)·제50항(전문 용어) 띄어쓰기 혼용 감지.
+
+    두 항 모두 "단어별로 띄어 씀을 원칙으로 하되 붙여 쓸 수 있다"이므로 어느
+    쪽도 오류가 아니다. 오류인 것은 한 작품 안에서 두 표기가 섞이는 것이다.
+    """
+
+    def _entries(self, *texts):
+        return [
+            SubtitleEntry(index=i + 1, start="", end="", text=t)
+            for i, t in enumerate(texts)
+        ]
+
+    def _reasons(self, flags):
+        return [f for f in flags if "혼용" in f.reason]
+
+    def test_proper_noun_mixed_forms_flagged(self):
+        flags = check_term_spacing_consistency(
+            self._entries("마포 경찰서 강력 팀이 도착했다", "마포경찰서 강력팀이 나섰다")
+        )
+        assert len(self._reasons(flags)) == 1
+
+    def test_technical_term_mixed_forms_flagged(self):
+        flags = check_term_spacing_consistency(
+            self._entries("만성 골수성 백혈병 진단을 받았다", "만성골수성백혈병 치료는 길다")
+        )
+        found = self._reasons(flags)
+        assert len(found) == 1
+        assert "만성 골수성 백혈병" in found[0].reason
+        assert "만성골수성백혈병" in found[0].reason
+
+    def test_uniform_document_not_flagged(self):
+        """한쪽으로 통일돼 있으면 붙여 쓴 쪽이든 띄어 쓴 쪽이든 건드리지 않는다."""
+        joined = check_term_spacing_consistency(
+            self._entries("만성골수성백혈병 진단", "만성골수성백혈병 치료")
+        )
+        spaced = check_term_spacing_consistency(
+            self._entries("만성 골수성 백혈병 진단", "만성 골수성 백혈병 치료")
+        )
+        assert self._reasons(joined) == []
+        assert self._reasons(spaced) == []
+
+    def test_suggests_the_majority_form(self):
+        flags = check_term_spacing_consistency(
+            self._entries(
+                "만성골수성백혈병 진단",
+                "만성골수성백혈병 치료",
+                "만성 골수성 백혈병 재발",
+            )
+        )
+        found = self._reasons(flags)
+        assert len(found) == 1
+        assert found[0].line_index == 3
+        assert found[0].suggested_fix == "만성골수성백혈병 재발"
+
+    def test_street_name_attached_form_preferred_on_tie(self):
+        """거리 이름의 '대로/로/가'는 이름에 붙여 씀이 원칙이므로, 횟수가 같으면
+        띄어 쓴 '세종 대로'가 아니라 '세종대로'를 통일 후보로 제안한다."""
+        flags = check_term_spacing_consistency(
+            self._entries("세종대로 사거리에서 만나자", "세종 대로 사거리는 넓다")
+        )
+        found = self._reasons(flags)
+        assert len(found) == 1
+        assert found[0].line_index == 2
+        assert found[0].suggested_fix == "세종대로 사거리는 넓다"
+
+    def test_dependent_noun_not_treated_as_term(self):
+        """의존명사 '대로'('말한 대로')는 제42항 대상이라 용어 후보가 아니다."""
+        flags = check_term_spacing_consistency(
+            self._entries("말한 대로 하면 된다", "말한대로 하면 된다")
+        )
+        assert self._reasons(flags) == []
+
+    def test_protected_dialect_lines_excluded(self):
+        """사투리 protect 화자 대사에는 어떤 플래그도 남기지 않는다."""
+        entries = self._entries("마포 경찰서 강력 팀이 도착했다", "마포경찰서 강력팀이 나섰다")
+        flags = check_term_spacing_consistency(entries, skip_indices={2})
+        assert self._reasons(flags) == []
+
+    def test_wired_into_correct_entries(self):
+        _, flags, _ = correct_entries(
+            self._entries("만성 골수성 백혈병 진단", "만성골수성백혈병 치료")
+        )
+        assert len(self._reasons(flags)) == 1
 
 
 class TestApplyReplacementsTokenBoundary:
