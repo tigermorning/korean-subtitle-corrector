@@ -85,6 +85,9 @@
   .opt-label-sub{display:block;font-weight:400;font-size:0.88em;color:#777;margin-top:3px}
   .opt-note{color:#666;font-size:0.85em;margin:6px 0 0;line-height:1.35}
   .step-label{display:block;font-weight:600;color:#444;font-size:0.9em;margin-bottom:10px}
+  /* 업로드 상자는 가운데 정렬이 관례지만, 단계 제목까지 가운데로 가면 2·3단계
+     제목과 축이 어긋나 보인다. 제목만 왼쪽으로 맞춘다. */
+  .drop .step-label{text-align:left}
   .run{border:1px solid #e3e6ea;border-radius:10px;background:#f8f9fb;padding:18px;margin-top:14px}
   /* 교정은 문서 길이에 비례해 오래 걸린다. 멈춘 것과 계산 중인 것을 구분할 수
      있도록 도는 표시와 경과 시간을 함께 보여준다 — 둘 다 살아 있다는 증거다. */
