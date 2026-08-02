@@ -37,5 +37,9 @@ def test_sample_srt_full_pipeline():
     assert any("그 일은 할만하다 -> 그 일은 할 만하다" in a for a in applied)
     assert any("벙어리장갑 -> 손모아장갑" in a for a in applied)
 
+    # 9번 줄('그는 손모아장갑을 꼈다')은 2026-08-02부터 플래그가 나지 않는다.
+    # kiwi가 '손 모아 장갑을'로 쪼개자고 제안했는데, 그건 우리가 방금 자동 교정으로
+    # 만든 표준어를 도로 갈라놓는 제안이었다. 어절 끝 조사를 떼고 사전을 확인하도록
+    # 고치면서(word_exists('손모아장갑') = True) 근거 없는 제안이 사라졌다.
     flag_line_indices = {f.line_index for f in flags}
-    assert flag_line_indices == {4, 9, 10}
+    assert flag_line_indices == {4, 10}

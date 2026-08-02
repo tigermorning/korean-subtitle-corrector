@@ -804,9 +804,15 @@ def correct_subtitle_bracket_spacing(
     갈려서 고정하지 않는다(기본값은 지금까지의 동작인 대괄호).
 
     반환값: (교정된 텍스트, 적용 로그)."""
+    # 표시가 연달아 오는 경우([♪ 음악][대수] 처럼)는 붙여 쓴다. 한 칸을 띄우는
+    # 것은 표시와 **대사** 사이지, 표시끼리가 아니다(사용자 지정 2026-08-02).
+    openers = "".join(
+        re.escape(opener) for opener, close in _MARKER_PAIRS.items() if close in closers
+    )
+    lookahead = rf"(?=[^\s{openers}])" if openers else r"(?=\S)"
     corrected = text
     for closer in closers:
-        corrected = re.sub(re.escape(closer) + r"\s*(?=\S)", closer + " ", corrected)
+        corrected = re.sub(re.escape(closer) + r"\s*" + lookahead, closer + " ", corrected)
     if corrected != text:
         return corrected, ["화자명·어조 표시 뒤 한 칸 띄움 (자막)"]
     return text, []
@@ -1493,6 +1499,31 @@ def _covered_by_larger_dictionary_unit(text: str, tokens: list, i: int) -> bool:
     return False
 
 
+def _is_verb_stem_mistagged_as_noun(tokens, i: int) -> bool:
+    """tokens[i]가 명사로 태깅됐지만 실은 용언 어간인지 사전으로 확인한다.
+
+    kiwi는 잘 쓰이지 않는 용언 어간을 명사(NNG)로 태깅하는 일이 있다. 2026-08-02
+    실사용에서 '이제 여기서 덖는 겁니까'의 '덖'이 NNG로 잡혀 '덖'을 단독으로
+    조회했고, 사전에 없으니 미등록어로 플래그됐다. 그런데 바로 뒤에 관형사형 어미
+    '는'이 붙어 있고 `word_exists('덖다')`는 참이다 — 즉 **확인할 방법이 있는데
+    확인하지 않아서** 난 오탐이다.
+
+    판정은 결정론적이다: 명사 바로 뒤에 어미가 붙어 있으면(명사에는 어미가 붙지
+    않는다) 그 명사를 어간으로 보고 '어간+다'를 사전에 조회한다. 등재돼 있으면
+    미등록어가 아니다. 사전이 kiwi의 통계적 태깅보다 권위 있는 근거라는, 이
+    프로젝트의 기존 원칙과 같다.
+    """
+    if i + 1 >= len(tokens):
+        return False
+    nxt = tokens[i + 1]
+    if not nxt.tag.startswith("E"):
+        return False
+    # 어간과 어미가 붙어 있어야 한다(사이에 다른 형태소가 끼면 별개 어절이다).
+    if nxt.start != tokens[i].start + tokens[i].len:
+        return False
+    return bool(word_exists(tokens[i].form + "다"))
+
+
 def _unknown_content_words(text: str) -> list[str]:
     """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
     조각내는 경우의 오탐은 _covered_by_larger_dictionary_unit()(원리 1 공유 가드)로
@@ -1507,6 +1538,8 @@ def _unknown_content_words(text: str) -> list[str]:
             continue
         lemma = t.lemma
         if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
+            continue
+        if _is_verb_stem_mistagged_as_noun(tokens, i):
             continue
         if _covered_by_larger_dictionary_unit(text, tokens, i):
             continue
@@ -2098,10 +2131,20 @@ def _protect_headword_run_splits(text: str, suggested: str) -> str:
             to_remove.append((j1, j2))
             continue
         run_tokens = _kiwi.tokenize(run)
+        if not run_tokens:
+            continue
         # 용언이면 마지막 어미를 떼고 기본형(어간+다)으로 사전을 확인한다.
-        if run_tokens and run_tokens[-1].tag.startswith("E"):
+        if run_tokens[-1].tag.startswith("E"):
             stem = run[: run_tokens[-1].start]
             if len(stem) >= 2 and word_exists(stem + "다"):
+                to_remove.append((j1, j2))
+                continue
+        # 체언이면 뒤에 붙은 조사를 떼고 다시 확인한다. 런은 어절 단위라 조사가
+        # 붙어 있으면("짬짜면을") 표제어 조회가 실패한다 — 2026-08-02 실사용에서
+        # `word_exists('짬짜면')`이 참인데도 '짬 짜면을'로 쪼개자는 제안이 나갔다.
+        if run_tokens[-1].tag.startswith("J"):
+            body = run[: run_tokens[-1].start]
+            if len(body) >= 2 and word_exists(body):
                 to_remove.append((j1, j2))
     for j1, j2 in sorted(to_remove, key=lambda r: r[0], reverse=True):
         suggested = suggested[:j1] + suggested[j2:]

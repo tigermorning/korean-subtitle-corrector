@@ -255,3 +255,33 @@ def test_e_subtitle_removes_final_period_every_line():
     # 행 중간 마침표는 쉼표로, 행 끝은 제거 — 2026-08-02부터 둘 다 자동이다.
     c2, _f2, _l2 = _run_mode_full("네. 그래.\n알겠어.", "subtitle")
     assert c2[0].text == "네, 그래\n알겠어"
+
+
+# --- 2026-08-02 실사용 감수: 사전 표제어 오탐 3건 + 브래킷 연속 ---
+
+def test_verb_stem_mistagged_as_noun_not_flagged_unknown():
+    """'덖는'의 '덖'을 kiwi가 명사로 태깅해 미등록어로 플래그하던 오탐.
+
+    명사 뒤에는 어미가 붙지 않는다 — 어미가 붙어 있으면 어간으로 보고
+    '어간+다'(덖다, 사전 등재)를 확인해야 한다.
+    """
+    _out, flags = _run("[세윤] 스님, 이제 여기서 덖는 겁니까, 이렇게?")
+    assert not any("사전에 없는 단어" in f.reason for f in flags)
+
+
+def test_headword_with_particle_not_split():
+    """'짬짜면을'처럼 조사가 붙으면 표제어 조회가 실패해 '짬 짜면을'로 쪼개자고
+    제안하던 오탐. 어절 끝 조사를 떼고 다시 확인한다."""
+    out, flags = _run("짬짜면을 시켰다")
+    assert out == "짬짜면을 시켰다"
+    assert not any("짬 짜면" in (f.suggested_fix or "") for f in flags)
+
+
+def test_adjacent_brackets_keep_no_space():
+    """'[♪ 음악][대수] 대사'처럼 표시가 연달아 오면 사이를 띄우지 않는다.
+    한 칸을 띄우는 것은 표시와 대사 사이지 표시끼리가 아니다."""
+    from subtitle_corrector.parsers import SubtitleEntry as _E
+    corrected, _f, _l = correct_entries(
+        [_E(index=1, start="0", end="1", text="[♪ 박진감 넘치는 음악][대수] 가자")]
+    )
+    assert corrected[0].text == "[♪ 박진감 넘치는 음악][대수] 가자"
