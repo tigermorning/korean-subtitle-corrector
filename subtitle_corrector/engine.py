@@ -47,7 +47,9 @@ from .dictionary import (
     former_term_field,
     compound_status,
     convert_dialect,
+    DIALECT_MARKERS,
     definition_markers,
+    is_contemporary_general_word,
     detect_dialect_ratio,
     detect_speaker_dialect,
     former_term_lookup,
@@ -788,8 +790,17 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
             return False  # 사이에 공백/다른 토큰이 있으면 좌측 결합 후보 아님
         return word_exists(prev.form + lead.form)
 
+    # 자막 표시(효과음·지문·화자명) 안쪽은 일반 문장 규칙의 대상이 아니다.
+    # 2026-08-02 실사용: SDH 효과음 '[탁 - 차 문]'의 '차 문'이 '차문'으로 병합됐다.
+    # '차문'은 사전 표제어이긴 하나 뜻이 借文(대작)·借問(물음)·조선 상소문뿐이라
+    # 자동차 문과 무관하다. 표시 안은 이미 맞춤법·띄어쓰기 제안에서 빼고 있었는데
+    # 합성어 병합만 빠져 있었다.
+    brackets = _bracket_spans(text)
+
     fixes = []  # (start, end, replacement, description)
     for start, boundary, end in _compound_candidate_spans(text):
+        if _inside_any_span(start, brackets) or _inside_any_span(boundary, brackets):
+            continue
         if start in adnominal_starts:
             continue
         if left_grouping_ambiguous(start):
@@ -2007,7 +2018,10 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
         elif before.tag.startswith("V"):
             before_part = before.lemma
         after_part = after.lemma if after.tag.startswith("V") else after.form
-        if not word_exists(before_part + after_part):
+        joined_form = before_part + after_part
+        if not word_exists(joined_form) or not is_contemporary_general_word(joined_form):
+            # 사전에 있어도 그 표제어가 역사·방언 같은 특수 분야에만 있으면 현대
+            # 문장을 붙여 쓸 근거가 못 된다('오고하다' = 五考하다, 역사).
             to_restore.append(insert_at)
 
     for insert_at in sorted(to_restore, reverse=True):
@@ -2847,10 +2861,6 @@ def _correct_line(
             )
         )
 
-    # 사투리는 작업자가 직접 지정한다 — 미지정 화자에 대한 사투리 자동 감지
-    # '추천' 플래그는 띄우지 않는다('늘어지며'·'피식' 같은 지문이 화자로
-    # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
-    # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
 
     # 자막 모드 구두점 규칙(사용자 지정 2026-08-02). 일반 글 모드는 구두점을
     # 그대로 두므로 하나도 적용하지 않는다. 순서가 중요하다 — 말줄임표를 먼저
@@ -3007,6 +3017,11 @@ def correct_entries(
     # 어떻게 썼는지 비교해야 한다). 그래서 줄 단위 파이프라인이 모두 끝나고
     # 교정이 확정된 뒤에 문서 전체를 한 번 훑는다.
     flags.extend(check_term_spacing_consistency(corrected_entries, protected_indices))
+
+    # 사투리 자동 감지는 넣지 않는다(2026-08-02 재확인). 화자 단위로 모아 봐도
+    # 현재 표지 사전으로는 표준어 화자와 갈리지 않는다 — 실측에서 전라도 화자의
+    # 평균 사투리 비율 0.080 vs 표준어 화자 0.073으로, 어떤 문턱을 잡아도 오탐이
+    # 생긴다. 근거가 이 정도면 알리지 않는 편이 낫다.
 
     return corrected_entries, flags, applied_log
 

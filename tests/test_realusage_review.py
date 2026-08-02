@@ -374,3 +374,27 @@ def test_determiner_not_treated_as_interjection():
     assert _run("그 빌리지에 살아")[0] == "그 빌리지에 살아"
     assert _run("이 사람 누구야")[0] == "이 사람 누구야"
     assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"
+
+
+def test_marker_content_not_merged():
+    """SDH 효과음 '[탁 - 차 문]'의 '차 문'이 '차문'으로 병합되던 오탐.
+
+    '차문'은 표제어이긴 하나 뜻이 借文(대작)·借問(물음)·조선 상소문뿐이라 자동차
+    문과 무관하다. 자막 표시 안은 일반 문장 규칙의 대상이 아니므로 병합하지 않는다.
+    """
+    assert _run("[탁 - 차 문]")[0] == "[탁 - 차 문]"
+    # 표시 밖에서는 정상 병합이 유지된다
+    assert _run("노천 카페에서 만나자")[0] == "노천카페에서 만나자"
+
+
+def test_historical_headword_is_not_join_evidence():
+    """'미림이도 오고 했는데'를 '오고했는데'로 붙이자던 제안.
+
+    근거였던 '오고하다'는 五考하다(역사: 벼슬아치 고과)와 제주 방언뿐이다. 사전에
+    있다는 사실만으로는 현대 문장을 붙여 쓸 근거가 되지 않는다.
+    """
+    out, flags = _run("미림이도 오고 했는데 얼른 오라고 혀라")
+    assert out == "미림이도 오고 했는데 얼른 오라고 혀라"
+    assert not any("오고했는데" in (f.suggested_fix or "") for f in flags)
+    # 정당한 붙임은 그대로 유지된다
+    assert _run("선물 받았어")[0] == "선물받았어"

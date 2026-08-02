@@ -191,6 +191,54 @@ def former_term_field(word: str) -> str | None:
     return None
 
 
+# 현대 일반 문장의 근거로 삼을 수 없는 표제어 분야. 사전에 있다는 사실만으로 붙여
+# 쓰면 안 되는 말들이다 — 2026-08-02 실사용에서 '미림이도 오고 했는데'가
+# '오고했는데'로 붙자는 제안을 받았는데, 근거였던 '오고하다'는 五考하다(역사: 벼슬아치
+# 고과)와 제주 방언뿐이었다. 지금 쓰는 말이 아니다.
+_NON_CONTEMPORARY_FIELDS = frozenset({"역사", "방언", "옛말", "북한어", "은어"})
+
+# 우리말샘은 지역어를 분야(cat) 없이 뜻풀이 안에 표시하는 경우가 있다
+# ("제주 지역에서는 '오고다'로도 적는다"). 분야만 보면 이런 뜻이 일반어로 잡힌다.
+_NON_CONTEMPORARY_PHRASES = ("지역에서는", "지역어", "옛말", "북한어", "은어로")
+
+
+@lru_cache(maxsize=4096)
+def is_contemporary_general_word(word: str) -> bool:
+    """표제어에 **현대 일반어로 쓰이는 뜻**이 하나라도 있는지.
+
+    분야 표시가 없는 뜻(일반어)이 하나라도 있으면 참이다. 모든 뜻이 역사·방언·옛말·
+    은어 같은 특수 분야에만 달려 있으면 거짓 — 사전에 있다는 사실만으로 현대 문장의
+    표기 근거로 삼을 수 없다.
+
+    분야(cat)는 우리말샘만 제공하므로 그쪽을 본다. 조회 실패는 참으로 흡수한다
+    (근거가 없으면 기존 동작을 바꾸지 않는다).
+    """
+    try:
+        items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return True
+    if isinstance(items, dict):
+        items = [items]
+    fields = []
+    for item in items:
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword != word:
+            continue
+        senses = item.get("sense", [])
+        if isinstance(senses, dict):
+            senses = [senses]
+        for sense in senses:
+            field = (sense.get("cat") or "").strip()
+            definition = sense.get("definition") or ""
+            marked = field in _NON_CONTEMPORARY_FIELDS or any(
+                phrase in definition for phrase in _NON_CONTEMPORARY_PHRASES
+            )
+            fields.append(marked)
+    if not fields:
+        return True  # 우리말샘에 없으면 판단 근거가 없다 -> 기존 동작 유지
+    return not all(fields)
+
+
 @lru_cache(maxsize=4096)
 def appears_in_standard_headword(word: str) -> bool:
     """word가 우리말샘 표제어의 **구성 요소**로 등장하는지 확인한다.
