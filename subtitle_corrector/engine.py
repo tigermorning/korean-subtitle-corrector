@@ -468,6 +468,18 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
                 if not already_delimited_before(j):
                     insert_positions.add(j)
 
+    # **쉼표는 어절 경계에만 넣는다.** 이 가드가 없으면 kiwi가 한 어절을 쪼갠
+    # 분석을 그대로 믿고 낱말 한가운데를 갈라 버린다 — 2026-08-02 실사용에서
+    # '연실아'가 '연,실아'로, '정말 미안햐'가 '정말 미안,햐'로 바뀌었다. 원본을
+    # 왜곡하는 유형이라 개별 규칙마다 막지 않고 삽입 지점 전체에 한 번에 건다.
+    # (삽입 자리 앞이나 뒤 중 하나는 공백이거나 텍스트 끝이어야 한다.)
+    def at_word_boundary(pos: int) -> bool:
+        if pos <= 0 or pos >= len(text):
+            return True
+        return text[pos - 1].isspace() or text[pos].isspace()
+
+    insert_positions = {pos for pos in insert_positions if at_word_boundary(pos)}
+
     # 사전에 등재된 한 단어 안에는 쉼표를 넣지 않는다. kiwi는 '에라이'(감탄사,
     # 표제어)를 '에라'(IC)+'이'로, '아싸'를 '아'(IC)+'싸'로 쪼개는데, 그 분석을
     # 믿고 쉼표를 넣으면 '에라,이!'라는 없는 말이 된다(2026-08-02 실사용에서 발견).
