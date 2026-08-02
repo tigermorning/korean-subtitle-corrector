@@ -56,6 +56,7 @@ def correct_subtitle(
     speaker_bracket: str = Form(""),
     tone_bracket: str = Form(""),
     max_cps: float = Form(SUBTITLE_MAX_CPS),
+    max_line_chars: int = Form(0),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -151,6 +152,7 @@ def correct_subtitle(
             ),
             # 음수는 0(검사 끔)으로 접는다 — 읽기 속도 상한이 음수인 상태는 없다.
             max_cps=max(0.0, max_cps),
+            max_line_chars=max(0, max_line_chars),
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른

@@ -162,6 +162,66 @@ _FORMER_TERM_RE = re.compile(r"[‘']([^’']+)[’']의\s*전\s*용어")
 
 
 @lru_cache(maxsize=4096)
+def former_term_field(word: str) -> str | None:
+    """word의 "전 용어" 안내가 어느 전문 분야 뜻에 달려 있는지 돌려준다.
+
+    표준국어대사전 검색 API는 분야(cat)를 주지 않고 우리말샘은 준다. 2026-08-02
+    실사용에서 '원통'이 옛 용어로 안내됐는데, 그 안내는 **수학 분야 뜻**('원기둥'의
+    전 용어)에만 달려 있고 일상적인 뜻('분하고 억울함')과는 무관했다. 분야를 함께
+    보여주면 사람이 문맥을 보고 즉시 판단할 수 있다.
+
+    반환값: 분야 이름(예: "수학"), 분야 표시가 없거나 조회 실패면 None.
+    """
+    try:
+        items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return None
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        headword = (item.get("word") or "").replace("-", "").replace("^", "")
+        if headword != word:
+            continue
+        senses = item.get("sense", [])
+        if isinstance(senses, dict):
+            senses = [senses]
+        for sense in senses:
+            if _FORMER_TERM_RE.search((sense.get("definition") or "")):
+                return (sense.get("cat") or "").strip() or None
+    return None
+
+
+@lru_cache(maxsize=4096)
+def appears_in_standard_headword(word: str) -> bool:
+    """word가 우리말샘 표제어의 **구성 요소**로 등장하는지 확인한다.
+
+    단독 표제어가 없어도 '빌리지 뱅가드', '그리니치 빌리지', '스마트 빌리지'처럼
+    그 말을 구성 요소로 쓰는 표제어가 국립국어원 사전에 여럿 있으면, 그건 한국어에서
+    통용되는 표기라는 근거다(2026-08-02 실사용: '빌리지'를 "사전에 없는 단어"로
+    플래그한 오탐).
+
+    **비표준 안내가 붙은 표제어는 근거로 인정하지 않는다.** 이 구분이 없으면
+    '스노우 체인'(비표준, 표준은 '스노체인') 때문에 '스노우'가 통과해 확정 교정이
+    무력해진다 — 실측으로 확인했다: 스노우 관련 표제어 3건은 전부 비표준 판정,
+    빌리지 관련 표제어 6건은 전부 표준 판정이었다.
+    """
+    try:
+        items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return False
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        headword = item.get("word") or ""
+        parts = [part for part in re.split(r"[\s^\-]", headword) if part]
+        if len(parts) < 2 or word not in parts:
+            continue  # 단독 표제어는 word_exists가 이미 확인했다
+        if _opendict_item_is_standard(item):
+            return True
+    return False
+
+
+@lru_cache(maxsize=4096)
 def former_term_lookup(word: str) -> dict | None:
     """word가 표준국어대사전에서 "'X'의 전 용어."로 표시된 옛 용어(지양 대상)면,
     그 현재 표준 용어(X)와 동형이의 판정 정보를 돌려준다.

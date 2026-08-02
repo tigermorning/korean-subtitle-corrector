@@ -42,6 +42,8 @@ from kiwipiepy import Kiwi
 
 from .common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from .dictionary import (
+    appears_in_standard_headword,
+    former_term_field,
     compound_status,
     convert_dialect,
     definition_markers,
@@ -344,6 +346,21 @@ def _is_quoted_command(tokens, ic_pos: int) -> bool:
     return prev.tag.startswith("E") and prev.form in _QUOTED_COMMAND_ENDINGS
 
 
+def _has_determiner_reading(text: str, token) -> bool:
+    """감탄사로 태깅된 토큰이 실은 관형사('그 빌리지', '이 사람')일 수 있는지.
+
+    2026-08-02 실사용: '그 빌리지에 살아'가 '그, 빌리지에 살아'로 자동 교정됐다.
+    kiwi가 관형사 '그'를 감탄사(IC)로 태깅했기 때문이다. 판정 근거는 kiwi 자신의
+    대안 분석이다 — 같은 자리를 관형사(MM)로 읽는 후보가 있으면 둘 중 어느 쪽인지는
+    문맥이 정하므로, 쉼표를 넣지 않는다('에서' 과교정에서 쓴 것과 같은 방식).
+    """
+    for tokens, _score in _kiwi.analyze(text, top_n=5):
+        for candidate in tokens:
+            if candidate.start == token.start and candidate.tag == "MM":
+                return True
+    return False
+
+
 def _inside_headword(text: str, pos: int) -> bool:
     """pos가 사전 표제어 한 단어의 '내부'인지 — 그렇다면 거기를 갈라선 안 된다.
 
@@ -386,7 +403,11 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     insert_positions = set()
 
     # 1) 문장 맨 앞 감탄사 + 내용어 → 감탄사 뒤에 쉼표
-    if tokens[0].tag == "IC" and is_content(tokens[1]):
+    if (
+        tokens[0].tag == "IC"
+        and is_content(tokens[1])
+        and not _has_determiner_reading(text, tokens[0])
+    ):
         pos = tokens[0].start + tokens[0].len
         if pos < len(text) and text[pos - 1] != "," and text[pos] not in ",.!?…":
             insert_positions.add(pos)
@@ -928,6 +949,51 @@ def _displayed_length(text: str, markers: "SubtitleMarkers | None" = None) -> in
     return len(visible.replace("\n", ""))
 
 
+def check_line_length(
+    index: int,
+    text: str,
+    max_line_chars: int,
+    markers: "SubtitleMarkers | None" = None,
+) -> FlagItem | None:
+    """자막 한 줄의 글자 수가 사용자가 정한 상한을 넘는지 확인한다(사용자 요청).
+
+    읽기 속도(CPS)와 달리 한 줄 글자 수 상한은 배급사·매체마다 다르므로 기본값을
+    두지 않고 **사용자가 지정할 때만** 검사한다(0이면 검사 안 함).
+
+    세는 기준은 읽기 속도와 같다 — 공백은 세고(화면에서 자리를 차지한다), 줄바꿈
+    표기·자막 위치 표기 같은 편집 기호는 빼고, 화자명·어조 표기는 화면에 나오므로
+    센다. 줄바꿈 표기가 지정돼 있으면 그것도 줄 경계로 본다.
+
+    자동으로 고치지 않는다 — 줄을 어디서 나눌지는 의미 단위(구·절 경계) 판단이고,
+    글자를 줄이는 것은 번역 자체를 고치는 일이라 둘 다 사람 몫이다.
+    """
+    if max_line_chars <= 0:
+        return None
+    body = text
+    if markers and markers.position:
+        body = body.replace(markers.position, "")
+    if markers and markers.line_break:
+        body = body.replace(markers.line_break, chr(10))
+    over = []
+    lines = body.split(chr(10))
+    for number, line in enumerate(lines, start=1):
+        length = len(line.rstrip())
+        if length > max_line_chars:
+            where = f"{number}번째 줄" if len(lines) > 1 else "한 줄"
+            over.append(f"{where} {length}자")
+    if not over:
+        return None
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=(
+            f"한 줄 글자 수 초과: {', '.join(over)} (상한 {max_line_chars}자) — "
+            "줄을 나눌 위치나 표현을 줄이는 방법은 의미 단위 판단이 필요해 "
+            "자동으로 고치지 않습니다."
+        ),
+    )
+
+
 def check_reading_speed(
     index: int,
     text: str,
@@ -1239,6 +1305,16 @@ def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[Fl
                 target = result["target"]
                 if not result["ambiguous"]:
                     auto_replacements[surface] = target
+                elif former_term_field(surface):
+                    # 옛 용어 안내가 **특정 전문 분야 뜻**에만 달려 있고 그 밖의 일반
+                    # 뜻도 있는 경우다(2026-08-02 실사용: '원통'의 안내는 우리말샘에서
+                    # cat='수학'인 뜻, 즉 '원기둥'의 옛 용어에만 달려 있고 '분하고
+                    # 억울함'이라는 일상적인 뜻과는 무관하다). 일반 문장에서 그 분야
+                    # 용어로 쓰였다는 근거가 없으므로 플래그하지 않는다.
+                    #
+                    # 분야 표시가 없는 옛 용어(예: '간질' — 우리말샘 cat 없음)는
+                    # 지금까지처럼 플래그한다. 실측으로 두 사례가 이 신호로 갈렸다.
+                    pass
                 elif surface not in flagged:
                     flagged.add(surface)
                     others = "; ".join(result["other_meanings"])
@@ -1693,6 +1769,8 @@ def _unknown_content_words(text: str) -> list[str]:
         lemma = t.lemma
         if word_exists(lemma) or _is_productive_demonym_compound(lemma) or search_kornorms(lemma):
             continue
+        if appears_in_standard_headword(lemma):
+            continue  # 단독 표제어는 없어도 국립국어원 표제어의 구성 요소로 쓰이는 말
         if _is_verb_stem_mistagged_as_noun(tokens, i):
             continue
         if _covered_by_larger_dictionary_unit(text, tokens, i):
@@ -1974,6 +2052,13 @@ def _protect_unfounded_joining(text: str, suggested: str) -> str:
             else:
                 to_restore.append(insert_at)  # 애매함 -> 원문 보존 (사람 확인)
             continue
+        if before.tag.startswith("J") and after.tag == "VX":
+            # 한글 맞춤법 제47항 단서: **앞말에 조사가 붙으면** 그 뒤의 보조 용언은
+            # 띄어 쓴다(붙임 허용 대상이 아니다). kiwi.space()는 '보기만 해도'를
+            # '보기만해도'로 붙이자고 제안했는데, '만'이 조사이므로 규정상 불가다
+            # (2026-08-02 실사용 보고). 사전 조회 이전에 규정으로 걸러낸다.
+            to_restore.append(insert_at)
+            continue
         if before.tag == "NNG" and after.lemma == "받다" and (
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS
         ):
@@ -2196,6 +2281,13 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
             continue  # "80%" 같은 숫자+기호 표기 관례 (사전 등재 여부와 무관)
         if before.form == "안" and after.lemma == "되다" and _andoeda_forces_split(tokens, after):
             continue  # 금지 구성 확정 -> 이 공백 삽입은 정답이므로 되돌리지 않는다
+        if before.tag.startswith("J") and after.tag == "VX":
+            # 한글 맞춤법 제47항 단서: **앞말에 조사가 붙으면** 그 뒤의 보조 용언은
+            # 띄어 쓴다(붙임 허용 대상이 아니다). kiwi.space()는 '보기만 해도'를
+            # '보기만해도'로 붙이자고 제안했는데, '만'이 조사이므로 규정상 불가다
+            # (2026-08-02 실사용 보고). 사전 조회 이전에 규정으로 걸러낸다.
+            to_restore.append(insert_at)
+            continue
         if before.tag == "NNG" and after.lemma == "받다" and (
             _is_action_noun(before.form) or before.form in _PASSIVE_ONLY_BATDA_NOUNS
         ):
@@ -2879,6 +2971,7 @@ def correct_entries(
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
     max_cps: float = SUBTITLE_MAX_CPS,
+    max_line_chars: int = 0,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2901,6 +2994,9 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
+
+    max_line_chars는 자막 한 줄 글자 수 상한이다. 매체마다 기준이 달라 기본값을 두지
+    않고(0=검사 안 함) 사용자가 지정할 때만 본다.
 
     max_cps는 자막 읽기 속도 상한(글자 수 ÷ 표시 시간)이다. 자막 모드에서 타임코드가
     있는 항목에만 적용하며, 0 이하면 검사하지 않는다.
@@ -2997,6 +3093,9 @@ def correct_entries(
             )
             if speed_flag:
                 flags.append(speed_flag)
+            length_flag = check_line_length(e.index, corrected_text, max_line_chars, markers)
+            if length_flag:
+                flags.append(length_flag)
 
         corrected_entries.append(
             SubtitleEntry(

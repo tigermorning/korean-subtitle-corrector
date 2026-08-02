@@ -161,6 +161,11 @@
           <span class="opt-note" style="margin:0">글자 수 ÷ 표시 시간(자/초). 성인 17, 아동물 13이 널리 쓰이고 20을 넘으면 사실상 읽기 어렵습니다. 타임코드가 있는 자막에만 적용되며, 0을 넣으면 검사하지 않습니다.</span>
         </div>
         <div class="dialect-row">
+          <label style="min-width:150px">한 줄 최대 글자 수</label>
+          <input type="number" id="maxLineChars" value="0" min="0" max="200" style="width:90px">
+          <span class="opt-note" style="margin:0">매체마다 기준이 달라 기본값을 두지 않았습니다. 쓰시는 상한을 넣으면 넘는 줄을 확인 항목으로 알려 드립니다(0이면 검사하지 않습니다).</span>
+        </div>
+        <div class="dialect-row">
           <label style="min-width:150px">화면자막 표기</label>
           <input type="text" id="screenTextMarker" placeholder="&quot;  또는  @" style="width:120px">
           <span class="opt-note" style="margin:0">짝이 있는 문자(따옴표·괄호)면 감싸인 구간만, 짝이 없는 문자(@·#)면 그 줄 전체를 제외합니다.</span>
@@ -517,6 +522,7 @@ submitBtn.addEventListener('click', async () => {
     // 보내 봐야 서버가 무시하지만, 무엇이 적용되는지 요청만 봐도 분명해야 한다.
     if (!docType || docType.value === 'subtitle') {
       form.append('max_cps', document.getElementById('maxCps').value || '0');
+      form.append('max_line_chars', document.getElementById('maxLineChars').value || '0');
       form.append('screen_text_marker', document.getElementById('screenTextMarker').value);
       form.append('line_break_marker', document.getElementById('lineBreakMarker').value);
       form.append('position_marker', document.getElementById('positionMarker').value);

@@ -339,3 +339,38 @@ def test_merged_particle_not_auto_split():
 def test_particle_attachment_still_auto_corrected():
     """조사·어미 결합 자동 교정 자체는 살아 있어야 한다(위 규칙의 회귀 가드)."""
     assert _run("오늘은날씨가좋네요")[0] == "오늘은 날씨가 좋네요"
+
+
+def test_particle_before_auxiliary_not_joined():
+    """'보기만 해도'를 '보기만해도'로 붙이자던 제안(2026-08-02 실사용 보고).
+
+    한글 맞춤법 제47항 단서: 앞말에 조사가 붙으면 그 뒤의 보조 용언은 띄어 쓴다.
+    '만'이 조사이므로 붙임 허용 대상이 아니다 — 사전 조회 이전에 규정으로 막는다.
+    """
+    out, flags = _run("보기만 해도 좋다")
+    assert out == "보기만 해도 좋다"
+    assert not any("보기만해도" in (f.suggested_fix or "") for f in flags)
+
+
+def test_component_of_standard_headword_not_unknown():
+    """'빌리지'는 단독 표제어가 없지만 '빌리지 뱅가드'·'스마트 빌리지' 등
+    표준 표제어의 구성 요소다. 비표준 안내가 붙은 표제어(스노우 체인)는 근거로
+    인정하지 않으므로 '스노우' 교정은 그대로 유지된다."""
+    _out, flags = _run("그 빌리지에 살아")
+    assert not any("사전에 없는 단어" in f.reason for f in flags)
+
+
+def test_field_limited_former_term_not_flagged():
+    """'원통'의 옛 용어 안내는 우리말샘에서 수학 분야 뜻에만 달려 있고 일상적인
+    뜻('분하고 억울함')과는 무관하다. 분야 표시가 없는 옛 용어(간질)는 계속 플래그한다."""
+    _out, flags = _run("원통 모양이야")
+    assert not any("전 용어" in f.reason for f in flags)
+    _out2, flags2 = _run("간질 환자가 늘었다")
+    assert any("전 용어" in f.reason for f in flags2)
+
+
+def test_determiner_not_treated_as_interjection():
+    """관형사 '그'를 감탄사로 보고 '그, 빌리지에'로 쉼표를 넣던 오교정."""
+    assert _run("그 빌리지에 살아")[0] == "그 빌리지에 살아"
+    assert _run("이 사람 누구야")[0] == "이 사람 누구야"
+    assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"

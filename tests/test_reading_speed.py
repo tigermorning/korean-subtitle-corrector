@@ -100,3 +100,45 @@ class TestInPipeline:
         """타임코드가 없는 일반 텍스트 입력에서는 조용히 건너뛴다."""
         _c, flags, _l = correct_entries(self._entry("가" * 40, start="", end=""))
         assert not any("읽기 속도 초과" in f.reason for f in flags)
+
+
+class TestLineLength:
+    """한 줄 글자 수 상한(사용자 지정 2026-08-02).
+
+    읽기 속도와 달리 이 상한은 매체·배급사마다 달라 기본값을 두지 않는다.
+    사용자가 값을 넣을 때만 검사한다.
+    """
+
+    def _entry(self, text):
+        return [SubtitleEntry(index=1, start="00:00:01,000", end="00:00:09,000", text=text)]
+
+    def test_not_checked_by_default(self):
+        _c, flags, _l = correct_entries(self._entry("가" * 50))
+        assert not any("한 줄 글자 수" in f.reason for f in flags)
+
+    def test_flagged_over_user_limit(self):
+        _c, flags, _l = correct_entries(self._entry("가" * 20), max_line_chars=16)
+        assert any("1번째 줄 20자" in f.reason or "한 줄 20자" in f.reason for f in flags)
+
+    def test_exactly_at_limit_is_not_flagged(self):
+        _c, flags, _l = correct_entries(self._entry("가" * 16), max_line_chars=16)
+        assert not any("한 줄 글자 수" in f.reason for f in flags)
+
+    def test_each_line_checked_separately(self):
+        _c, flags, _l = correct_entries(self._entry("가" * 20 + "\n" + "나" * 5), max_line_chars=16)
+        reasons = [f.reason for f in flags if "한 줄 글자 수" in f.reason]
+        assert len(reasons) == 1
+        assert "1번째 줄" in reasons[0] and "2번째" not in reasons[0]
+
+    def test_line_break_marker_counts_as_a_line_boundary(self):
+        markers = normalize_subtitle_markers(line_break="|")
+        _c, flags, _l = correct_entries(
+            self._entry("가" * 20 + "|" + "나" * 5), markers=markers, max_line_chars=16
+        )
+        assert any("1번째 줄 20자" in f.reason for f in flags)
+
+    def test_not_checked_in_prose_mode(self):
+        _c, flags, _l = correct_entries(
+            self._entry("가" * 50), doc_type="prose", max_line_chars=16
+        )
+        assert not any("한 줄 글자 수" in f.reason for f in flags)
