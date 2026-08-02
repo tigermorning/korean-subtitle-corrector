@@ -888,6 +888,90 @@ def correct_subtitle_bracket_spacing(
     return text, []
 
 
+# 읽기 속도(CPS, characters per second) 기본 상한. 업계에서 널리 쓰이는 성인 기준은
+# 17자/초, 아동물은 13자/초이고 20자/초를 넘으면 사실상 읽을 수 없다고 본다.
+# 글자 수 상한(배급사마다 다름)과 달리 이건 사람이 글을 읽는 속도라 기준이 수렴한다.
+# 0 이하를 주면 검사하지 않는다.
+SUBTITLE_MAX_CPS = 17.0
+
+_TIMECODE_RE = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
+
+
+def _timecode_seconds(value: str) -> float | None:
+    """'00:00:01,000' 형태의 타임코드를 초로 바꾼다. 형식이 아니면 None."""
+    match = _TIMECODE_RE.fullmatch((value or "").strip())
+    if not match:
+        return None
+    hours, minutes, seconds, millis = match.groups()
+    return (
+        int(hours) * 3600
+        + int(minutes) * 60
+        + int(seconds)
+        + int(millis.ljust(3, "0")) / 1000
+    )
+
+
+def _displayed_length(text: str, markers: "SubtitleMarkers | None" = None) -> int:
+    """화면에 실제로 보이는 글자 수. 공백은 세고 줄바꿈과 제어 표기는 빼낸다.
+
+    공백을 세는 이유는 화면에서 자리를 차지하고 읽는 시간에도 영향을 주기 때문이다
+    (업계 CPS 계산도 공백을 포함한다). 반대로 줄바꿈 표기(`|`)와 자막 위치
+    표기(`{\\an8}`)는 편집용 기호라 시청자에게 보이지 않으므로 뺀다. 화자명·어조
+    표기는 SDH에서 실제로 화면에 나오므로 뺀 것이 아니라 그대로 센다.
+    """
+    visible = text
+    if markers:
+        if markers.position:
+            visible = visible.replace(markers.position, "")
+        if markers.line_break:
+            visible = visible.replace(markers.line_break, "")
+    return len(visible.replace("\n", ""))
+
+
+def check_reading_speed(
+    index: int,
+    text: str,
+    start: str,
+    end: str,
+    max_cps: float = SUBTITLE_MAX_CPS,
+    markers: "SubtitleMarkers | None" = None,
+) -> FlagItem | None:
+    """자막 한 장의 읽기 속도(글자 수 ÷ 표시 시간)가 기준을 넘는지 확인한다.
+
+    어문 규범이 아니라 **사람이 읽는 속도**라는 물리적 제약이다. 글자 수 상한과
+    달리 이 값은 배급사가 달라도 크게 벌어지지 않는다(성인 17, 아동 13, 20을 넘으면
+    사실상 못 읽음).
+
+    자동으로 고치지 않는다 — 해결 방법은 표현을 줄이거나 표시 시간을 늘리는 것인데,
+    전자는 번역을 고치는 일이고 후자는 타임코드를 바꾸는 일이라 둘 다 사람 몫이다.
+
+    타임코드가 없거나(일반 텍스트) 형식이 아니면 검사하지 않는다.
+    """
+    if max_cps <= 0:
+        return None
+    start_seconds, end_seconds = _timecode_seconds(start), _timecode_seconds(end)
+    if start_seconds is None or end_seconds is None:
+        return None
+    duration = end_seconds - start_seconds
+    if duration <= 0:
+        return None
+    length = _displayed_length(text, markers)
+    if not length:
+        return None
+    cps = length / duration
+    if cps <= max_cps:
+        return None
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=(
+            f"읽기 속도 초과: {cps:.1f}자/초 (기준 {max_cps:g}자/초) — "
+            f"{duration:.1f}초 동안 {length}자입니다. 표현을 줄이거나 표시 시간을 "
+            "늘려야 하며, 어느 쪽이든 사람이 판단할 일이라 자동으로 고치지 않습니다."
+        ),
+    )
+
+
 def correct_subtitle_internal_period(text: str) -> tuple[str, list[str]]:
     """자막에서 한 줄에 두 문장이 이어질 때, 문장 사이의 마침표는 쉼표(,)로
     바꾼다(자막 관례, 사용자 지정 2026-08-02). 문장 종결 마침표 뒤에 공백을 두고
@@ -2794,6 +2878,7 @@ def correct_entries(
     dialect_region: str | None = None,
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
+    max_cps: float = SUBTITLE_MAX_CPS,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
     """entries를 처리한다.
 
@@ -2816,6 +2901,9 @@ def correct_entries(
     spacing_mode는 제47항 보조 용언 띄어쓰기 기준을 문서 전체에 하나로 정한다
     (principle=원칙·띄어 씀, allowance=허용·붙여 씀). 한 작품 안에서 두 기준이
     섞이면 안 되므로 여기서 한 번 정규화해 모든 줄에 같은 값을 넘긴다.
+
+    max_cps는 자막 읽기 속도 상한(글자 수 ÷ 표시 시간)이다. 자막 모드에서 타임코드가
+    있는 항목에만 적용하며, 0 이하면 검사하지 않는다.
 
     markers는 자막 편집 표지(화면자막·줄바꿈·위치)다. 지정된 표지는 어문 규범의
     대상이 아니라 기술적 표지이므로 교정에서 제외한다. 자막 모드에서만 쓴다.
@@ -2901,6 +2989,14 @@ def correct_entries(
         )
         flags.extend(line_flags)
         applied_log.extend(f"[{e.index}] {m}" for m in line_applied)
+
+        # 읽기 속도는 타임코드가 있어야 계산할 수 있어 줄 단위 파이프라인 밖에서 본다.
+        if doc_type == "subtitle":
+            speed_flag = check_reading_speed(
+                e.index, corrected_text, e.start, e.end, max_cps, markers
+            )
+            if speed_flag:
+                flags.append(speed_flag)
 
         corrected_entries.append(
             SubtitleEntry(

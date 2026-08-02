@@ -156,6 +156,11 @@
       <div class="opt-group" id="markerOptions">
         <span class="opt-label">자막 편집 표지<span class="opt-label-sub">자막 모드에만 적용 · 여기 적은 표지는 교정하지 않습니다</span></span>
         <div class="dialect-row">
+          <label style="min-width:150px">읽기 속도 상한</label>
+          <input type="number" id="maxCps" value="17" min="0" max="60" step="0.5" style="width:90px">
+          <span class="opt-note" style="margin:0">글자 수 ÷ 표시 시간(자/초). 성인 17, 아동물 13이 널리 쓰이고 20을 넘으면 사실상 읽기 어렵습니다. 타임코드가 있는 자막에만 적용되며, 0을 넣으면 검사하지 않습니다.</span>
+        </div>
+        <div class="dialect-row">
           <label style="min-width:150px">화면자막 표기</label>
           <input type="text" id="screenTextMarker" placeholder="&quot;  또는  @" style="width:120px">
           <span class="opt-note" style="margin:0">짝이 있는 문자(따옴표·괄호)면 감싸인 구간만, 짝이 없는 문자(@·#)면 그 줄 전체를 제외합니다.</span>
@@ -511,6 +516,7 @@ submitBtn.addEventListener('click', async () => {
     // 자막 편집 표지는 자막 모드에서만 의미가 있다. 일반 글에서는 보내지 않는다 —
     // 보내 봐야 서버가 무시하지만, 무엇이 적용되는지 요청만 봐도 분명해야 한다.
     if (!docType || docType.value === 'subtitle') {
+      form.append('max_cps', document.getElementById('maxCps').value || '0');
       form.append('screen_text_marker', document.getElementById('screenTextMarker').value);
       form.append('line_break_marker', document.getElementById('lineBreakMarker').value);
       form.append('position_marker', document.getElementById('positionMarker').value);

@@ -255,3 +255,14 @@
 - **구조**: 이 기능 때문에 한 줄을 구간 단위로 교정할 수 있어야 해서, `correct_entries()` 안에 박혀 있던 줄 단위 파이프라인을 `_correct_line()`으로 **순수 이동**했다(로직 변경 없음, 이동 후 195건 그대로 통과). 표지 처리는 그 위의 `_correct_line_with_markers()`가 맡는다.
 - **플래그는 줄 전체 기준으로 되돌린다**: 구간 단위로 교정해도 `original_text`·`suggested_fix`는 줄 전체여야 한다. 조각으로 남으면 리포트에 일부만 보이고, `apply-report`가 그 조각으로 줄 전체를 덮어써 나머지 대사를 지운다.
 - **노출**: `correct_entries(markers=)`, `/api/correct`의 `screen_text_marker`·`line_break_marker`·`position_marker` Form, `main.py --screen-text-marker/--line-break-marker/--position-marker`, 웹 UI "자막 편집 표지" 입력 3칸. 테스트: `tests/test_subtitle_markers.py`(13건).
+
+## 17. 자막 읽기 속도(CPS) 검사 (구현 완료, 2026-08-02)
+
+**어문 규범이 아니라 사람이 글을 읽는 속도**라는 물리적 제약이다. 글자 수 상한이 배급사마다 갈리는 것과 달리 이 값은 크게 벌어지지 않는다 — 성인 **17자/초**, 아동물 **13자/초**가 널리 쓰이고 20자/초를 넘으면 사실상 읽을 수 없다고 본다(넷플릭스 등 스트리밍 자막 지침, 자막 품질 연구 공통).
+
+- **계산**: 화면에 보이는 글자 수 ÷ 표시 시간(타임코드 차). `.srt`의 타임코드는 이미 파싱하고 있었으나 지금까지 한 번도 쓰지 않았다.
+- **무엇을 세나**: 공백은 센다(화면에서 자리를 차지하고 읽는 시간에 들어간다 — 업계 CPS 계산도 동일). 줄바꿈은 글자가 아니므로 빼고, 줄바꿈 표기(`|`)·자막 위치 표기(`{\an8}`)는 시청자에게 보이지 않는 편집 기호라 뺀다. **화자명·어조 표기는 SDH에서 실제로 화면에 나오므로 센다.**
+- **자동 교정하지 않는다**: 해결책은 표현을 줄이거나(번역을 고치는 일) 표시 시간을 늘리는 것(타임코드를 고치는 일)뿐이라 둘 다 사람 몫이다.
+- **적용 범위**: 자막 모드 + 타임코드가 있는 항목만. 일반 텍스트·`.docx`에는 타임코드가 없어 조용히 건너뛴다. 0 이하를 주면 검사하지 않는다.
+- **구현**: `engine.py`의 `check_reading_speed`(+ `SUBTITLE_MAX_CPS`, `_timecode_seconds`, `_displayed_length`), `correct_entries(max_cps=)`, `/api/correct`의 `max_cps` Form, `main.py --max-cps`, 웹 UI "읽기 속도 상한". 테스트: `tests/test_reading_speed.py`(17건).
+- **검증**(2026-08-02): 전체 스위트 242건 통과, held-out 12/14로 기준선 동일. `examples/sample.srt`는 새 플래그 0건(짧은 자막이라 상한에 걸리지 않음). 실제 서버에서 기본 17 / 13 / 0(끔) 세 경우를 확인했다.
