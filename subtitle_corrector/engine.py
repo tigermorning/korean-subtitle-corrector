@@ -297,6 +297,21 @@ def _is_quoted_command(tokens, ic_pos: int) -> bool:
     return prev.tag.startswith("E") and prev.form in _QUOTED_COMMAND_ENDINGS
 
 
+def _inside_headword(text: str, pos: int) -> bool:
+    """pos가 사전 표제어 한 단어의 '내부'인지 — 그렇다면 거기를 갈라선 안 된다.
+
+    pos를 사이에 둔 한글 런(공백·문장부호로 끊기는 덩어리)을 통째로 사전에
+    조회한다. 런이 표제어면 kiwi가 그 안을 어떻게 쪼갰든 한 단어다.
+    """
+    if pos <= 0 or pos >= len(text):
+        return False
+    start, end = _hangul_run_bounds(text, pos - 1)
+    if end <= pos:  # pos가 런 바깥(경계)이면 단어 내부가 아니다
+        return False
+    run = text[start:end]
+    return len(run) >= 2 and bool(word_exists(run))
+
+
 def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     """감탄사(IC)와 호격어(체언+호격조사 JKV)는 문장에서 쉼표로 구분한다.
     문맥과 무관하게 규정상 정답이 정해져 있어 자동으로 쉼표를 넣는다:
@@ -352,6 +367,14 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
                     j -= 1
                 if not already_delimited_before(j):
                     insert_positions.add(j)
+
+    # 사전에 등재된 한 단어 안에는 쉼표를 넣지 않는다. kiwi는 '에라이'(감탄사,
+    # 표제어)를 '에라'(IC)+'이'로, '아싸'를 '아'(IC)+'싸'로 쪼개는데, 그 분석을
+    # 믿고 쉼표를 넣으면 '에라,이!'라는 없는 말이 된다(2026-08-02 실사용에서 발견).
+    # 사전이 kiwi의 통계적 분석보다 권위 있다는 이 프로젝트의 기존 원칙 그대로다.
+    insert_positions = {
+        pos for pos in insert_positions if not _inside_headword(text, pos)
+    }
 
     if not insert_positions:
         return text, []
@@ -2282,6 +2305,77 @@ def check_term_spacing_consistency(
     return flags
 
 
+def _dictionary_backed(piece: str) -> bool:
+    """조각이 사전으로 뒷받침되는 말인지 — 표제어이거나, 조사·어미를 떼면 표제어인지.
+
+    한 글자 조각은 판정하지 않고 통과시킨다(조사·의존명사·관형사 등 한 글자 말이
+    많아 여기서 막으면 정당한 분리까지 취소된다).
+    """
+    piece = piece.strip()
+    if len(piece) <= 1:
+        return True
+    if word_exists(piece):
+        return True
+    tokens = _kiwi.tokenize(piece)
+    if not tokens:
+        return True
+    tail = tokens[-1]
+    body = piece[: tail.start]
+    if body and tail.tag.startswith("J"):  # 체언 + 조사
+        if word_exists(body):
+            return True
+    if body and tail.tag.startswith("E"):  # 용언 어간 + 어미
+        if word_exists(body + "다"):
+            return True
+    if body:
+        # 표면형으로 잘라 조회했는데 사전에 없다면, 그 조각은 사전으로 설명되지
+        # 않는 것이다. 여기서 첫 형태소로 다시 봐주면 '짓골에'가 '짓'(표제어)
+        # 때문에 통과해 버려 이 규칙 자체가 무력해진다(2026-08-02 실측).
+        return False
+    # 표면형으로 자를 수 없는 활용(어간과 어미가 받침을 공유하는 '됩니다' 등)만
+    # 첫 형태소의 기본형으로 확인한다. 이 갈래가 없으면 '안 됩니다' 같은 정당한
+    # 분리 제안까지 "근거 없음"으로 취소된다(실측에서 3건 깨졌다).
+    head = tokens[0]
+    lemma = head.lemma or head.form
+    if head.tag.startswith(("V", "XSV", "XSA")):
+        return bool(word_exists(lemma if lemma.endswith("다") else lemma + "다"))
+    return bool(word_exists(lemma))
+
+
+def _protect_unresolvable_splits(text: str, suggested: str) -> str:
+    """분리해서 생기는 조각이 사전으로 설명되지 않으면 그 분리를 되돌린다.
+
+    2026-08-02 실사용에서 사극 지명 '한짓골'이 '한 짓골'로 쪼개졌다. '한'은
+    관형사로 태깅돼 기존 보호(_TERM_COMPOUND_TAGS)에서 빠졌고, '한짓골'은 사전에
+    없어 표제어 보호에도 걸리지 않았다. 그런데 **쪼갠 결과인 '짓골'도 사전에
+    없다** — 즉 이 분리는 어느 쪽으로도 사전 근거가 없다.
+
+    원문이 붙어 있었다는 사실이 유일한 근거라면, 근거 없이 갈라놓는 것보다
+    그대로 두는 편이 이 프로젝트의 원칙에 맞는다("확실한 것만 자동 처리, 애매하면
+    사람에게"). 분리 후 조각이 전부 사전으로 설명될 때만 제안을 남긴다.
+    """
+    # 한 어절이 여러 번 쪼개질 수 있으므로(먹을수있다 -> 먹을 / 수 / 있다) 삽입
+    # 지점을 어절별로 모아 **최종 조각 전체**를 본다. 삽입 하나만 놓고 좌우를
+    # 판정하면 '수있다' 같은 중간 상태를 사전에 조회하게 되어 정당한 제안까지
+    # 취소된다(2026-08-02 첫 시도에서 실제로 그렇게 깨졌다).
+    by_run: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
+    for i1, j1, j2 in _inserted_space_ranges(text, suggested):
+        start, end = _hangul_run_bounds(text, max(0, i1 - 1))
+        if not (start < i1 < end):
+            continue  # 어절 경계에 넣는 공백은 이 규칙의 대상이 아니다
+        by_run.setdefault((start, end), []).append((i1, j1, j2))
+
+    to_remove = []
+    for (start, end), points in by_run.items():
+        cuts = sorted(p[0] for p in points)
+        pieces = [text[a:b] for a, b in zip([start] + cuts, cuts + [end])]
+        if not all(_dictionary_backed(piece) for piece in pieces):
+            to_remove.extend((j1, j2) for _i1, j1, j2 in points)
+    for j1, j2 in sorted(to_remove, key=lambda r: r[0], reverse=True):
+        suggested = suggested[:j1] + suggested[j2:]
+    return suggested
+
+
 def check_spacing(index: int, text: str) -> FlagItem | None:
     """띄어쓰기 제안은 신뢰도를 알 수 없으므로 절대 자동 적용하지 않고
     원문과 다르면 무조건 사람 확인용으로 플래그한다 (예: '한번'/'한 번'처럼
@@ -2305,6 +2399,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     suggested = _protect_unfounded_respacing(text, suggested)
     suggested = _protect_headword_run_splits(text, suggested)
     suggested = _protect_unfounded_joining(text, suggested)
+    suggested = _protect_unresolvable_splits(text, suggested)
 
     if suggested != text:
         return FlagItem(

@@ -285,3 +285,39 @@ def test_adjacent_brackets_keep_no_space():
         [_E(index=1, start="0", end="1", text="[♪ 박진감 넘치는 음악][대수] 가자")]
     )
     assert corrected[0].text == "[♪ 박진감 넘치는 음악][대수] 가자"
+
+
+def test_headword_interjection_not_split_by_comma():
+    """'에라이!'(감탄사 표제어)를 kiwi가 '에라'+'이'로 쪼갠 것을 믿고 쉼표를
+    넣어 '에라,이!'로 만들던 자동 교정 버그(2026-08-02 실사용 보고).
+
+    사용자는 이것을 "느낌표가 한 칸 띄워졌다"로 보고했는데, 실제로는 느낌표가
+    아니라 그 앞 글자가 떨어져 나온 것이었다.
+    """
+    assert _run("에라이!")[0] == "에라이!"
+    assert _run("아싸!")[0] == "아싸!"
+    assert _run("에라이! 그만해")[0] == "에라이! 그만해"
+
+
+def test_unresolvable_split_not_suggested():
+    """'한짓골'(사극 지명, 사전 미등재)을 '한 짓골'로 쪼개자던 제안.
+
+    쪼갠 결과인 '짓골'도 사전에 없다 — 어느 쪽으로도 사전 근거가 없는 분리라
+    제안하지 않는다. 붙어 있던 원문을 근거 없이 갈라놓는 것보다 그대로 두는
+    편이 낫다.
+    """
+    out, flags = _run("한짓골에 갔다")
+    assert out == "한짓골에 갔다"
+    assert not any("한 짓골" in (f.suggested_fix or "") for f in flags)
+
+
+def test_dictionary_backed_splits_still_suggested():
+    """근거 있는 분리 제안까지 막으면 안 된다(위 규칙의 회귀 가드).
+
+    '안 됩니다'는 어간과 어미가 받침을 공유해 표면형으로 자를 수 없는 활용이라,
+    첫 시도에서 이 제안이 함께 죽었다.
+    """
+    _out, flags = _run("그러면 안됩니다")
+    assert any(f.suggested_fix == "그러면 안 됩니다" for f in flags)
+    _out2, flags2 = _run("이것도 먹을수있다")
+    assert any(f.suggested_fix == "이것도 먹을 수 있다" for f in flags2)
