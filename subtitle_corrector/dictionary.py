@@ -287,6 +287,9 @@ def definition_markers(word: str) -> frozenset:
     """word의 표준국어대사전 뜻풀이에 나타나는 '맥락 경쟁' 표지를 돌려준다.
     - '준말': 다른 말의 준말(예: 큰애='큰아이'의 준말)
     - '비유적': 비유어(예: 턱밑='아주 가까운 곳'을 비유적으로)
+    - '은어': 특정 집단의 말(예: 새발=은어로 '젓가락') — 2026-08-02 실사용에서
+      '새 발의 피'가 '새발의 피'로 잘못 병합됐다. '새발'은 은어(젓가락)와 해조류
+      이름뿐이라, 일반 문장의 '새 발'(새의 발)과 의미가 경쟁한다.
     이런 표지가 있으면 그 붙여쓰기 형태는 띄어 쓴 구(句)와 의미가 경쟁하므로,
     합성어라도 문맥 없이 자동으로 붙이면 안 된다는 신호다. 조회 실패는 빈
     집합으로 흡수한다."""
@@ -310,6 +313,8 @@ def definition_markers(word: str) -> frozenset:
                 markers.add("준말")
             if "비유적" in definition:
                 markers.add("비유적")
+            if "은어로" in definition:
+                markers.add("은어")
     return frozenset(markers)
 
 

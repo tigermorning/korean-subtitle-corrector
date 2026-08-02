@@ -36,6 +36,11 @@ _ALLOWED_EXTENSIONS = set(SUPPORTED_EXTENSIONS)
 # 보다 "핵심 기능 전체가 막힌다"는 점에서 더 실질적인 위험이라 크기 제한을
 # 둔다.
 _MAX_UPLOAD_BYTES = 1_000_000
+# PDF만 예외로 크게 둔다. 위 제한의 목적은 **사전 조회 횟수**를 묶는 것인데, 그 횟수는
+# 글자 수에 비례하지 파일 크기에 비례하지 않는다. PDF는 본문에 그림·도판이 함께 들어가
+# 글이 얼마 없어도 파일이 커지므로(2026-08-02 실측: 두 줄짜리 그림 PDF가 1.4MB), 같은
+# 잣대를 대면 정상적인 원고까지 막힌다.
+_MAX_PDF_BYTES = 30_000_000
 
 
 def _split_words(raw: str) -> list[str]:
@@ -79,15 +84,29 @@ def correct_subtitle(
     # 범용 엔진이다(engine.correct_entries). .srt는 타임코드 구조를 보존해야
     # 하고, 일반 텍스트는 줄 구성만 보존하면 되므로 파일 형식에 따라
     # 파서/저장 함수만 갈아 끼운다 — 교정 로직 자체는 완전히 동일하다.
-    raw = file.file.read(_MAX_UPLOAD_BYTES + 1)
-    if len(raw) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(413, f"파일이 너무 큽니다. 최대 {_MAX_UPLOAD_BYTES // 1_000_000}MB까지 지원합니다.")
+    size_limit = _MAX_PDF_BYTES if ext == ".pdf" else _MAX_UPLOAD_BYTES
+    raw = file.file.read(size_limit + 1)
+    if len(raw) > size_limit:
+        raise HTTPException(413, f"파일이 너무 큽니다. 최대 {size_limit // 1_000_000}MB까지 지원합니다.")
 
     with tempfile.TemporaryDirectory() as tmp:
         in_path = Path(tmp) / f"input{ext}"
         in_path.write_bytes(raw)
 
         entries = parse_file(in_path)
+
+        # 스캔본 PDF(글자가 이미지)면 텍스트가 하나도 안 나온다. 조용히 빈 결과를
+        # 돌려주면 사용자는 도구가 고장 난 줄 안다 — 무엇이 문제인지 알린다.
+        # OCR은 넣지 않는다(2026-08-02 사용자 결정): 실측에서 '초코렛을 좋아해요'가
+        # '조 코 렛 을 좋 아 해 요'로 읽혔고, 그런 오독이 리포트를 뒤덮으면 정작
+        # 봐야 할 교정 항목이 묻힌다. OCR 품질은 우리가 통제할 수 없는 변수다.
+        if ext == ".pdf" and not any(e.text.strip() for e in entries):
+            raise HTTPException(
+                400,
+                "이 PDF에는 텍스트 레이어가 없습니다(글자가 이미지인 스캔본). "
+                "이 도구는 글자를 추정해 읽지 않습니다 — 다른 OCR 도구로 텍스트를 "
+                "먼저 뽑은 뒤 .txt나 .docx로 올려 주세요.",
+            )
 
         # dialect_map 파싱: JSON 문자열 → dict
         parsed_dialect_map: dict[str, str] = {}
@@ -156,7 +175,9 @@ def correct_subtitle(
         write_file(corrected_entries, out_path, in_path)
         corrected_text = out_path.read_text(encoding="utf-8")
 
-        if ext == ".docx":
+        # .docx·.pdf는 원본이 바이너리라 그대로 디코드할 수 없다. 우리가 읽어 낸
+        # 텍스트를 원문으로 삼는다.
+        if ext in (".docx", ".pdf"):
             original_text = "\n".join(e.text for e in entries) + "\n"
         else:
             original_text = raw.decode("utf-8-sig")

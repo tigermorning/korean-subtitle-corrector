@@ -200,7 +200,21 @@ def _word_bounds(text: str, pos: int) -> tuple[int, int]:
     return start, end
 
 
-def _mechanical_respace(text: str) -> str:
+def _after_subtitle_marker(text: str, pos: int, markers: "SubtitleMarkers | None") -> bool:
+    """pos 바로 앞이 자막 표시(위치·화자명·어조)의 끝인지.
+
+    표시와 말자막 사이에는 반드시 한 칸이 있어야 하는데(사용자 지정 2026-08-02),
+    조사·어미 결합 규칙이 그 공백을 지워 버리는 일이 있었다 — '[달래] 아, 비켜!'의
+    '아'를 호격조사로 보고 앞말에 붙이려 한 경우다. 뒤에 다시 한 칸을 넣어 결과는
+    맞았지만, 자동 교정 로그에 하지도 않은 변경이 남아 사용자를 혼란스럽게 했다.
+    """
+    unit = _marker_unit_pattern(markers)
+    if not unit:
+        return False
+    return any(m.end() == pos for m in re.finditer(unit, text))
+
+
+def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> str:
     """조사·어미·접미사 결합 지점의 띄어쓰기만 정리한다 (한글 맞춤법
     제41항: 조사는 앞말에 붙여 씀 + 어미/접미사는 애초에 앞 형태소와 분리해
     쓸 수 없음). 이 지점의 정답은 문맥과 무관하게 항상 하나뿐이므로 안전하게
@@ -248,6 +262,8 @@ def _mechanical_respace(text: str) -> str:
             # — 실제 텍스트에 없는 형태소라 태그 판정에 근거가 없음. 이 토큰의
             # 태그(예: VV)를 근거로 앞 형태소(EC)와의 경계에 공백을 삽입하면
             # 원문을 왜곡한다(예: '없다길래'→'없다 길래' 오류).
+        if _after_subtitle_marker(text, gap_start, markers):
+            continue  # 자막 표시와 말자막 사이 한 칸은 규칙이라 지우지 않는다
         if "\n" in text[gap_start:gap_end]:
             continue  # 자막 등에서 의도적으로 넣은 줄바꿈 - 문법적 판단과 무관하게 원래 줄 구성을 보존한다
         if t2.form == "요" and t2.len == 1 and gap_start == gap_end:
@@ -332,6 +348,12 @@ def _is_punct_token(tok) -> bool:
 # "말라, 그래"라는 엉뚱한 쉼표를 넣었다.
 _QUOTED_COMMAND_ENDINGS = {"라", "으라", "자", "냐", "마", "래"}
 
+# 표준어 '그래'의 사투리형. kiwi는 이들을 감탄사(IC)로 태깅하지만, 실제로는
+# '그렇다/그리하다'의 사투리 활용형(서술어)으로 쓰이는 경우가 많다 — 2026-08-02
+# 실사용에서 '어디 있는디 그려?'가 '어디 있는디, 그려?'로 잘못 교정됐다. 표준어
+# 감탄사가 아니므로 쉼표 규칙의 대상에서 아예 뺀다.
+_DIALECT_AGREEMENT_FORMS = {"그려", "그랴", "기여", "그라", "그자"}
+
 
 def _is_quoted_command(tokens, ic_pos: int) -> bool:
     """tokens[ic_pos]의 '그래'가 감탄사가 아니라 간접인용 축약의 서술어인지.
@@ -341,6 +363,8 @@ def _is_quoted_command(tokens, ic_pos: int) -> bool:
     수정하지 않는다는 원칙에 따라 쉼표를 넣지 않는 쪽을 택한다 — 안 넣어서 생기는
     손해(사람이 직접 넣음)가 잘못 넣어서 생기는 손해(대사 뜻이 바뀜)보다 작다.
     """
+    if tokens[ic_pos].form in _DIALECT_AGREEMENT_FORMS:
+        return True  # 사투리 서술어일 수 있어 문맥 없이 쉼표를 넣지 않는다
     if tokens[ic_pos].form not in ("그래", "그러래"):
         return False
     prev = tokens[ic_pos - 1]
@@ -407,6 +431,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     if (
         tokens[0].tag == "IC"
         and is_content(tokens[1])
+        and tokens[0].form not in _DIALECT_AGREEMENT_FORMS
         and not _has_determiner_reading(text, tokens[0])
     ):
         pos = tokens[0].start + tokens[0].len
@@ -430,7 +455,11 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
         # 3) 문장 맨 끝 호격어(체언+JKV) → 호격 체언 앞에 쉼표
         elif lt.tag == "JKV" and last >= 2:
             noun = tokens[last - 1]
-            if noun.tag in ("NNP", "NNG") and is_content(tokens[last - 2]):
+            # 호격어는 별개 어절이다. 어절 **중간**에 쉼표를 넣으면 이름이 쪼개진다 —
+            # 2026-08-02 실사용에서 '연실아'가 '연,실아'로 잘렸다(kiwi가 '연'을
+            # 관형사로, '실'을 명사로 태깅했다). 앞이 공백이거나 줄 시작일 때만 넣는다.
+            starts_word = noun.start == 0 or text[noun.start - 1].isspace()
+            if noun.tag in ("NNP", "NNG") and is_content(tokens[last - 2]) and starts_word:
                 j = noun.start
                 while j > 0 and text[j - 1] == " ":
                     j -= 1
@@ -448,6 +477,8 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     if not insert_positions:
         return text, []
     corrected = text
+    # 쉼표 뒤에는 한 칸을 띄운다. 어절 중간이 아니라 경계에만 넣으므로 대개 이미
+    # 공백이 뒤따르지만, 그렇지 않은 경우를 대비해 명시적으로 보장한다.
     for pos in sorted(insert_positions, reverse=True):
         corrected = corrected[:pos] + "," + corrected[pos:]
     return corrected, [_localized_change(text, corrected)]
@@ -577,12 +608,14 @@ def _localized_change(original: str, corrected: str) -> str:
     return f"{pre}{original[ci:cjo]}{suf} -> {pre}{corrected[ci:cjc]}{suf}"
 
 
-def correct_particle_spacing(text: str) -> tuple[str, list[str]]:
+def correct_particle_spacing(
+    text: str, markers: "SubtitleMarkers | None" = None
+) -> tuple[str, list[str]]:
     """조사·어미·접미사 결합 지점의 띄어쓰기 오류를 자동으로 정리한다.
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문조각 -> 교정조각')
     """
-    corrected = _mechanical_respace(text)
+    corrected = _mechanical_respace(text, markers)
     applied = [_localized_change(text, corrected)] if corrected != text else []
     return corrected, applied
 
@@ -2756,7 +2789,7 @@ def _correct_line(
     corrected_text = text
 
     corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
-    corrected_text, particle_fixes = correct_particle_spacing(corrected_text)
+    corrected_text, particle_fixes = correct_particle_spacing(corrected_text, markers)
     corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
     corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
