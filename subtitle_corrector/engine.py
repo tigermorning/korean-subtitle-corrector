@@ -785,35 +785,51 @@ def correct_subtitle_bracket_spacing(text: str) -> tuple[str, list[str]]:
     return text, []
 
 
-def check_subtitle_internal_period(index: int, text: str) -> FlagItem | None:
+def correct_subtitle_internal_period(text: str) -> tuple[str, list[str]]:
     """자막에서 한 줄에 두 문장이 이어질 때, 문장 사이의 마침표는 쉼표(,)로
-    바꾸는 것이 관례다. 문장 종결 마침표 뒤에 공백을 두고 다른 문장이 이어지는
-    지점을 찾아, 마침표를 쉼표로 바꾼 형태를 확인 플래그로 제안한다(자동 교정은
-    하지 않는다 — 문장 경계 판단은 사람이 확인). 줄 맨 끝 마침표는
-    correct_subtitle_final_period()가 이미 자동으로 제거한다."""
+    바꾼다(자막 관례, 사용자 지정 2026-08-02). 문장 종결 마침표 뒤에 공백을 두고
+    다른 문장이 이어지는 지점만 대상이다 — 줄 맨 끝 마침표는
+    correct_subtitle_final_period()가 따로 제거하고, 소수점(3.14)과
+    말줄임표(...)는 _is_sentence_period()가 걸러 낸다.
+
+    예전에는 확인 플래그로만 제안했으나, 자막에서는 이 자리에 쉼표를 쓰는 것이
+    정답 하나로 정해져 있어 자동 교정으로 올렸다.
+
+    반환값: (쉼표로 바꾼 텍스트, 적용 로그)."""
     positions = []
     for i, ch in enumerate(text):
         if ch != "." or not _is_sentence_period(text, i):
             continue
         nxt = text[i + 1] if i + 1 < len(text) else ""
-        # '행 중간'의 문장 경계만 플래그한다: 마침표 뒤가 (줄바꿈이 아닌) 공백이고
-        # 같은 행에 문장이 더 이어질 때. 행 끝 마침표(줄바꿈 앞 또는 텍스트 끝)는
-        # correct_subtitle_final_period()가 이미 자동으로 제거한다.
         if nxt == " " and text[i + 1 :].strip():
             positions.append(i)
     if not positions:
-        return None
+        return text, []
     drop = set(positions)
     fixed = "".join("," if i in drop else ch for i, ch in enumerate(text))
-    return FlagItem(
-        line_index=index,
-        original_text=text,
-        reason=(
-            "자막에서 한 줄에 두 문장이 이어질 때는 문장 사이에 마침표 대신 "
-            "쉼표(,)를 씁니다 — 확인하세요."
-        ),
-        suggested_fix=fixed,
-    )
+    return fixed, ["문장 사이 마침표를 쉼표로 (자막)"]
+
+
+# 말줄임표. 한글 맞춤법은 가운뎃점 여섯(……)을 원칙으로 하고 셋(…)·마침표
+# 여섯(......)·셋(...)을 허용하지만, 이 도구의 자막 표기는 온점 세 개로
+# 통일한다(사용자 지정 2026-08-02).
+_ELLIPSIS_CHAR_RE = re.compile(r"…+")
+_ELLIPSIS_DOTS_RE = re.compile(r"\.{4,}")
+
+
+def correct_subtitle_ellipsis(text: str) -> tuple[str, list[str]]:
+    """말줄임표를 온점 세 개(...)로 통일한다.
+
+    바꾸는 것은 두 가지뿐이다: 말줄임표 문자(…, 연속이면 하나로)와 온점 네 개
+    이상(......). 온점 하나·둘은 건드리지 않는다 — 하나는 마침표이고, 둘은
+    말줄임표로 단정할 근거가 없어 사람이 볼 영역이다.
+
+    반환값: (통일된 텍스트, 적용 로그)."""
+    fixed = _ELLIPSIS_CHAR_RE.sub("...", text)
+    fixed = _ELLIPSIS_DOTS_RE.sub("...", fixed)
+    if fixed == text:
+        return text, []
+    return fixed, ["말줄임표를 온점 세 개로 (자막)"]
 
 
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
@@ -2402,13 +2418,18 @@ def correct_entries(
         # 잡혀 엉뚱한 사투리 추천이 대거 뜨는 문제 때문에 사용자가 끄기로 결정).
         # 사투리 처리는 dialect_map으로 명시 지정된 화자에 대해서만 이뤄진다.
 
-        # 자막 모드: 줄 끝 문장 종결 마침표는 관례상 쓰지 않으므로 자동 제거한다
-        # (정답이 하나뿐). 문장 사이 마침표(쉼표로 바꿔야 하는 경우)는 아래
-        # check_subtitle_internal_period()가 확인 플래그로 제안한다. 일반 글
-        # 모드는 구두점을 허용하므로 둘 다 하지 않는다.
+        # 자막 모드 구두점 규칙(사용자 지정 2026-08-02). 일반 글 모드는 구두점을
+        # 그대로 두므로 하나도 적용하지 않는다. 순서가 중요하다 — 말줄임표를 먼저
+        # 온점 세 개로 통일해야 그 뒤의 마침표 규칙이 '...'을 문장 종결 마침표로
+        # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
+        # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
         if doc_type == "subtitle":
             corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text)
             applied_log.extend(f"[{e.index}] {m}" for m in bracket_log)
+            corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
+            applied_log.extend(f"[{e.index}] {m}" for m in ellipsis_log)
+            corrected_text, internal_log = correct_subtitle_internal_period(corrected_text)
+            applied_log.extend(f"[{e.index}] {m}" for m in internal_log)
             corrected_text, period_log = correct_subtitle_final_period(corrected_text)
             applied_log.extend(f"[{e.index}] {m}" for m in period_log)
 
@@ -2424,8 +2445,6 @@ def correct_entries(
             check_ambiguous_particle(e.index, corrected_text),
             check_spacing(e.index, corrected_text),
         ]
-        if doc_type == "subtitle":
-            checks.append(check_subtitle_internal_period(e.index, corrected_text))
         for f in checks:
             if not f:
                 continue

@@ -120,11 +120,12 @@ def test_e_subtitle_removes_final_period():
     assert not any(f.suggested_fix and f.suggested_fix.endswith(".") for f in flags)
 
 
-def test_e_subtitle_internal_period_to_comma_flag():
-    # 한 줄에 두 문장: 끝 마침표는 자동 제거, 문장 사이 마침표는 쉼표로 바꾸자고 플래그.
+def test_e_subtitle_internal_period_becomes_comma():
+    # 한 줄에 두 문장: 문장 사이 마침표는 쉼표로 자동 대체, 끝 마침표는 자동 제거
+    # (2026-08-02 사용자 지정으로 플래그에서 자동 교정으로 승격).
     corrected, flags, _log = _run_mode_full("보여 주세요. 궁금해요.", "subtitle")
-    assert corrected[0].text == "보여 주세요. 궁금해요"  # 끝 마침표만 제거
-    assert any(f.suggested_fix == "보여 주세요, 궁금해요" for f in flags)
+    assert corrected[0].text == "보여 주세요, 궁금해요"
+    assert not any("쉼표" in f.reason for f in flags)
 
 
 def test_e_prose_keeps_periods():
@@ -247,11 +248,10 @@ def test_interjection_vocative_comma():
 
 
 def test_e_subtitle_removes_final_period_every_line():
-    # 여러 줄 자막: 각 행의 끝 마침표를 모두 자동 제거하고, 행 중간 마침표만 쉼표 플래그.
+    # 여러 줄 자막: 각 행의 끝 마침표를 모두 자동 제거한다.
     corrected, flags, _log = _run_mode_full("안녕하세요.\n반갑습니다.", "subtitle")
     assert corrected[0].text == "안녕하세요\n반갑습니다"
     assert not any("쉼표" in f.reason for f in flags)
-    # 행 중간 마침표는 여전히 플래그, 행 끝은 자동 제거
-    c2, f2, _l2 = _run_mode_full("네. 그래.\n알겠어.", "subtitle")
-    assert c2[0].text == "네. 그래\n알겠어"
-    assert any(f.suggested_fix == "네, 그래\n알겠어" for f in f2)
+    # 행 중간 마침표는 쉼표로, 행 끝은 제거 — 2026-08-02부터 둘 다 자동이다.
+    c2, _f2, _l2 = _run_mode_full("네. 그래.\n알겠어.", "subtitle")
+    assert c2[0].text == "네, 그래\n알겠어"
