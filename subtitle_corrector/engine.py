@@ -159,6 +159,44 @@ def _content_lemmas(text: str) -> list[str]:
     ]
 
 
+def _merged_particle_reading_exists(text: str, t1, t2) -> bool:
+    """t1(조사)과 뒤 음절이 실은 **하나의 조사**일 수 있는지 kiwi 후보로 확인한다.
+
+    2026-08-02 실사용: '개나리길 입구에서 봐'가 '개나리길 입구에 서 봐'로 자동
+    교정됐다. kiwi 1순위 분석이 '에'(JKB)+'서'(서다)였기 때문인데, 2순위 후보는
+    '에서'(JKB) 하나다. 둘 다 문법적으로 가능한 문장이라('입구에서 보자' /
+    '입구에 서 봐라') 어느 쪽인지는 문맥이 정한다 — 자동으로 고를 일이 아니다.
+
+    판정 근거는 kiwi 자신의 대안 분석이다(확률적 추측이 아니라 "다른 읽기가
+    존재한다"는 사실). 원문이 이미 띄어 쓰여 있으면 그 읽기 자체가 생기지 않으므로
+    이 함수는 붙어 있는 경우에만 쓴다.
+    """
+    start, end = _word_bounds(text, t1.start)
+    word = text[start:end]
+    if not word:
+        return False
+    offset = t1.start - start
+    for tokens, _score in _kiwi.analyze(word, top_n=5):
+        for token in tokens:
+            if not token.tag.startswith("J"):
+                continue
+            # 같은 자리에서 시작하면서 t1보다 길게 뻗은 조사 = 합쳐 읽은 후보
+            if token.start == offset and token.len > t1.len:
+                return True
+    return False
+
+
+def _word_bounds(text: str, pos: int) -> tuple[int, int]:
+    """pos를 포함하는 어절(공백으로 끊기는 덩어리)의 [시작, 끝)."""
+    start = pos
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    end = pos
+    while end < len(text) and not text[end].isspace():
+        end += 1
+    return start, end
+
+
 def _mechanical_respace(text: str) -> str:
     """조사·어미·접미사 결합 지점의 띄어쓰기만 정리한다 (한글 맞춤법
     제41항: 조사는 앞말에 붙여 씀 + 어미/접미사는 애초에 앞 형태소와 분리해
@@ -247,6 +285,15 @@ def _mechanical_respace(text: str) -> str:
             # 단, 조사(J*)나 서술격조사(VCP) 등에는 이 예외를 적용하지 않는다
             # (예: "오늘은날씨"→"오늘은 날씨"는 반드시 교정해야 함).
             if t1.tag == "EC" and gap_start == gap_end:
+                continue
+            # 조사 뒤에 붙어 있는 글자가 실은 그 조사의 일부일 수 있으면(에+서 =
+            # '에서') 어느 읽기가 맞는지 문맥이 정한다. 자동으로 갈라놓지 않고
+            # 원문 간격을 보존한다 — check_spacing()이 사람 확인용 제안을 남긴다.
+            if (
+                gap_start == gap_end
+                and t1.tag.startswith("J")
+                and _merged_particle_reading_exists(text, t1, t2)
+            ):
                 continue
             desired_gap = " "  # 어절이 완결된 지점 -> 새 어절은 항상 띄어씀
         elif (

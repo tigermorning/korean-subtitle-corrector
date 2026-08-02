@@ -321,3 +321,21 @@ def test_dictionary_backed_splits_still_suggested():
     assert any(f.suggested_fix == "그러면 안 됩니다" for f in flags)
     _out2, flags2 = _run("이것도 먹을수있다")
     assert any(f.suggested_fix == "이것도 먹을 수 있다" for f in flags2)
+
+
+def test_merged_particle_not_auto_split():
+    """'입구에서 봐'를 '입구에 서 봐'로 자동 교정하던 과교정(2026-08-02 보고).
+
+    kiwi 1순위 분석이 '에'(조사)+'서'(서다)였지만, 2순위 후보는 '에서'(조사
+    하나)다. 둘 다 문법적으로 가능한 문장이라 문맥이 정할 일이지 자동으로 고를
+    일이 아니다. 자동 교정이라 사람이 못 보고 지나칠 위험이 컸다.
+    """
+    out, _flags = _run("개나리길 입구에서 봐")
+    assert out == "개나리길 입구에서 봐"
+    assert _run("학교에서 만나")[0] == "학교에서 만나"
+    assert _run("너한테서 들었어")[0] == "너한테서 들었어"
+
+
+def test_particle_attachment_still_auto_corrected():
+    """조사·어미 결합 자동 교정 자체는 살아 있어야 한다(위 규칙의 회귀 가드)."""
+    assert _run("오늘은날씨가좋네요")[0] == "오늘은 날씨가 좋네요"
