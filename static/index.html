@@ -45,8 +45,8 @@
   .dialect-add button{padding:6px 14px;font-size:0.85em;background:#2d3436;color:#fff;border:none;border-radius:6px;cursor:pointer}
   .dialect-row .remove-btn{background:none;border:none;color:#c0392b;cursor:pointer;font-size:1.1em;padding:0 4px}
   /* 핵심 동선(파일 선택 -> 교정하기)을 맨 위에 두고, 대부분 기본값 그대로 쓰는
-     설정과 읽기용 설명은 접어 둔다. 접혀 있어도 지금 어떤 기준으로 교정되는지
-     알 수 있도록 요약 줄(.summary-value)에 현재 설정을 항상 표시한다. */
+     설정과 읽기용 설명은 접어 둔다. .summary-value는 접힌 패널 제목 옆에 붙는
+     보조 설명이다(설명 패널에서만 쓴다 — 옵션 패널은 제목만 둔다). */
   details.panel{border:1px solid #e3e6ea;border-radius:10px;background:#f8f9fb;margin-top:14px}
   details.panel>summary{cursor:pointer;padding:14px 18px;font-size:0.95em;font-weight:600;color:#333;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;line-height:1.3}
   details.panel>summary::-webkit-details-marker{display:none}
@@ -101,7 +101,7 @@
   </section>
 
   <details class="panel" id="optionsPanel">
-    <summary>교정 옵션 <span class="summary-value" id="optionSummary"></span></summary>
+    <summary>교정 옵션</summary>
     <div class="panel-body">
       <div class="opt-group">
         <span class="opt-label">사용 목적</span>
@@ -121,7 +121,7 @@
       <div class="opt-group opt-columns">
         <div class="wordlists">
           <label class="opt-label" for="namesInput">[선택사항] 고유명사·요리·음료 이름<span class="opt-label-sub">(한 줄에 하나씩 작성)</span></label>
-          <textarea id="namesInput" placeholder="연실&#10;덱스&#10;탄두리치킨"></textarea>
+          <textarea id="namesInput" placeholder="연실&#10;철수&#10;탄두리치킨"></textarea>
           <p class="opt-note">여기 적은 단어는 절대 잘못 쪼개지 않습니다. 문서에서 3번 이상 반복되는 단어는 적지 않아도 자동으로 인식됩니다.</p>
         </div>
 
@@ -232,7 +232,6 @@ function buildDialectRows(speakers) {
   const container = document.getElementById('dialectRows');
   if (!speakers.length) {
     container.innerHTML = '<p style="color:#999;font-size:0.85em">사투리를 지정할 화자 이름을 아래에 직접 추가하세요.</p>';
-    updateOptionSummary();
     return;
   }
   container.innerHTML = speakers.map(s => `
@@ -260,7 +259,6 @@ function buildDialectRows(speakers) {
     });
   });
 
-  updateOptionSummary();
 }
 
 function getDialectMap() {
@@ -283,36 +281,6 @@ function getDialectModes() {
   return map;
 }
 
-// 옵션 패널이 접혀 있어도 지금 어떤 기준으로 교정되는지 한 줄로 보여준다.
-// 마법사(단계별 페이지)의 '확인 단계'가 하던 역할을 이 줄이 대신하므로,
-// 기본값이 아닌 항목이 하나라도 있으면 색으로 강조해 못 보고 지나치지 않게 한다.
-function updateOptionSummary() {
-  const docType = document.querySelector('input[name="docType"]:checked');
-  const spacingMode = document.querySelector('input[name="spacingMode"]:checked');
-  const docLabel = (docType && docType.value === 'prose') ? '일반 글' : '자막';
-  const spacingLabel = (spacingMode && spacingMode.value === 'allowance') ? '허용(붙여 씀)' : '원칙(띄어 씀)';
-  const dialectCount = Object.keys(getDialectMap()).length;
-  const nameCount = document.getElementById('namesInput').value
-    .split('\n').filter(l => l.trim()).length;
-
-  const docRegion = document.getElementById('documentDialectRegion').value;
-
-  const parts = [docLabel, spacingLabel];
-  if (docRegion) parts.push(`문서 전체 ${docRegion} 사투리`);
-  if (dialectCount) parts.push(`사투리 ${dialectCount}명`);
-  if (nameCount) parts.push(`고유명사 ${nameCount}개`);
-
-  const el = document.getElementById('optionSummary');
-  el.textContent = '· ' + parts.join(' · ');
-  const changed = docLabel !== '자막' || spacingLabel !== '원칙(띄어 씀)'
-    || !!docRegion || dialectCount > 0 || nameCount > 0;
-  el.classList.toggle('changed', changed);
-}
-
-// 패널 안에서 무엇이 바뀌든(라디오·드롭다운·텍스트) 요약을 다시 그린다.
-// 화자 행은 동적으로 만들어지므로 개별 리스너 대신 패널에 위임한다.
-document.getElementById('optionsPanel').addEventListener('change', updateOptionSummary);
-document.getElementById('optionsPanel').addEventListener('input', updateOptionSummary);
 
 function renderResult(data) {
   resultEl.classList.add('show');
