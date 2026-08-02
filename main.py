@@ -16,7 +16,8 @@ from subtitle_corrector.engine import (
     normalize_spacing_mode,
     register_custom_words,
 )
-from subtitle_corrector.parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, write_srt
+from subtitle_corrector.file_io import output_suffix, parse_file, write_file
+from subtitle_corrector.parsers import parse_srt, write_srt
 from subtitle_corrector.report import read_report, write_report
 
 app = typer.Typer()
@@ -91,14 +92,7 @@ def correct(
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
 
-    ext = input_file.suffix.lower()
-    is_srt = ext == ".srt"
-    if is_srt:
-        entries = parse_srt(input_file)
-    elif ext == ".docx":
-        entries = parse_docx(input_file)
-    else:
-        entries = parse_plain_text(input_file)
+    entries = parse_file(input_file)
     spacing_mode = normalize_spacing_mode(spacing)
     if spacing_mode != spacing.strip().lower():
         typer.echo(f"알 수 없는 --spacing 값 '{spacing}' -> 원칙(principle)으로 진행합니다.")
@@ -125,14 +119,11 @@ def correct(
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
     # 텍스트와 동일하게 결과를 순수 텍스트(.txt)로 돌려준다.
-    suffix = ".srt" if is_srt else ".txt"
+    suffix = output_suffix(input_file.name)
     output = output or input_file.with_name(input_file.stem + "_corrected" + suffix)
     report_path = report or input_file.with_name(input_file.stem + "_report.csv")
 
-    if is_srt:
-        write_srt(corrected_entries, output)
-    else:
-        write_plain_text(corrected_entries, output)
+    write_file(corrected_entries, output, input_file)
     write_report(flags, report_path)
 
     typer.echo(f"교정된 자막: {output}")

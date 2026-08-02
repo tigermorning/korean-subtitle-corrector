@@ -36,6 +36,7 @@
 import difflib
 import re
 from collections import Counter
+from dataclasses import replace
 from typing import NamedTuple
 
 from kiwipiepy import Kiwi
@@ -3047,12 +3048,7 @@ def correct_entries(
         #  사례라, 확률적 추정으로 자동 수정하지 않는 것이 이 프로젝트의 정책이다.)
         if region is not None and mode == "protect":
             protected_indices.add(e.index)
-            corrected_entries.append(
-                SubtitleEntry(
-                    index=e.index, start=e.start, end=e.end,
-                    text=e.text, speaker=e.speaker,
-                )
-            )
+            corrected_entries.append(replace(e))
             continue
 
         # assist — 텍스트는 그대로 두고 표준화 파이프라인도 돌리지 않는다
@@ -3060,12 +3056,7 @@ def correct_entries(
         if region is not None and mode == "assist":
             _, dialect_flags = check_dialect(e.index, e.text, region, mode)
             flags.extend(dialect_flags)
-            corrected_entries.append(
-                SubtitleEntry(
-                    index=e.index, start=e.start, end=e.end,
-                    text=e.text, speaker=e.speaker,
-                )
-            )
+            corrected_entries.append(replace(e))
             continue
 
         # 여기부터: 사투리 미지정 화자 또는 to_standard 화자.
@@ -3097,12 +3088,10 @@ def correct_entries(
             if length_flag:
                 flags.append(length_flag)
 
-        corrected_entries.append(
-            SubtitleEntry(
-                index=e.index, start=e.start, end=e.end,
-                text=corrected_text, speaker=e.speaker,
-            )
-        )
+        # dataclasses.replace로 만들면 형식별 원문 조각(raw_prefix/raw_suffix,
+        # original_text)이 그대로 따라온다 — 필드를 하나 늘릴 때마다 여기를 고치는
+        # 실수를 막는다.
+        corrected_entries.append(replace(e, text=corrected_text))
 
     # 제49항·제50항 혼용 검사는 한 줄만 봐서는 알 수 없다(같은 용어를 다른 줄에서
     # 어떻게 썼는지 비교해야 한다). 그래서 줄 단위 파이프라인이 모두 끝나고

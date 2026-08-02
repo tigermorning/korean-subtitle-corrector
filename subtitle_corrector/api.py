@@ -13,6 +13,7 @@ from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from . import store
+from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS
 from .engine import (
     SUBTITLE_MAX_CPS,
@@ -27,7 +28,7 @@ from .parsers import parse_docx, parse_plain_text, parse_srt, write_plain_text, 
 app = FastAPI(title="한국어 자막 교정 API")
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-_ALLOWED_EXTENSIONS = {".srt", ".txt", ".docx"}
+_ALLOWED_EXTENSIONS = set(SUPPORTED_EXTENSIONS)
 # 인증도 업로드 크기 제한도 없으면, 큰 파일 하나가 교정 엔진의 토큰 단위
 # 실시간 사전 API 호출(표준국어대사전/우리말샘/kornorms)을 통해 공유 API 키
 # 쿼터 자체를 고갈시킬 수 있다(§25 보안 검토, 2026-07-17) — 단순 메모리 DoS
@@ -64,7 +65,10 @@ def correct_subtitle(
     # 자동으로 스레드풀에서 돌려서 이 문제를 피한다.
     ext = Path(file.filename).suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(400, ".srt, .txt, .docx 파일만 지원합니다.")
+        raise HTTPException(
+            400,
+            "지원하지 않는 형식입니다. 지원 형식: " + ", ".join(sorted(_ALLOWED_EXTENSIONS)),
+        )
 
     # 번역가가 이 파일에 나오는 고유명사·요리/음료 이름을 미리 알려주면,
     # kiwi가 이후 이 단어를 절대 잘못 쪼개지 않는다(engine.register_custom_words).
@@ -84,12 +88,7 @@ def correct_subtitle(
         in_path = Path(tmp) / f"input{ext}"
         in_path.write_bytes(raw)
 
-        if ext == ".srt":
-            entries = parse_srt(in_path)
-        elif ext == ".docx":
-            entries = parse_docx(in_path)
-        else:
-            entries = parse_plain_text(in_path)
+        entries = parse_file(in_path)
 
         # dialect_map 파싱: JSON 문자열 → dict
         parsed_dialect_map: dict[str, str] = {}
@@ -157,12 +156,8 @@ def correct_subtitle(
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
         # 일반 텍스트와 동일하게 결과를 순수 텍스트로 돌려준다.
-        out_path = Path(tmp) / "output.txt"
-        if ext == ".srt":
-            out_path = Path(tmp) / "output.srt"
-            write_srt(corrected_entries, out_path)
-        else:
-            write_plain_text(corrected_entries, out_path)
+        out_path = Path(tmp) / f"output{output_suffix(file.filename)}"
+        write_file(corrected_entries, out_path, in_path)
         corrected_text = out_path.read_text(encoding="utf-8")
 
         if ext == ".docx":
@@ -209,7 +204,10 @@ def get_speakers(file: UploadFile):
     """
     ext = Path(file.filename).suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(400, ".srt, .txt, .docx 파일만 지원합니다.")
+        raise HTTPException(
+            400,
+            "지원하지 않는 형식입니다. 지원 형식: " + ", ".join(sorted(_ALLOWED_EXTENSIONS)),
+        )
 
     raw = file.file.read(_MAX_UPLOAD_BYTES + 1)
     if len(raw) > _MAX_UPLOAD_BYTES:
@@ -218,12 +216,7 @@ def get_speakers(file: UploadFile):
     with tempfile.TemporaryDirectory() as tmp:
         in_path = Path(tmp) / f"input{ext}"
         in_path.write_bytes(raw)
-        if ext == ".srt":
-            entries = parse_srt(in_path)
-        elif ext == ".docx":
-            entries = parse_docx(in_path)
-        else:
-            entries = parse_plain_text(in_path)
+        entries = parse_file(in_path)
 
     speakers = sorted({e.speaker for e in entries if e.speaker})
     return {"speakers": speakers}

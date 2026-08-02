@@ -20,6 +20,29 @@ class SubtitleEntry:
     end: str
     text: str
     speaker: str | None = field(default=None, repr=False)
+    # 자막 형식마다 대사 앞뒤에 우리가 다루지 않는 것들이 붙는다(ASS의 스타일
+    # 필드, SAMI의 태그, TTML의 속성, VTT의 큐 설정). 그 조각을 원문 그대로 들고
+    # 있다가 저장할 때 되돌린다 — 이해하지 못하는 정보를 잃지 않기 위해서다.
+    raw_prefix: str | None = field(default=None, repr=False)
+    raw_suffix: str | None = field(default=None, repr=False)
+    # 교정 전 원문. 저장할 때 원본 파일에서 이 대사를 찾아 바꾸는 데 쓴다.
+    original_text: str | None = field(default=None, repr=False)
+
+
+def _extract_speaker(first_line: str) -> str | None:
+    """SDH 브래킷에서 화자 이름을 뽑는다 ([민수], [민수/상황] 등).
+
+    "[문 여는 소리]"처럼 브래킷만 있고 뒤에 대사가 없는 줄은 효과음·지문이므로
+    화자로 잡지 않는다(그렇지 않으면 효과음이 사투리 설정 목록에 대거 섞여 온다).
+    브래킷 뒤에 실제 대사가 이어질 때만 화자로 본다. SRT 외 형식(formats.py)도
+    같은 규칙을 써야 하므로 함수로 분리했다.
+    """
+    bracket_match = _SPEAKER_BRACKET_RE.match(first_line)
+    if not bracket_match:
+        return None
+    close_idx = first_line.find("]")
+    remainder = first_line[close_idx + 1 :].strip() if close_idx != -1 else ""
+    return bracket_match.group(1).strip() if remainder else None
 
 
 def parse_srt(path: Path) -> list[SubtitleEntry]:
@@ -37,14 +60,7 @@ def parse_srt(path: Path) -> list[SubtitleEntry]:
         # 단, "[문 여는 소리]"처럼 브래킷만 있고 뒤에 대사가 없는 줄은 효과음·
         # 지문이므로 화자로 잡지 않는다(그렇지 않으면 효과음이 사투리 설정
         # 목록에 대거 섞여 들어온다). 브래킷 뒤에 실제 대사가 이어질 때만 화자.
-        speaker = None
-        first_line = lines[2].strip() if len(lines) > 2 else ""
-        bracket_match = _SPEAKER_BRACKET_RE.match(first_line)
-        if bracket_match:
-            close_idx = first_line.find("]")
-            remainder = first_line[close_idx + 1 :].strip() if close_idx != -1 else ""
-            if remainder:
-                speaker = bracket_match.group(1).strip()
+        speaker = _extract_speaker(lines[2].strip() if len(lines) > 2 else "")
         entries.append(
             SubtitleEntry(
                 index=int(lines[0].strip()),
@@ -52,6 +68,7 @@ def parse_srt(path: Path) -> list[SubtitleEntry]:
                 end=match.group(2),
                 text=text,
                 speaker=speaker,
+                original_text=text,
             )
         )
     return entries
@@ -70,7 +87,10 @@ def parse_plain_text(path: Path) -> list[SubtitleEntry]:
     빈 값으로 채운다. 빈 줄도 그대로 하나의 항목으로 유지해서, 원본의 줄
     구성(문단 구분 등)을 그대로 보존한다."""
     lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
-    return [SubtitleEntry(index=i, start="", end="", text=line, speaker=None) for i, line in enumerate(lines)]
+    return [
+        SubtitleEntry(index=i, start="", end="", text=line, speaker=None, original_text=line)
+        for i, line in enumerate(lines)
+    ]
 
 
 def write_plain_text(entries: list[SubtitleEntry], path: Path) -> None:
@@ -87,4 +107,7 @@ def parse_docx(path: Path) -> list[SubtitleEntry]:
     from docx import Document
 
     doc = Document(str(path))
-    return [SubtitleEntry(index=i, start="", end="", text=p.text, speaker=None) for i, p in enumerate(doc.paragraphs)]
+    return [
+        SubtitleEntry(index=i, start="", end="", text=p.text, speaker=None, original_text=p.text)
+        for i, p in enumerate(doc.paragraphs)
+    ]
