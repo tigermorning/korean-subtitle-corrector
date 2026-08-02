@@ -302,6 +302,18 @@ function getDialectModes() {
 }
 
 
+// 자막 편집 표지는 자막 모드에만 쓰인다. 일반 글을 고르면 화면에서 감춘다 —
+// 보이기만 하고 적용되지 않는 설정은 "적었는데 왜 안 되지"를 만든다.
+function updateMarkerVisibility() {
+  const checked = document.querySelector('input[name="docType"]:checked');
+  document.getElementById('markerOptions').hidden = !!checked && checked.value !== 'subtitle';
+}
+
+document.querySelectorAll('input[name="docType"]').forEach(radio => {
+  radio.addEventListener('change', updateMarkerVisibility);
+});
+updateMarkerVisibility();
+
 function renderResult(data) {
   resultEl.classList.add('show');
   document.getElementById('correctedSrt').textContent = data.corrected_srt;
