@@ -52,6 +52,8 @@ def correct_subtitle(
     screen_text_marker: str = Form(""),
     line_break_marker: str = Form(""),
     position_marker: str = Form(""),
+    speaker_bracket: str = Form(""),
+    tone_bracket: str = Form(""),
 ):
     # 사전 API를 순차적으로 여러 번 호출하는 무거운 동기(blocking) 작업이라,
     # async def로 두면 이 요청이 끝날 때까지 이벤트 루프 전체가 막혀 다른
@@ -142,7 +144,8 @@ def correct_subtitle(
             # 자막 편집 표지. 업계 공통 규칙이 없어 값을 고정하지 않고 그때그때
             # 받는다. 자막 모드에서만 쓰이며, 지정된 표지는 교정에서 제외된다.
             markers=normalize_subtitle_markers(
-                screen_text_marker, line_break_marker, position_marker
+                screen_text_marker, line_break_marker, position_marker,
+                speaker_bracket, tone_bracket,
             ),
         )
 

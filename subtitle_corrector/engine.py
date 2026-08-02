@@ -276,6 +276,27 @@ def _is_punct_token(tok) -> bool:
     return tok.tag.startswith(_PUNCT_TAG_PREFIXES)
 
 
+# 간접인용 축약에서 '그래' 앞에 오는 어미. "말라 그래"는 "말라고 해"의 준말이라
+# '그래'가 감탄사가 아니라 인용을 받는 서술어다(2026-08-02 실사용에서 발견).
+# kiwi는 문장부호가 붙으면("말라 그래.") 이 '그래'를 IC로 태깅해, 감탄사 규칙이
+# "말라, 그래"라는 엉뚱한 쉼표를 넣었다.
+_QUOTED_COMMAND_ENDINGS = {"라", "으라", "자", "냐", "마", "래"}
+
+
+def _is_quoted_command(tokens, ic_pos: int) -> bool:
+    """tokens[ic_pos]의 '그래'가 감탄사가 아니라 간접인용 축약의 서술어인지.
+
+    바로 앞이 인용 축약에 쓰이는 어미(-라/-자/-냐 등)일 때만 참이다. 동의의
+    '그래'("밥 먹자, 그래")와 형태가 겹치는 경계 사례가 남지만, 애매하면 자동
+    수정하지 않는다는 원칙에 따라 쉼표를 넣지 않는 쪽을 택한다 — 안 넣어서 생기는
+    손해(사람이 직접 넣음)가 잘못 넣어서 생기는 손해(대사 뜻이 바뀜)보다 작다.
+    """
+    if tokens[ic_pos].form not in ("그래", "그러래"):
+        return False
+    prev = tokens[ic_pos - 1]
+    return prev.tag.startswith("E") and prev.form in _QUOTED_COMMAND_ENDINGS
+
+
 def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     """감탄사(IC)와 호격어(체언+호격조사 JKV)는 문장에서 쉼표로 구분한다.
     문맥과 무관하게 규정상 정답이 정해져 있어 자동으로 쉼표를 넣는다:
@@ -316,7 +337,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     if last >= 1:
         lt = tokens[last]
         # 2) 문장 맨 끝 감탄사(내용어 뒤) → 감탄사 앞에 쉼표
-        if lt.tag == "IC" and is_content(tokens[last - 1]):
+        if lt.tag == "IC" and is_content(tokens[last - 1]) and not _is_quoted_command(tokens, last):
             j = lt.start
             while j > 0 and text[j - 1] == " ":
                 j -= 1
@@ -770,19 +791,24 @@ def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
     return "\n".join(new_lines), ["문장 끝 마침표 제거 (자막)"]
 
 
-_BRACKET_CLOSE_RESPACE_RE = re.compile(r"\]\s*(?=\S)")
+def correct_subtitle_bracket_spacing(
+    text: str, closers: tuple[str, ...] = ("]",)
+) -> tuple[str, list[str]]:
+    """자막 관례상 화자명·어조 표시 뒤에는 항상 한 칸을 띄운다.
 
-
-def correct_subtitle_bracket_spacing(text: str) -> tuple[str, list[str]]:
-    """자막 관례상 화자·지문 표시 '[...]' 뒤에는 항상 한 칸을 띄운다. 닫는
-    ']' 바로 뒤에 대사가 붙어 있거나 공백이 여러 칸이면 정확히 한 칸으로
-    맞춘다(정답이 하나뿐이라 자동 교정). 브래킷만 있고 뒤에 대사가 없는 줄
+    닫는 부호 바로 뒤에 대사가 붙어 있거나 공백이 여러 칸이면 정확히 한 칸으로
+    맞춘다(정답이 하나뿐이라 자동 교정). 표시만 있고 뒤에 대사가 없는 줄
     (효과음 등)은 건드리지 않는다.
 
+    closers는 설정된 화자명·어조 부호의 닫는 쪽이다. OTT마다 대괄호와 괄호가
+    갈려서 고정하지 않는다(기본값은 지금까지의 동작인 대괄호).
+
     반환값: (교정된 텍스트, 적용 로그)."""
-    corrected = _BRACKET_CLOSE_RESPACE_RE.sub("] ", text)
+    corrected = text
+    for closer in closers:
+        corrected = re.sub(re.escape(closer) + r"\s*(?=\S)", closer + " ", corrected)
     if corrected != text:
-        return corrected, ["'[ ]' 뒤 한 칸 띄움 (자막)"]
+        return corrected, ["화자명·어조 표시 뒤 한 칸 띄움 (자막)"]
     return text, []
 
 
@@ -2264,30 +2290,63 @@ _MARKER_PAIRS = {
 }
 
 
+# 화자명·어조 표기에 쓰는 부호. OTT·스튜디오마다 대괄호와 괄호가 갈려서 이것도
+# 설정으로 받는다(사용자 지정 2026-08-02). 값을 안 주면 대괄호를 쓴다 — 지금까지의
+# 동작이 대괄호 기준이었으므로 기본값을 바꾸면 기존 사용자의 결과가 달라진다.
+_DEFAULT_TAG_BRACKET = "[]"
+
+
 class SubtitleMarkers(NamedTuple):
     screen_text: str = ""
     line_break: str = ""
     position: str = ""
+    speaker: str = _DEFAULT_TAG_BRACKET
+    tone: str = _DEFAULT_TAG_BRACKET
 
     @property
     def any_set(self) -> bool:
         return bool(self.screen_text or self.line_break or self.position)
+
+    @property
+    def tag_closers(self) -> tuple[str, ...]:
+        """화자명·어조 표기의 닫는 부호(뒤에 한 칸을 띄워야 하는 자리)."""
+        closers = [pair[-1] for pair in (self.speaker, self.tone) if pair]
+        return tuple(dict.fromkeys(closers))  # 중복 제거, 순서 유지
+
+
+def _normalize_bracket_pair(value: str | None) -> str:
+    """'[', '[]', '(' 처럼 들어온 값을 '여는+닫는' 두 글자로 맞춘다.
+
+    한 글자만 주면 짝을 찾아 채우고(_MARKER_PAIRS), 짝이 없는 문자면 미설정으로
+    본다 — 화자명 표기는 여닫는 짝이 있어야 어디까지가 화자명인지 정해진다.
+    """
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if len(value) >= 2:
+        return value[0] + value[-1]
+    closing = _MARKER_PAIRS.get(value)
+    return value + closing if closing else ""
 
 
 def normalize_subtitle_markers(
     screen_text: str | None = None,
     line_break: str | None = None,
     position: str | None = None,
+    speaker: str | None = None,
+    tone: str | None = None,
 ) -> SubtitleMarkers:
     """설정에서 받은 표지 문자열을 정규화한다.
 
     공백만 있는 값은 미설정으로 본다 — 표지가 공백이면 문서 전체가 보호 구간이
-    되어 교정이 통째로 멈춘다.
+    되어 교정이 통째로 멈춘다. 화자명·어조 부호는 미설정이면 기본값(대괄호)이다.
     """
     return SubtitleMarkers(
         (screen_text or "").strip(),
         (line_break or "").strip(),
         (position or "").strip(),
+        _normalize_bracket_pair(speaker) or _DEFAULT_TAG_BRACKET,
+        _normalize_bracket_pair(tone) or _DEFAULT_TAG_BRACKET,
     )
 
 
@@ -2352,7 +2411,7 @@ def _correct_line_with_markers(
     """
     markers = markers or SubtitleMarkers()
     if doc_type != "subtitle" or not markers.any_set:
-        return _correct_line(index, text, doc_type, spacing_mode)
+        return _correct_line(index, text, doc_type, spacing_mode, markers.tag_closers)
 
     # 1. 보호 조각(위치 표지 / 화면자막 구간)과 교정 대상 조각으로 나눈다.
     pieces: list[tuple[str, bool]] = []  # (조각, 보호 여부)
@@ -2379,7 +2438,9 @@ def _correct_line_with_markers(
             out_parts.append(piece)
             continue
         target = piece.replace(markers.line_break, "\n") if markers.line_break else piece
-        fixed, piece_flags, piece_applied = _correct_line(index, target, doc_type, spacing_mode)
+        fixed, piece_flags, piece_applied = _correct_line(
+            index, target, doc_type, spacing_mode, markers.tag_closers
+        )
         if markers.line_break:
             fixed = fixed.replace("\n", markers.line_break)
             piece_flags = [
@@ -2415,7 +2476,11 @@ def _correct_line_with_markers(
 
 
 def _correct_line(
-    index: int, text: str, doc_type: str, spacing_mode: str
+    index: int,
+    text: str,
+    doc_type: str,
+    spacing_mode: str,
+    tag_closers: tuple[str, ...] = ("]",),
 ) -> tuple[str, list[FlagItem], list[str]]:
     """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
 
@@ -2500,7 +2565,9 @@ def _correct_line(
     # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
     # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
     if doc_type == "subtitle":
-        corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text)
+        corrected_text, bracket_log = correct_subtitle_bracket_spacing(
+            corrected_text, tag_closers
+        )
         applied.extend(bracket_log)
         corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text)
         applied.extend(ellipsis_log)

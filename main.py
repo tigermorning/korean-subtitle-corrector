@@ -66,6 +66,16 @@ def correct(
         "--position-marker",
         help=r"자막 모드 전용. 자막 위치 표기(예: {\an8}). 제어 코드라 통째로 보호합니다.",
     ),
+    speaker_bracket: str = typer.Option(
+        "",
+        "--speaker-bracket",
+        help="자막 모드 전용. 화자명 표기 부호(예: [] 또는 ()). 닫는 부호 뒤에 한 칸을 띄웁니다. 기본값은 대괄호.",
+    ),
+    tone_bracket: str = typer.Option(
+        "",
+        "--tone-bracket",
+        help="자막 모드 전용. 어조·지문 표기 부호(예: [] 또는 ()). 기본값은 대괄호.",
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -95,7 +105,8 @@ def correct(
         dialect_region=region,
         dialect_mode=dialect_mode if region else None,
         markers=normalize_subtitle_markers(
-            screen_text_marker, line_break_marker, position_marker
+            screen_text_marker, line_break_marker, position_marker,
+            speaker_bracket, tone_bracket,
         ),
     )
 

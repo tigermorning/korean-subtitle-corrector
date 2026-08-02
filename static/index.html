@@ -129,6 +129,16 @@
           <input type="text" id="positionMarker" placeholder="{\an8}" style="width:120px">
           <span class="opt-note" style="margin:0">제어 코드라 통째로 보호합니다.</span>
         </div>
+        <div class="dialect-row">
+          <label style="min-width:150px">화자명 표기</label>
+          <input type="text" id="speakerBracket" placeholder="[]" style="width:120px">
+          <span class="opt-note" style="margin:0">닫는 부호 뒤에 한 칸을 띄웁니다. 비워 두면 대괄호를 씁니다.</span>
+        </div>
+        <div class="dialect-row">
+          <label style="min-width:150px">어조·지문 표기</label>
+          <input type="text" id="toneBracket" placeholder="()" style="width:120px">
+          <span class="opt-note" style="margin:0">OTT마다 대괄호와 괄호가 갈립니다. 쓰시는 부호를 적어 주세요.</span>
+        </div>
         <p class="opt-note">업계 공통 규칙이 없어 작업자·편집기마다 다릅니다. 쓰시는 표기를 그때그때 적어 주세요. 비워 두면 그 표지는 쓰지 않는 것으로 봅니다.</p>
       </div>
 
@@ -370,6 +380,8 @@ submitBtn.addEventListener('click', async () => {
       form.append('screen_text_marker', document.getElementById('screenTextMarker').value);
       form.append('line_break_marker', document.getElementById('lineBreakMarker').value);
       form.append('position_marker', document.getElementById('positionMarker').value);
+      form.append('speaker_bracket', document.getElementById('speakerBracket').value);
+      form.append('tone_bracket', document.getElementById('toneBracket').value);
     }
     const spacingMode = document.querySelector('input[name="spacingMode"]:checked');
     form.append('spacing_mode', spacingMode ? spacingMode.value : 'principle');

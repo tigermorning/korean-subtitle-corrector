@@ -36,7 +36,9 @@ class TestNormalize:
 
     def test_values_are_trimmed(self):
         markers = normalize_subtitle_markers(' " ', " | ", " {\\an8} ")
-        assert markers == ('"', "|", "{\\an8}")
+        assert (markers.screen_text, markers.line_break, markers.position) == (
+            '"', "|", "{\\an8}",
+        )
 
 
 class TestScreenTextMarker:
@@ -102,3 +104,61 @@ class TestScope:
         for f in flags:
             if f.suggested_fix:
                 assert '"SALE"' in f.suggested_fix
+
+
+class TestSpeakerToneBrackets:
+    """화자명·어조 표기 부호. OTT마다 대괄호와 괄호가 갈려 설정으로 받는다."""
+
+    def test_default_is_square_bracket(self):
+        """기본값을 바꾸면 기존 사용자의 결과가 달라진다 — 대괄호를 유지한다."""
+        out, _flags, _log = _run("[민수]안녕하세요")
+        assert out == "[민수] 안녕하세요"
+
+    def test_configured_paren_gets_the_space(self):
+        markers = normalize_subtitle_markers(speaker="(")
+        out, _flags, _log = _run("(민수)안녕하세요", markers)
+        assert out == "(민수) 안녕하세요"
+
+    def test_unconfigured_bracket_is_left_alone(self):
+        """대괄호만 쓰는 원고에서 괄호까지 건드리면 정당한 표기를 망친다."""
+        out, _flags, _log = _run("(민수)안녕하세요")
+        assert out == "(민수)안녕하세요"
+
+    def test_single_char_input_infers_the_pair(self):
+        assert normalize_subtitle_markers(speaker="(").speaker == "()"
+        assert normalize_subtitle_markers(speaker="()").speaker == "()"
+
+    def test_unpaired_char_falls_back_to_default(self):
+        """짝이 없는 문자는 어디까지가 화자명인지 정할 수 없다."""
+        assert normalize_subtitle_markers(speaker="@").speaker == "[]"
+
+    def test_tone_bracket_also_applies(self):
+        markers = normalize_subtitle_markers(tone="(")
+        out, _flags, _log = _run("(웃으며)좋아", markers)
+        assert out == "(웃으며) 좋아"
+
+    def test_both_brackets_can_differ(self):
+        markers = normalize_subtitle_markers(speaker="[", tone="(")
+        assert markers.tag_closers == ("]", ")")
+
+
+class TestQuotedCommandComma:
+    """'말라 그래'는 '말라고 해'의 준말이라 '그래'가 감탄사가 아니다.
+
+    2026-08-02 실사용에서 '지랄하시지 말라 그래.'가 '지랄하시지 말라, 그래'로
+    잘못 교정된 것을 사용자가 발견해 고쳤다.
+    """
+
+    def test_quoted_command_gets_no_comma(self):
+        out, _flags, _log = _run("지랄하시지 말라 그래.")
+        assert out == "지랄하시지 말라 그래"
+
+    def test_other_quoted_endings(self):
+        assert _run("오지 말라 그래")[0] == "오지 말라 그래"
+        assert _run("먹자 그래.")[0] == "먹자 그래"
+
+    def test_real_interjection_still_gets_comma(self):
+        """감탄사 규칙 자체는 그대로 살아 있어야 한다(회귀 확인)."""
+        assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"
+        assert _run("싫다면 뭐.")[0] == "싫다면, 뭐"
+        assert _run("먹어 준희야.")[0] == "먹어, 준희야"
