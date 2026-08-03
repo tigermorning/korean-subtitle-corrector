@@ -136,3 +136,62 @@ def check_term_spacing_consistency(
                 )
             )
     return flags
+
+
+def check_aux_verb_consistency(
+    entries: list[SubtitleEntry], skip_indices: set[int] | None = None
+) -> list[FlagItem]:
+    """보조 용언 띄어쓰기(제47항) **혼용**을 문서 전체 단위로 잡아 플래그한다.
+
+    제47항은 "띄어 씀을 원칙으로 하되 붙여 씀도 허용"하므로 둘 다 맞는 표기다. 그래서
+    기본값은 원문 유지이고 자동으로 통일하지 않는다(2026-08-04 사용자 결정) — 납품처마다
+    요구가 달라 미리 정할 수 없다. 다만 **한 문서에 두 표기가 섞이면 그건 선택이 아니라
+    오류**이므로, 혼용 사실만 결정론적으로 확인해 사람에게 넘긴다.
+
+    판정: 같은 (본용언 어간 + 보조 용언) 짝이 어떤 줄에서는 붙어 있고 다른 줄에서는 띄어
+    있는지 본다. 통일 후보는 문서에서 더 자주 쓴 쪽으로 제안하고, 횟수가 같으면 원칙(띄어
+    씀)을 제안한다 — 제47항의 기본이 원칙이기 때문이다.
+    """
+    skip_indices = skip_indices or set()
+    joined: Counter = Counter()
+    spaced: Counter = Counter()
+    lines: dict[str, list[SubtitleEntry]] = {}
+
+    for entry in entries:
+        if entry.index in skip_indices:
+            continue
+        tokens = _kiwi.tokenize(entry.text)
+        for i in range(1, len(tokens)):
+            aux, stem = tokens[i], tokens[i - 1]
+            if aux.tag != "VX":
+                continue
+            gap = entry.text[stem.start + stem.len : aux.start]
+            if gap not in ("", " "):
+                continue
+            key = f"{stem.form}+{aux.form}"
+            (joined if gap == "" else spaced)[key] += 1
+            lines.setdefault(key, []).append(entry)
+
+    flags = []
+    for key in sorted(set(joined) & set(spaced)):
+        stem, _, aux = key.partition("+")
+        if joined[key] > spaced[key]:
+            preferred = "붙여 쓴 쪽이 더 많습니다"
+        elif spaced[key] > joined[key]:
+            preferred = "띄어 쓴 쪽이 더 많습니다"
+        else:
+            preferred = "횟수가 같아 원칙(띄어 씀)을 권합니다"
+        flags.append(
+            FlagItem(
+                line_index=lines[key][0].index,
+                original_text=lines[key][0].text,
+                reason=(
+                    f"보조 용언 '{aux}' 띄어쓰기가 문서 안에서 섞였습니다 — "
+                    f"붙여 쓴 곳 {joined[key]}군데, 띄어 쓴 곳 {spaced[key]}군데. "
+                    f"제47항은 둘 다 인정하지만 한 문서에서는 하나로 통일해야 합니다"
+                    f"({preferred}). 위쪽 '띄어쓰기 기준'에서 한쪽을 고르면 문서 전체를"
+                    " 그 기준으로 통일합니다."
+                ),
+            )
+        )
+    return flags

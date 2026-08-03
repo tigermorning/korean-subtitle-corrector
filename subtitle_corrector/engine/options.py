@@ -44,15 +44,22 @@ def normalize_punctuation_style(ellipsis_style=None, quote_style=None) -> Punctu
 # 그래서 이 값은 문서 단위로 한 번만 정하고 모든 줄에 같은 값을 적용한다.
 #   principle — 원칙: 붙여 쓴 것을 띄어 쓴다(기본값, 기존 동작)
 #   allowance — 허용: 띄어 쓴 것을 붙여 쓴다
-SPACING_MODES = ("principle", "allowance")
+# **기본값을 "keep"(원문 유지)으로 바꿨다(2026-08-04).** 제47항은 띄어 씀을 원칙으로 하되
+# 붙여 씀도 허용하므로 **둘 다 맞는 표기**다. 전에는 기본이 원칙 통일이어서, 번역가가 붙여
+# 쓴 표기가 문서 전체에서 자동으로 띄어졌다(실사용 6강 자막: '틀어주면'->'틀어 주면',
+# '도와달라고'->'도와 달라고', '받아줄까'->'받아 줄까'). 어느 기준을 쓰는지는 납품처마다
+# 다르므로 미리 정할 수 없다 — 말줄임표·따옴표와 같은 성격이다(사용자 지정).
+# 혼용 자체는 여전히 교정 대상이라 check_aux_verb_consistency()가 플래그로 알린다.
+SPACING_MODES = ("keep", "principle", "allowance")
 
 
 def normalize_spacing_mode(mode: str | None) -> str:
     """띄어쓰기 기준을 SPACING_MODES 중 하나로 정규화한다.
 
-    모르는 값·빈 값은 원칙(principle)으로 떨어뜨린다 — 제47항의 기본이 원칙이고,
-    입력이 잘못됐을 때 규범 기본값이 아닌 쪽으로 문서 전체를 바꿔 버리면
-    사용자가 의도하지 않은 표기가 조용히 통일되기 때문이다.
+    모르는 값·빈 값은 원칙(principle)으로 떨어뜨린다 — 화면 2단계의 '띄어쓰기 기준'이
+    원칙으로 미리 선택돼 있으므로 값이 안 왔을 때도 같은 결과가 나와야 한다
+    (2026-08-04 사용자 지정: "사용자가 2단계에서 지정한 대로 해야 한다").
+    'keep'(원문 유지)은 사용자가 명시적으로 고를 때만 적용한다.
     """
     value = str(mode or "").strip().lower()
     return value if value in SPACING_MODES else "principle"

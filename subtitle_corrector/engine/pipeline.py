@@ -17,6 +17,7 @@ from .markers import _is_marker_only_line, _screen_text_spans, _split_by_marker
 from .spacing import (
     _aux_verb_spacing,
     check_ambiguous_compound,
+    check_compound_merge_candidate,
     correct_compound_spacing,
     correct_particle_spacing,
 )
@@ -51,7 +52,7 @@ from .replacements import (
 )
 from .spelling import check_purified_terms, check_spelling
 from .dialect import check_dialect
-from .consistency import check_term_spacing_consistency
+from .consistency import check_aux_verb_consistency, check_term_spacing_consistency
 from .spacing_guards import check_spacing
 from .edit_guard import verify_edit
 
@@ -296,6 +297,7 @@ def _correct_line(
         check_purified_terms(index, corrected_text),
         check_colloquial_loanword(index, corrected_text),
         check_ambiguous_compound(index, corrected_text),
+        check_compound_merge_candidate(index, corrected_text),
         check_ambiguous_particle(index, corrected_text),
         check_contracted_form(index, corrected_text),
         check_joined_interjection_spacing(index, corrected_text),
@@ -450,6 +452,7 @@ def correct_entries(
     # 어떻게 썼는지 비교해야 한다). 그래서 줄 단위 파이프라인이 모두 끝나고
     # 교정이 확정된 뒤에 문서 전체를 한 번 훑는다.
     flags.extend(check_term_spacing_consistency(corrected_entries, protected_indices))
+    flags.extend(check_aux_verb_consistency(corrected_entries, protected_indices))
 
     # 사투리 자동 감지는 넣지 않는다(2026-08-02 재확인). 화자 단위로 모아 봐도
     # 현재 표지 사전으로는 표준어 화자와 갈리지 않는다 — 실측에서 전라도 화자의

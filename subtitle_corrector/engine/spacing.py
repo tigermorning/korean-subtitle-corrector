@@ -277,7 +277,8 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     # 합성어 병합만 빠져 있었다.
     brackets = _bracket_spans(text)
 
-    fixes = []  # (start, end, replacement, description)
+    fixes = []  # (start, end, replacement, description) — 지금은 비어 있다(아래 주석 참고)
+    candidates = []  # (start, end, 붙임형, 원문) — 사람에게 물을 후보
     for start, boundary, end in _compound_candidate_spans(text):
         if _inside_any_span(start, brackets) or _inside_any_span(boundary, brackets):
             continue
@@ -299,14 +300,54 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
             # 아무 처리도 하지 않는다.
             if definition_markers(combined):
                 continue
-            fixes.append((start, end, combined, f"{original} -> {combined}"))
+            # **자동으로 붙이지 않는다(2026-08-04 사용자 결정).** 붙임형이 표제어라는 것은
+            # "붙여 쓸 수도 있다"는 근거이지 원문이 띄어 쓴 것이 틀렸다는 근거가 아니다.
+            # 실사용에서 뜻이 바뀌는 사고가 반복됐다 — '남의 집 개'->'집개'(집에서 기르는
+            # 개), '따지러 온 다음 날'->'다음날'(정해지지 않은 미래의 어떤 날),
+            # '예산 안에서'->'예산안'. 사전은 이 넷과 '노천 카페'->'노천카페'(타당)를
+            # 가르지 못한다(모두 표제어·표지 없음). 그래서 후보만 모아
+            # check_compound_merge_candidate()가 확인 항목으로 낸다.
+            candidates.append((start, end, combined, original))
 
     corrected = text
     applied = []
     for start, end, replacement, desc in sorted(fixes, key=lambda f: f[0], reverse=True):
         corrected = corrected[:start] + replacement + corrected[end:]
         applied.append(desc)
+    _MERGE_CANDIDATES[text] = candidates
     return corrected, list(reversed(applied))
+
+
+# 마지막으로 계산한 병합 후보. correct_compound_spacing()은 (텍스트, 로그)만 돌려주는
+# 계약이라 후보를 함께 실어 보낼 자리가 없다 — 같은 줄에 대해 곧바로 호출되는
+# check_compound_merge_candidate()가 이 값을 읽는다. 파이프라인은 한 줄씩 순서대로
+# 처리하므로 이 방식이 성립한다.
+_MERGE_CANDIDATES: dict[str, list] = {}
+
+
+def check_compound_merge_candidate(index: int, text: str) -> FlagItem | None:
+    """띄어 쓴 명사 연쇄를 붙여 쓸 후보로 확인 플래그한다('노천 카페' -> '노천카페').
+
+    자동으로 붙이지 않는 이유는 correct_compound_spacing() 안의 주석에 있다 — 사전은
+    뜻이 바뀌는 경우('집 개' -> '집개')와 타당한 경우('노천 카페' -> '노천카페')를 가르지
+    못한다. 판정은 사람이 한다.
+    """
+    candidates = _MERGE_CANDIDATES.get(text) or []
+    for _start, _end, combined, original in candidates:
+        suggested = text.replace(original, combined, 1)
+        if suggested == text:
+            continue
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"'{combined}'이 사전 표제어이므로 '{original}'을 붙여 쓸 수 있습니다. "
+                "다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 "
+                "바꾸지 않았습니다 — 문맥 확인이 필요합니다."
+            ),
+        )
+    return None
 
 
 # 위치·방향을 뜻하는 자립명사. 앞말과 띄어 써서 "그 범위의 내부/외부"를 나타내는 용법이
@@ -456,7 +497,8 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
     """한글 맞춤법 제47항: 보조 용언은 "띄어 씀을 원칙으로 하되, 붙여 씀도
     허용"한다 — 둘 다 맞는 표기다. mode가 어느 쪽으로 통일할지 정한다.
 
-      principle(기본값) — 붙여 쓴 형태를 띄어 쓴 형태로 바꾼다.
+      keep(기본값)      — 아무것도 바꾸지 않는다. 원문의 선택을 그대로 둔다.
+      principle         — 붙여 쓴 형태를 띄어 쓴 형태로 바꾼다.
       allowance         — 띄어 쓴 형태를 붙여 쓴 형태로 바꾼다.
 
     어느 쪽이든 대상 구간(패턴 1·2)은 같고 간격을 넣느냐 빼느냐만 갈린다.
@@ -474,7 +516,10 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록, 붙임 불가 구간 안내 목록)
     """
-    joining = normalize_spacing_mode(mode) == "allowance"
+    normalized = normalize_spacing_mode(mode)
+    if normalized == "keep":
+        return text, [], []  # 원문 유지가 기본 — 원칙·허용 둘 다 규범상 맞다
+    joining = normalized == "allowance"
     tokens = _kiwi.tokenize(text)
     edits = set()  # {(gap_start, gap_end, replacement)}
     blocked: list[str] = []

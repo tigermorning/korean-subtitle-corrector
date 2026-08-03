@@ -18,7 +18,8 @@ EXPECTED_CORRECTED_TEXTS = [
     "오늘은 날씨가 좋네요",
     "저는 초콜릿을 좋아해요",
     "스노우 기자가 발표했다",  # 고유명사는 자동 반영하지 않고 플래그만
-    "노천카페에서 만나자",
+    # 합성어 병합은 2026-08-04부터 자동이 아니라 확인 항목이다
+    "노천 카페에서 만나자",
     "그 일은 할 만하다",
     "그러고 나서 집에 갔다",
     "고개를 반듯이 들어라",
@@ -32,7 +33,7 @@ def test_sample_srt_full_pipeline():
     corrected, flags, applied = correct_entries(entries)
 
     assert [e.text for e in corrected] == EXPECTED_CORRECTED_TEXTS
-    assert len(applied) == 6
+    assert len(applied) == 5
     assert any("초코렛 -> 초콜릿" in a for a in applied)
     assert any("그 일은 할만하다 -> 그 일은 할 만하다" in a for a in applied)
     assert any("벙어리장갑 -> 손모아장갑" in a for a in applied)
@@ -42,4 +43,5 @@ def test_sample_srt_full_pipeline():
     # 만든 표준어를 도로 갈라놓는 제안이었다. 어절 끝 조사를 떼고 사전을 확인하도록
     # 고치면서(word_exists('손모아장갑') = True) 근거 없는 제안이 사라졌다.
     flag_line_indices = {f.line_index for f in flags}
-    assert flag_line_indices == {4, 10}
+    # 5번 줄('노천 카페에서 만나자')이 병합 후보로 새로 플래그된다(2026-08-04 정책 변경)
+    assert flag_line_indices == {4, 5, 10}

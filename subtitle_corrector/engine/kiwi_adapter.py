@@ -281,7 +281,9 @@ def _has_content_word_reading(text: str, token) -> bool:
     다르게 읽은 것이 아니라 아예 다른 분석이다.
     """
     return _has_reading(
-        text, token, ("NNG", "NNP", "NNB", "NR", "VV", "VA", "VA-I", "VV-I", "VCP", "VCN")
+        text,
+        token,
+        ("NNG", "NNP", "NNB", "NP", "NR", "VV", "VA", "VA-I", "VV-I", "VCP", "VCN"),
     )
 
 

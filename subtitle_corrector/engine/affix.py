@@ -106,6 +106,11 @@ def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
             continue  # '명사'와 '하'가 이미 떨어져 있으면 대상 아님
         if adnom.tag != "MM" and adnom.tag != "ETM":
             continue  # 관형사/관형형이 아니면(부사 등) 나누지 않는다
+        # **관형어는 어절 처음에 온다.** 어절 중간의 MM은 kiwi가 모르는 낱말을 쪼갠
+        # 결과다 — 2026-08-04 사용자 제공 자막 6강 166번에서 고유명사 '엘모'가
+        # '엘'(NNG)+'모'(MM)로 쪼개져 '엘모 인터뷰할 때'가 '엘모 인터뷰 할 때'로 갈렸다.
+        if adnom.tag == "MM" and adnom.start > 0 and not text[adnom.start - 1].isspace():
+            continue  # 관형사형 어미(ETM)는 본래 어절 안에 있으므로 MM에만 적용한다
         if text[adnom.start + adnom.len : noun.start] not in (" ", ""):
             continue  # 관형어가 이 명사 바로 앞이 아니면 수식 관계가 아님
         cuts.append(hae.start)

@@ -19,6 +19,7 @@ from subtitle_corrector.engine import (
     _aux_verb_spacing,
     check_spacing,
     check_spelling,
+    check_compound_merge_candidate,
     check_term_spacing_consistency,
     correct_always_wrong,
     correct_aux_verb_spacing,
@@ -131,10 +132,15 @@ class TestAuxVerbSpacingAllowanceMode:
         assert "만싶다" in blocked[0]
 
     def test_normalize_spacing_mode_falls_back_to_principle(self):
-        """모르는 값이 문서 전체를 허용으로 뒤집으면 안 된다."""
+        """모르는 값이 문서 전체를 허용으로 뒤집으면 안 된다.
+
+        화면 2단계의 '띄어쓰기 기준'이 원칙으로 미리 선택돼 있으므로, 값이 오지 않았을
+        때도 같은 결과가 나와야 한다(2026-08-04 사용자 지정: "사용자가 2단계에서 지정한
+        대로 해야 한다"). 'keep'(원문 유지)은 명시적으로 고를 때만 적용한다."""
         assert normalize_spacing_mode("allowance") == "allowance"
         assert normalize_spacing_mode("ALLOWANCE") == "allowance"
         assert normalize_spacing_mode("principle") == "principle"
+        assert normalize_spacing_mode("keep") == "keep"
         for bad in ("", None, "허용", "joined", "principal"):
             assert normalize_spacing_mode(bad) == "principle"
 
@@ -341,17 +347,18 @@ class TestParticleSpacing:
 class TestCompoundSpacing:
     """사전에 하나의 합성어(하이픈 표기)로 등재된 경우만 자동으로 붙인다."""
 
-    def test_notcheon_cafe(self):
-        assert correct_compound_spacing("노천 카페에 갔다") == (
-            "노천카페에 갔다",
-            ["노천 카페 -> 노천카페"],
-        )
+    def test_notcheon_cafe_is_a_candidate_not_an_auto_merge(self):
+        """2026-08-04부터 자동으로 붙이지 않는다 — 붙임형이 표제어라는 것은 "붙여 쓸 수도
+        있다"는 근거이지 원문이 틀렸다는 근거가 아니다(실사용에서 '집 개'->'집개',
+        '다음 날'->'다음날'처럼 뜻이 바뀌는 사고가 반복됐다). 후보만 플래그한다."""
+        assert correct_compound_spacing("노천 카페에 갔다") == ("노천 카페에 갔다", [])
+        flag = check_compound_merge_candidate(1, "노천 카페에 갔다")
+        assert flag and flag.suggested_fix == "노천카페에 갔다"
 
-    def test_geu_ttae(self):
-        assert correct_compound_spacing("그 때 이야기를 했다") == (
-            "그때 이야기를 했다",
-            ["그 때 -> 그때"],
-        )
+    def test_geu_ttae_is_a_candidate(self):
+        assert correct_compound_spacing("그 때 이야기를 했다") == ("그 때 이야기를 했다", [])
+        flag = check_compound_merge_candidate(1, "그 때 이야기를 했다")
+        assert flag and flag.suggested_fix == "그때 이야기를 했다"
 
     def test_sseun_mat_adnominal_not_auto_merged(self):
         # 용언 관형사형(쓰+ㄴ)+명사는 '쓴 맛'(맛이 쓰다)이라는 구문 읽기가 늘
@@ -634,11 +641,10 @@ class TestCompoundSpacingMMAllowlist:
     def test_demonstrative_plus_unrelated_homograph_not_joined(self):
         assert correct_compound_spacing("그 다리를 건넜다") == ("그 다리를 건넜다", [])
 
-    def test_allowlisted_demonstrative_compound_still_joined(self):
-        assert correct_compound_spacing("그 때 이야기를 했다") == (
-            "그때 이야기를 했다",
-            ["그 때 -> 그때"],
-        )
+    def test_allowlisted_demonstrative_compound_is_a_candidate(self):
+        """허용 목록에 있는 지시 관형사 조합도 후보로만 낸다(2026-08-04 정책 변경)."""
+        assert correct_compound_spacing("그 때 이야기를 했다") == ("그 때 이야기를 했다", [])
+        assert check_compound_merge_candidate(1, "그 때 이야기를 했다") is not None
 
 
 class TestCheckSpellingProductiveDemonymCompound:

@@ -30,9 +30,11 @@ def test_a2_figurative_compound_flagged_not_merged():
     assert any(f.suggested_fix == "턱밑이 간지럽다" for f in flags)
 
 
-def test_a3_plain_compound_still_merged():
-    out, _flags = _run("노천 카페에서 만나자")
-    assert out == "노천카페에서 만나자"
+def test_a3_plain_compound_becomes_a_candidate():
+    """2026-08-04부터 합성어 병합은 자동이 아니라 후보(확인 항목)다."""
+    out, flags = _run("노천 카페에서 만나자")
+    assert out == "노천 카페에서 만나자"
+    assert any(f.suggested_fix == "노천카페에서 만나자" for f in flags)
 
 
 # --- B: 모호 자동교체 -> 플래그 ---
@@ -405,8 +407,9 @@ def test_marker_content_not_merged():
     문과 무관하다. 자막 표시 안은 일반 문장 규칙의 대상이 아니므로 병합하지 않는다.
     """
     assert _run("[탁 - 차 문]")[0] == "[탁 - 차 문]"
-    # 표시 밖에서는 정상 병합이 유지된다
-    assert _run("노천 카페에서 만나자")[0] == "노천카페에서 만나자"
+    # 표시 안에서는 병합 후보조차 만들지 않는다(표시 밖은 후보로 제안된다)
+    assert not any("차문" in (f.suggested_fix or "") for f in _run("[탁 - 차 문]")[1])
+    assert any("노천카페" in (f.suggested_fix or "") for f in _run("노천 카페에서 만나자")[1])
 
 
 def test_historical_headword_is_not_join_evidence():
@@ -612,8 +615,8 @@ def test_real_manuscript_overcorrections_2026_08_03():
     assert _run("집 밖으로 나갔다")[0] == "집 밖으로 나갔다"
     # '더하다'가 표제어라 부사 '더' + '하다' 구성을 붙였다
     assert _run("증축을 더 해도 되겠네요")[0] == "증축을 더 해도 되겠네요"
-    # 정당한 병합·교정은 그대로 유지된다
-    assert _run("노천 카페에서 만났다")[0] == "노천카페에서 만났다"
+    # 병합은 후보로만 나오고(2026-08-04), 조사 결합 교정은 그대로 자동이다
+    assert any("노천카페" in (f.suggested_fix or "") for f in _run("노천 카페에서 만났다")[1])
     assert _run("오늘은날씨가 좋다")[0] == "오늘은 날씨가 좋다"
 
 

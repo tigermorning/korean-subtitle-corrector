@@ -79,6 +79,7 @@ from .options import (
 from .spacing import (
     _aux_verb_spacing,
     check_ambiguous_compound,
+    check_compound_merge_candidate,
     correct_aux_verb_spacing,
     correct_compound_spacing,
     correct_particle_spacing,
@@ -114,7 +115,7 @@ from .replacements import (
 )
 from .spelling import check_purified_terms, check_spelling
 from .dialect import check_dialect
-from .consistency import check_term_spacing_consistency
+from .consistency import check_aux_verb_consistency, check_term_spacing_consistency
 from .spacing_guards import check_spacing
 from .pipeline import apply_report_fixes, correct_entries
 
@@ -162,9 +163,11 @@ __all__ = [
     "check_purified_terms",
     "check_spacing",
     "check_ambiguous_compound",
+    "check_compound_merge_candidate",
     "check_ambiguous_particle",
     "check_contracted_form",
     "check_colloquial_loanword",
     "check_dialect",
+    "check_aux_verb_consistency",
     "check_term_spacing_consistency",
 ]
