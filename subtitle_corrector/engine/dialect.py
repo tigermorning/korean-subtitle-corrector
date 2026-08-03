@@ -16,7 +16,9 @@ def check_dialect(
       표준어로 간주하지만 어미가 표준이 아니어도 자동교정하지 않는다.
     - mode == "assist": 텍스트는 그대로 두고, 표준어→사투리 제안 플래그만 만든다.
       convert_dialect(to_dialect)가 바꿀 게 없고 search_dialect도 비면 플래그 없음.
-    - mode == "to_standard": 사투리→표준어 자동 변환 + 확인 플래그.
+    - mode == "to_standard": 사투리→표준어 **제안 플래그만**. 2026-08-03 이전에는
+      자동 변환이었으나, 표지 사전 감사에서 근거 없는 항목이 원고를 깨뜨리는 것을
+      확인해 제안으로 내렸다(`dictionary/dialect.py` 상단 "사투리 표 감사").
 
     "protect" 모드는 이 함수를 호출하지 않는다(호출부에서 통째로 건너뛴다).
 
@@ -39,15 +41,22 @@ def check_dialect(
         return text, []
 
     if mode == "to_standard":
+        # 2026-08-03부터 **자동으로 바꾸지 않는다**. 표지 사전 27개 항목을 우리말샘으로
+        # 전수 조회했더니 검증되는 것이 3개뿐이었고(자세한 내용은 dictionary/dialect.py
+        # 상단 "사투리 표 감사"), 이 표는 단어 경계 없이 문자열을 치환하기 때문에
+        # 근거 없는 항목 하나가 원고를 조용히 깨뜨렸다 — '그래 노래를 불렀다'가
+        # '그라고 노라고를 불렀다'가 되는 식이다. 남은 항목은 사전으로 확인된
+        # 것뿐이지만, 표를 다시 채울 때 같은 사고가 재발하지 않도록 **경로 자체를
+        # 제안으로 내렸다**. 사람이 보고 채택하는 것까지 막지는 않는다.
         converted = convert_dialect(text, region, "to_standard")
         if converted != text:
-            return converted, [FlagItem(
+            return text, [FlagItem(
                 line_index=index,
                 original_text=text,
                 suggested_fix=converted,
                 reason=(
-                    f"사투리→표준어 자동 변환 ({region}) — "
-                    "변환된 텍스트를 확인해 주세요."
+                    f"사투리→표준어 제안 ({region}) — 자동으로 바꾸지 않습니다. "
+                    "표지 사전의 근거가 항목마다 고르지 않아 확인 후 직접 반영하세요."
                 ),
             )]
         return text, []

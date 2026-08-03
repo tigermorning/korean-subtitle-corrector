@@ -95,18 +95,19 @@ class TestDocumentLevelDialect:
     def test_no_document_setting_keeps_previous_behavior(self):
         assert resolve_dialect_mode("영희", {"민수": "제주도"}, {}) == (None, None)
 
-    def test_prose_document_is_converted_to_standard(self):
-        """화자 표기가 없는 일반 글도 문서 전체 설정만으로 표준어 변환이 걸린다."""
-        corrected, _, applied_log = correct_entries(
-            [SubtitleEntry(index=1, start="", end="", text="이거 아이가 마이시 좋다")],
+    def test_prose_document_to_standard_suggests_without_changing_text(self):
+        """화자 표기가 없는 일반 글도 문서 전체 설정만으로 사투리 처리가 걸린다.
+        다만 2026-08-03부터 to_standard는 **자동 변환이 아니라 제안**이다
+        (`dictionary/dialect.py` "사투리 표 감사")."""
+        corrected, flags, applied_log = correct_entries(
+            [SubtitleEntry(index=1, start="", end="", text="기냥 가자")],
             doc_type="prose",
-            dialect_region="경상도",
+            dialect_region="충청도",
             dialect_mode="to_standard",
         )
         assert any("[사투리 기준]" in line for line in applied_log)
-        # 화자 표기가 전혀 없는 줄인데도 문서 전체 설정만으로 변환이 걸린다
-        assert "아이가" not in corrected[0].text
-        assert "그래" in corrected[0].text
+        assert corrected[0].text == "기냥 가자"
+        assert any(f.suggested_fix == "그냥 가자" for f in flags)
 
     def test_document_setting_is_logged(self):
         _, _, applied_log = correct_entries(
@@ -153,17 +154,30 @@ class TestAssistMode:
     """assist: 텍스트는 그대로, 표준어→사투리 제안 플래그만 남긴다."""
 
     def test_standard_line_gets_dialect_suggestion(self):
-        entries = [_entry(1, "그래 많이 좋아")]
+        """제안은 **사전으로 확인된 항목**에서만 나온다. 2026-08-03 감사 전에는
+        근거 없는 표(경상도 '그래'->'아이가' 등)로 제안을 만들었다."""
+        entries = [_entry(1, "그냥 가자")]
         corrected, flags, _ = correct_entries(
-            entries, dialect_map={"민수": "경상도"}, dialect_modes={"민수": "assist"},
+            entries, dialect_map={"민수": "충청도"}, dialect_modes={"민수": "assist"},
         )
         # 텍스트는 절대 바뀌지 않는다
-        assert corrected[0].text == "그래 많이 좋아"
+        assert corrected[0].text == "그냥 가자"
         # 표준어→사투리 제안 플래그가 나온다
         assert len(flags) == 1
         assert flags[0].line_index == 1
-        assert flags[0].suggested_fix == "아이가 마이시 좋아"
+        assert flags[0].suggested_fix == "기냥 가자"
         assert "제안" in flags[0].reason
+
+    def test_no_suggestion_when_table_has_no_verified_entry(self):
+        """근거가 없으면 제안하지 않는다. '빨리'에 대응하는 경상도 표현은
+        사전으로 확인된 것이 없다 — 지역어 API는 500 장애이고 우리말샘
+        뜻풀이 검색으로도 찾을 수 없다(평가셋 d04)."""
+        entries = [_entry(1, "빨리 와라")]
+        corrected, flags, _ = correct_entries(
+            entries, dialect_map={"민수": "경상도"}, dialect_modes={"민수": "assist"},
+        )
+        assert corrected[0].text == "빨리 와라"
+        assert flags == []
 
     def test_already_dialect_line_emits_no_suggestion(self):
         # convert_dialect(to_dialect)가 바꿀 게 없고 search_dialect도 비면 플래그 없음
@@ -177,27 +191,34 @@ class TestAssistMode:
         assert corrected[0].text == entries[0].text
 
     def test_to_dialect_alias_behaves_as_assist(self):
-        entries = [_entry(1, "그래 많이 좋아")]
+        entries = [_entry(1, "그냥 가자")]
         corrected, flags, _ = correct_entries(
-            entries, dialect_map={"민수": "경상도"}, dialect_modes={"민수": "to_dialect"},
+            entries, dialect_map={"민수": "충청도"}, dialect_modes={"민수": "to_dialect"},
         )
-        assert corrected[0].text == "그래 많이 좋아"
-        assert any(f.suggested_fix == "아이가 마이시 좋아" for f in flags)
+        assert corrected[0].text == "그냥 가자"
+        assert any(f.suggested_fix == "기냥 가자" for f in flags)
 
 
 class TestToStandardMode:
-    """to_standard: 사투리→표준어 변환 후 표준화 파이프라인 적용 (네트워크 필요)."""
+    """to_standard: 사투리→표준어 **제안**만 남기고 텍스트는 바꾸지 않는다
+    (2026-08-03 변경, 네트워크 필요)."""
 
-    def test_dialect_line_converted_to_standard(self):
-        entries = [_entry(1, "이거 아이가 마이시 좋다")]
-        corrected, flags, applied = correct_entries(
-            entries, dialect_map={"민수": "경상도"}, dialect_modes={"민수": "to_standard"},
+    def test_dialect_line_gets_standard_suggestion_only(self):
+        entries = [_entry(1, "기냥 가자")]
+        corrected, flags, _ = correct_entries(
+            entries, dialect_map={"민수": "충청도"}, dialect_modes={"민수": "to_standard"},
         )
-        # 사투리 어휘가 표준어로 바뀌었다
-        assert "아이가" not in corrected[0].text
-        assert "마이시" not in corrected[0].text
-        assert "그래" in corrected[0].text
-        assert "많이" in corrected[0].text
-        # 변환 확인 플래그가 나온다
-        assert any("사투리→표준어" in f.reason for f in flags)
-        assert any("사투리→표준어 변환" in a for a in applied)
+        # 텍스트는 그대로다 — 자동 변환하지 않는다
+        assert corrected[0].text == "기냥 가자"
+        assert any(f.suggested_fix == "그냥 가자" for f in flags)
+        assert any("사투리→표준어 제안" in f.reason for f in flags)
+
+    def test_dialect_text_is_never_rewritten_by_substring_replacement(self):
+        """감사 전에는 표에 있던 '래'->'라고' 때문에 전라도 화자의 '노래'가
+        '노라고'로 깨졌다. 근거 없는 항목을 지웠으므로 이제 그대로 나가야 한다."""
+        entries = [_entry(1, "그래 노래를 불렀다")]
+        corrected, _, _ = correct_entries(
+            entries, dialect_map={"민수": "전라도"}, dialect_modes={"민수": "to_standard"},
+        )
+        assert "노래" in corrected[0].text
+        assert "노라고" not in corrected[0].text
