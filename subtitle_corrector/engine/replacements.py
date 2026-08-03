@@ -12,7 +12,7 @@ from ..dictionary import (
 from ..report import FlagItem
 from .text_utils import _has_batchim
 from .kiwi_adapter import _kiwi
-from .lexicon import _tensified_headword_variant
+from .lexicon import _tensified_headword_variant, is_hada_stem
 
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
     """행 끝에 띄어 쓴 '나'가 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
@@ -128,7 +128,13 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
     """
     replacements = {}
-    for t in _kiwi.tokenize(text):
+    tokens = _kiwi.tokenize(text)
+    for t in tokens:
+        # '-하다'가 바로 붙은 어근은 그 자체가 다른 낱말의 일부다. '힙하다'(우리말샘
+        # 표제어)의 '힙'을 우리말샘의 다른 항목(hip = 신체 부위, 규범 표기 '히프')으로
+        # 바꿔 '히프한 동네'가 됐다(2026-08-03 사용자 제공 자막 4강 132번).
+        if is_hada_stem(tokens, t):
+            continue
         # 부사(MAG)를 뺐던 탓에 '일찌기'('일찍이'의 비표준 표기, 우리말샘이 규범
         # 표기를 명시)가 그대로 나갔다 — 같은 성격의 명사 '눈쌀'·'설겆이'는 잡히는데
         # 부사만 새던 것이다(2026-08-03 평가셋 확대에서 g17로 드러남). 코퍼스의

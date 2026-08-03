@@ -85,7 +85,13 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
             # 완전히 반대다. kiwi가 "되"를 XSV(파생접미사)로 태깅하면 _ATTACH_TAGS
             # 때문에 공백을 제거하는데, 이 경우 "안 되다"의 띄어쓰기를 파괴할 수 있다.
             # "안되다"는 표준국어대사전 별도 표제어이므로, 원문의 띄어쓰기를 보존한다.
-            if t1.form == "안" and t1.tag == "MAG" and gap_start != gap_end:
+            # **부사 뒤에 띄어 쓴 접미사는 붙이지 않는다.** 부사+용언 구(句)와
+            # 파생·합성 동사가 둘 다 존재하고 표기가 뜻을 가르는 자리다:
+            # '안 되다'(금지)/'안되다'(상황이 안 됨), '못 하다'(하지 못함)/'못하다'
+            # (능력 부족), '더 하다'(추가로 하다)/'더하다'(보태다). 원문이 띄어 놓았다면
+            # 그 선택을 보존한다 — 2026-08-03 실사용 감수에서 '증축을 더 해도 되겠네요'가
+            # '더해도'로 붙었다(사용자 제공 자막 4강 103번). 전에는 '안'만 막고 있었다.
+            if t1.tag == "MAG" and gap_start != gap_end:
                 continue
             # 행 끝에 띄어 쓴 '나'는 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
             # '나아'의 오기인지 문맥 없이 가릴 수 없다. 붙여 버리면 '나아'였을
@@ -279,6 +285,8 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
         combined = text[start:boundary] + text[boundary:end].lstrip(" ")
         if original == combined:
             continue  # 이미 붙어 있음
+        if _positional_noun_phrase(text, boundary, end):
+            continue
         if compound_status(combined) == "합성어":
             # 붙임형이 '준말'(예: 큰애='큰아이'의 준말)이나 '비유적'(예: 턱밑)
             # 표제어면, 띄어 쓴 구(句)와 의미가 경쟁하므로 문맥 없이 자동으로
@@ -295,6 +303,33 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
         corrected = corrected[:start] + replacement + corrected[end:]
         applied.append(desc)
     return corrected, list(reversed(applied))
+
+
+# 위치·방향을 뜻하는 자립명사. 앞말과 띄어 써서 "그 범위의 내부/외부"를 나타내는 용법이
+# 매우 흔하다('예산 안에서', '집 밖으로', '책상 위에'). 그런데 붙인 형태가 우연히 다른
+# 뜻의 사전 표제어인 경우가 있어('예산안' = 예산 案), 합성어 병합이 원문의 뜻을 바꿔
+# 버린다 — 2026-08-03 실사용 감수에서 '예산 안에서 5m 정도 늘리고'가 '예산안에서'로
+# 바뀌었다(사용자 제공 자막 4강 160·203번).
+_POSITIONAL_NOUNS = frozenset({"안", "밖", "속", "위", "아래", "앞", "뒤", "옆", "사이", "가운데"})
+
+
+# 위치 명사에 붙어 "그 범위에서/으로"를 만드는 부사격 조사. 이 조사가 붙어 있으면 위치
+# 표현으로 읽는 것이 자연스럽다.
+_POSITIONAL_PARTICLES = ("에서", "에다", "에", "으로", "로", "까지", "부터")
+
+
+def _positional_noun_phrase(text: str, boundary: int, end: int) -> bool:
+    """병합 후보의 뒷말이 '안/밖/속/위…' + 부사격 조사인지 — 그렇다면 붙이지 않는다."""
+    tail = text[boundary:end].lstrip(" ")
+    for noun in _POSITIONAL_NOUNS:
+        if not tail.startswith(noun):
+            continue
+        rest = tail[len(noun):]
+        if not rest:
+            return True  # '예산 안'처럼 조사 없이 끝나도 위치 표현일 수 있다
+        if any(rest.startswith(particle) for particle in _POSITIONAL_PARTICLES):
+            return True
+    return False
 
 
 def check_ambiguous_compound(index: int, text: str) -> FlagItem | None:

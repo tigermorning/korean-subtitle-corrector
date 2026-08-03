@@ -22,7 +22,6 @@ from .spacing import (
 from .affix import (
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
-    check_undocumented_cheo_derivative,
     correct_action_noun_affix,
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
@@ -52,6 +51,7 @@ from .spelling import check_purified_terms, check_spelling
 from .dialect import check_dialect
 from .consistency import check_term_spacing_consistency
 from .spacing_guards import check_spacing
+from .edit_guard import verify_edit
 
 def _correct_line_with_markers(
     index: int,
@@ -166,24 +166,62 @@ def _correct_line(
     applied: list[str] = []
     corrected_text = text
 
+    # 규칙 하나가 끝날 때마다 edit_guard가 "이 변경을 규칙이 설명할 수 있는가"를 검사한다.
+    # 설명되지 않는 낱말 변경은 그 규칙의 결과를 버리고 원문을 유지한다(fail-closed).
+    # 파일과 무관한 보장이 필요해서 넣은 관문이다 — 자세한 이유는 edit_guard.py 참고.
+    blocked: list[str] = []
+
+    def _guard(rule: str, before: str, after: str, declared: list[str]) -> str:
+        accepted, refusal = verify_edit(rule, before, after, declared)
+        if refusal:
+            blocked.append(refusal)
+        return accepted
+
+    before = corrected_text
     corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
+    corrected_text = _guard("외래어 표기", before, corrected_text, applied_fixes)
+    before = corrected_text
     corrected_text, particle_fixes = correct_particle_spacing(corrected_text, markers)
+    corrected_text = _guard("조사·어미 띄어쓰기", before, corrected_text, particle_fixes)
+    before = corrected_text
     corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
+    corrected_text = _guard("관형어+명사 분리", before, corrected_text, adnominal_fixes)
+    before = corrected_text
     corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
+    corrected_text = _guard("접사 붙임", before, corrected_text, affix_fixes)
+    before = corrected_text
     corrected_text, honorific_fixes = correct_honorific_dependent_noun_spacing(corrected_text)
+    corrected_text = _guard("의존명사 님·씨", before, corrected_text, honorific_fixes)
+    before = corrected_text
     corrected_text, cheo_fixes = correct_intensive_prefix_cheo(corrected_text)
+    corrected_text = _guard("접두사 처-", before, corrected_text, cheo_fixes)
+    before = corrected_text
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
+    corrected_text = _guard("감탄사·호격 쉼표", before, corrected_text, comma_fixes)
+    before = corrected_text
     corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
+    corrected_text = _guard("합성어 붙임", before, corrected_text, compound_fixes)
+    before = corrected_text
     corrected_text, aux_verb_fixes, aux_verb_blocked = _aux_verb_spacing(
         corrected_text, spacing_mode
     )
+    corrected_text = _guard("보조 용언 띄어쓰기", before, corrected_text, aux_verb_fixes)
     applied.extend(f"[붙임 불가] {note}" for note in aux_verb_blocked)
+    before = corrected_text
     corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
+    corrected_text = _guard("확정 오류 표현", before, corrected_text, always_wrong_fixes)
+    before = corrected_text
     corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
+    corrected_text = _guard("규범 표기 재지정", before, corrected_text, nonstandard_fixes)
+    before = corrected_text
     corrected_text, discriminatory_fixes = correct_discriminatory_terms(corrected_text)
+    corrected_text = _guard("차별적 표현", before, corrected_text, discriminatory_fixes)
+    before = corrected_text
     corrected_text, former_term_fixes, former_term_flags = correct_former_terms(
         index, corrected_text
     )
+    corrected_text = _guard("전 용어", before, corrected_text, former_term_fixes)
+    applied.extend(blocked)
     applied.extend(
         applied_fixes
         + particle_fixes
@@ -261,7 +299,6 @@ def _correct_line(
         check_joined_interjection_spacing(index, corrected_text),
         check_honorific_dependent_noun(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
-        check_undocumented_cheo_derivative(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
     for f in checks:

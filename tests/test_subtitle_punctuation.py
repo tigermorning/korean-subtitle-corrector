@@ -56,17 +56,27 @@ class TestInternalPeriod:
 
 
 class TestEllipsis:
+    """말줄임표 변환은 **고른 표기가 있을 때만** 한다. 기본값은 원문 유지다
+    (2026-08-03 변경 — 규정이 '……'·'…'·'......'·'...'를 모두 인정하므로 맞는 표기를
+    다른 맞는 표기로 바꾸지 않는다)."""
+
+    DOTS = normalize_punctuation_style("dots", "keep")
+
+    def test_default_keeps_the_original(self):
+        assert correct_subtitle_ellipsis("글쎄…") == ("글쎄…", [])
+        assert correct_subtitle_ellipsis("글쎄......") == ("글쎄......", [])
+
     def test_ellipsis_char_becomes_three_dots(self):
-        assert correct_subtitle_ellipsis("글쎄…")[0] == "글쎄..."
+        assert correct_subtitle_ellipsis("글쎄…", self.DOTS)[0] == "글쎄..."
 
     def test_repeated_ellipsis_chars_collapse(self):
-        assert correct_subtitle_ellipsis("글쎄……")[0] == "글쎄..."
+        assert correct_subtitle_ellipsis("글쎄……", self.DOTS)[0] == "글쎄..."
 
     def test_six_dots_become_three(self):
-        assert correct_subtitle_ellipsis("글쎄......")[0] == "글쎄..."
+        assert correct_subtitle_ellipsis("글쎄......", self.DOTS)[0] == "글쎄..."
 
     def test_three_dots_unchanged(self):
-        assert correct_subtitle_ellipsis("글쎄...") == ("글쎄...", [])
+        assert correct_subtitle_ellipsis("글쎄...", self.DOTS) == ("글쎄...", [])
 
     def test_single_and_double_dots_untouched(self):
         """온점 하나는 마침표이고, 둘은 말줄임표로 단정할 근거가 없다."""
@@ -94,10 +104,11 @@ class TestInPipeline:
         _text, flags, _log = self._run("네. 그래.")
         assert not any("쉼표" in f.reason for f in flags)
 
-    def test_ellipsis_normalized_in_pipeline(self):
+    def test_ellipsis_kept_by_default_in_pipeline(self):
+        """기본값은 원문 유지 — 파이프라인에서도 말줄임표를 건드리지 않는다."""
         text, _flags, log = self._run("글쎄…")
-        assert text == "글쎄..."
-        assert any("말줄임표" in line for line in log)
+        assert text == "글쎄…"
+        assert not any("말줄임표" in line for line in log)
 
     def test_prose_mode_keeps_all_punctuation(self):
         text, _flags, _log = self._run("보여 주세요. 궁금해요…", doc_type="prose")
@@ -107,8 +118,9 @@ class TestInPipeline:
 class TestPunctuationStyle:
     """말줄임표·따옴표 표기 방식 선택 (사용자 지정 2026-08-02).
 
-    어문 규범이 하나로 정해 주지 않고 납품처마다 다르다. 기본값은 온점 세 개와
-    곧은따옴표 — 자막 편집기·플레이어 호환이 가장 넓다.
+    어문 규범이 하나로 정해 주지 않고 납품처마다 다르다. 그래서 **미리 정하지 않고**
+    기본값을 원문 유지로 두고, 필요할 때 골라 문서 전체를 통일한다(2026-08-03 변경:
+    전에는 온점 세 개·곧은따옴표가 기본이어서 실제 원고의 부호가 통째로 바뀌었다).
     """
 
     def _run(self, text, style=None):
@@ -117,9 +129,13 @@ class TestPunctuationStyle:
         )
         return corrected[0].text, log
 
-    def test_default_is_dots_and_straight_quotes(self):
-        assert self._run("글쎄…")[0] == "글쎄..."
-        assert self._run("그가 “안녕”이라 했다")[0] == ' 그가 "안녕"이라 했다'.strip()
+    def test_default_keeps_the_original_punctuation(self):
+        assert self._run("글쎄…")[0] == "글쎄…"
+        assert self._run("그가 “안녕”이라 했다")[0] == "그가 “안녕”이라 했다"
+
+    def test_half_quote_style_when_chosen(self):
+        style = normalize_punctuation_style("keep", "half")
+        assert self._run("그가 “안녕”이라 했다", style)[0] == '그가 "안녕"이라 했다'
 
     def test_char_style_collapses_dots(self):
         style = normalize_punctuation_style("char", "half")
@@ -135,9 +151,9 @@ class TestPunctuationStyle:
         style = normalize_punctuation_style("dots", "full")
         assert self._run('"시작"과 끝', style)[0] == "“시작”과 끝"
 
-    def test_unknown_value_falls_back_to_default(self):
+    def test_unknown_value_falls_back_to_keep(self):
         style = normalize_punctuation_style("이상한값", "")
-        assert (style.ellipsis, style.quotes) == ("dots", "half")
+        assert (style.ellipsis, style.quotes) == ("keep", "keep")
 
     def test_not_applied_in_prose_mode(self):
         corrected, _flags, _log = correct_entries(

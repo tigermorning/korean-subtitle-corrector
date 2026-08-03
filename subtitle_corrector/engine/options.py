@@ -8,26 +8,33 @@ from typing import NamedTuple
 # 정해 주지 않고 **납품처마다 다르다**(사용자 지정 2026-08-02). 기본값은 반각 기호와
 # 온점 세 개 — 자막 편집기·플레이어 호환이 가장 넓기 때문이다.
 #
-#   ellipsis: "dots" -> ...      / "char" -> …
-#   quotes:   "half" -> ' 와 "   / "full" -> ‘ ’ 와 “ ”
-ELLIPSIS_STYLES = ("dots", "char")
+#   ellipsis: "keep" -> 원문 유지(기본) / "dots" -> ...      / "char" -> …
+#   quotes:   "keep" -> 원문 유지(기본) / "half" -> ' 와 "   / "full" -> ‘ ’ 와 “ ”
+#
+# **기본값을 "원문 유지"로 바꿨다(2026-08-03).** 전에는 온점 세 개·곧은따옴표가
+# 기본이어서, 실제 원고를 넣으면 원문의 '…'와 '“ ”'가 문서 전체에서 통째로 바뀌었다.
+# 문장부호 규정은 말줄임표를 '……'(원칙)·'…'·'......'·'...' 모두 인정하고 따옴표도
+# 두 표기를 다 허용한다 — 즉 이 변환은 교정이 아니라 **맞는 표기를 다른 맞는 표기로
+# 바꾸는 임의 치환**이다. 낱말에서 그것을 금지하는 원칙(평가셋 t12: '도리어'를 '되레'로
+# 바꾸지 않는다)이 부호에도 똑같이 적용된다. 납품처가 특정 표기를 요구할 때만 고른다.
+ELLIPSIS_STYLES = ("keep", "dots", "char")
 
 
-QUOTE_STYLES = ("half", "full")
+QUOTE_STYLES = ("keep", "half", "full")
 
 
 class PunctuationStyle(NamedTuple):
-    ellipsis: str = "dots"
-    quotes: str = "half"
+    ellipsis: str = "keep"
+    quotes: str = "keep"
 
 
 def normalize_punctuation_style(ellipsis_style=None, quote_style=None) -> PunctuationStyle:
-    """설정값을 정규화한다. 모르는 값은 기본값(반각·온점 세 개)으로 떨어뜨린다."""
+    """설정값을 정규화한다. 모르는 값은 기본값(원문 유지)으로 떨어뜨린다."""
     ellipsis_value = str(ellipsis_style or "").strip().lower()
     quote_value = str(quote_style or "").strip().lower()
     return PunctuationStyle(
-        ellipsis_value if ellipsis_value in ELLIPSIS_STYLES else "dots",
-        quote_value if quote_value in QUOTE_STYLES else "half",
+        ellipsis_value if ellipsis_value in ELLIPSIS_STYLES else "keep",
+        quote_value if quote_value in QUOTE_STYLES else "keep",
     )
 
 

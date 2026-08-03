@@ -582,8 +582,33 @@ def test_cheo_prefix_derivative_is_not_split():
     assert not any("처 맞고" in (f.suggested_fix or "") for f in flags)
 
 
-def test_undocumented_cheo_derivative_is_flagged_not_corrected():
-    """'쳐맞고'는 사전에 근거가 없어 자동으로 바꾸지 않고 '처맞고'를 후보로 알린다."""
-    text, flags = _run("쳐맞고 들어왔다")
-    assert text == "쳐맞고 들어왔다"
-    assert [f.suggested_fix for f in flags] == ["처맞고 들어왔다"]
+def test_undocumented_cheo_derivative_is_corrected():
+    """붙여 쓴 '쳐맞고'는 '처맞고'로 고친다(2026-08-03 사용자 지정: 쳐맞고는 틀린 표기).
+
+    파생어가 사전에 없어도('처맞다' 미등재) 붙여 쓴 '쳐+본용언'은 접두사 결합밖에 될
+    수 없다 — '맞다'는 보조 용언이 아니므로 '치어 + 맞다'를 한 어절로 붙여 쓸 근거가
+    없다. 반면 **띄어 쓴** '쳐 맞고'는 건드리지 않는다: 사전에 없는 파생어라 '박수를
+    쳐 웃었다'(치다 + 웃다, 두 동작)처럼 정당한 두 용언 연결과 구분할 수 없다.
+    """
+    assert _run("쳐맞고 들어왔다") == ("처맞고 들어왔다", [])
+    assert _run("쳐 맞고 들어왔다")[0] == "쳐 맞고 들어왔다"
+
+
+def test_real_manuscript_overcorrections_2026_08_03():
+    """사용자 제공 자막(4강 과제)에서 발견한 과교정 4건 (2026-08-03).
+
+    네 건 모두 원인이 같다 — **사전에 표제어가 있다는 이유로 문맥을 무시한 자동 적용**
+    (`docs/DESIGN_PRINCIPLES.md` 원리 3, 우연한 사전 충돌).
+    """
+    # '힙하다'(우리말샘 표제어)의 어근을 kornorms 용례(hip -> 히프)로 치환했다
+    assert _run("새롭고 힙한 동네에서 일하게 돼서 신나네요")[0] == (
+        "새롭고 힙한 동네에서 일하게 돼서 신나네요"
+    )
+    # '예산안'(예산 案)이 표제어라 '예산 안(內)에서'를 붙여 버렸다
+    assert _run("예산 안에서 5m 정도 늘리고")[0] == "예산 안에서 5m 정도 늘리고"
+    assert _run("집 밖으로 나갔다")[0] == "집 밖으로 나갔다"
+    # '더하다'가 표제어라 부사 '더' + '하다' 구성을 붙였다
+    assert _run("증축을 더 해도 되겠네요")[0] == "증축을 더 해도 되겠네요"
+    # 정당한 병합·교정은 그대로 유지된다
+    assert _run("노천 카페에서 만났다")[0] == "노천카페에서 만났다"
+    assert _run("오늘은날씨가 좋다")[0] == "오늘은 날씨가 좋다"

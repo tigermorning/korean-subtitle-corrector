@@ -156,6 +156,7 @@
         <div class="dialect-row">
           <label style="min-width:150px">말줄임표</label>
           <select id="ellipsisStyle">
+            <option value="keep">원문 유지 (권장)</option>
             <option value="dots">온점 세 개 (...)</option>
             <option value="char">한 글자 (…)</option>
           </select>
@@ -163,11 +164,12 @@
         <div class="dialect-row">
           <label style="min-width:150px">따옴표</label>
           <select id="quoteStyle">
+            <option value="keep">원문 유지 (권장)</option>
             <option value="half">곧은따옴표 ( ' " )</option>
             <option value="full">둥근따옴표 ( ‘ ’ “ ” )</option>
           </select>
         </div>
-        <p class="opt-note">기본값은 온점 세 개와 곧은따옴표입니다 — 자막 편집기·플레이어 호환이 가장 넓습니다. 고른 표기로 문서 전체를 통일합니다.</p>
+        <p class="opt-note">기본값은 <b>원문 유지</b>입니다 — 말줄임표와 따옴표는 규정이 여러 표기를 모두 인정하므로, 맞는 표기를 다른 맞는 표기로 바꾸지 않습니다. 납품처가 특정 표기를 요구할 때만 골라 문서 전체를 통일하세요.</p>
       </div>
 
       <div class="opt-group" id="markerOptions">

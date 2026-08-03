@@ -4,7 +4,7 @@
 from ..dictionary import loanword_fix, word_exists
 from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
-from .lexicon import _tensified_headword_variant
+from .lexicon import is_hada_stem, _tensified_headword_variant
 
 def correct_loanwords(
     text: str,
@@ -28,9 +28,16 @@ def correct_loanwords(
     고유명사 확인 제안 목록 항목도 ('원문 -> 정답', 전체 맥락) 튜플이다 —
     텍스트 자체는 바뀌지 않고 이 제안만 리포트에 남는다.
     """
-    candidates = [t for t in _kiwi.tokenize(text) if t.tag in _LOANWORD_TAGS]
+    tokens = _kiwi.tokenize(text)
+    candidates = [t for t in tokens if t.tag in _LOANWORD_TAGS]
     replacements = []  # (start, len, original, fix, needs_review, context, is_proper_noun)
     for t in candidates:
+        # '-하다'가 바로 붙은 어근은 외래어 명사가 아니라 **용언의 어근**이다.
+        # 실사용에서 '새롭고 힙한 동네'가 '새롭고 히프한 동네'로 바뀌었다 — kornorms에
+        # hip -> 히프 용례가 있어 '힙'을 명사로 보고 치환한 것이다. '힙하다'는 우리말샘
+        # 표제어이므로 이 결합 자체가 사전에 있다(2026-08-03 실사용 감수).
+        if is_hada_stem(tokens, t):
+            continue
         # 이미 표준국어대사전에 정식 등재된 단어는 애초에 외래어 오표기 후보가
         # 아니므로 건드리지 않는다. 그렇지 않으면 "집"처럼 흔한 고유어가
         # kornorms의 전혀 무관한 외래어 항목과 우연히 겹쳐 "지브" 같은 엉뚱한

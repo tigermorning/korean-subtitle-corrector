@@ -145,6 +145,8 @@ def correct_subtitle_quotes(text: str, style: PunctuationStyle | None = None) ->
     이건 추측이 아니라 표기 관례를 그대로 옮긴 것이다.
     """
     style = style or PunctuationStyle()
+    if style.quotes == "keep":
+        return text, []  # 원문 유지가 기본 — 두 표기 모두 규범상 맞다
     if style.quotes == "half":
         fixed = "".join(_CURLY_TO_STRAIGHT.get(ch, ch) for ch in text)
     else:
@@ -182,6 +184,8 @@ def correct_subtitle_ellipsis(
 
     반환값: (통일된 텍스트, 적용 로그)."""
     style = style or PunctuationStyle()
+    if style.ellipsis == "keep":
+        return text, []  # 원문 유지가 기본 — 규정이 '……'·'…'·'......'·'...'를 모두 인정한다
     if style.ellipsis == "char":
         # 온점 세 개 이상을 한 글자짜리 말줄임표로 모은다.
         fixed = re.sub(r"\.{3,}", "…", text)

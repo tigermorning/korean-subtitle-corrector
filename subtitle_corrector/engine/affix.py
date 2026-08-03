@@ -220,21 +220,28 @@ def correct_intensive_prefix_cheo(text: str) -> tuple[str, list[str]]:
     표시해 등재한다(처-먹다 "'먹다'를 속되게 이르는 말", 처-넣다 "마구 집어넣다").
     '쳐먹다'·'쳐넣다'는 어느 사전에도 없다. 접두사이므로 뒤 용언과 붙여 쓴다.
 
-    자동 교정은 **뒤가 본용언(VV)일 때만** 한다. 보조 용언(VX) 자리는 '치다'의 활용과
+    파생어가 사전에 없어도(처맞다 미등재) 붙여 쓴 '쳐+본용언'은 고친다 — 접두사
+    결합밖에 될 수 없기 때문이다. 자동 교정은 **뒤가 본용언(VV)일 때만** 한다. 보조 용언(VX) 자리는 '치다'의 활용과
     구분되지 않는다 — '박수를 쳐 줘'의 '쳐 주다'는 정상이고 '처주다'도 사전 표제어라
     조건만으로는 걸러지지 않는다. 그 자리는 check_intensive_prefix_cheo()가 플래그한다.
 
     반환값: (교정된 텍스트, 적용 로그)."""
     tokens = _kiwi.tokenize(text)
-    edits = []  # (쳐 시작, 뒤 용언 시작, 붙임형)
+    edits = []  # (쳐 시작, 뒤 용언 시작)
     for i in range(len(tokens) - 2):
         found = _cheo_prefix_candidate(text, tokens, i)
-        if not found:
+        if found:
+            start, verb_start, _joined, verb_tag = found
+            if verb_tag == "VV":
+                edits.append((start, verb_start))
             continue
-        start, verb_start, _joined, verb_tag = found
-        if verb_tag != "VV":
-            continue
-        edits.append((start, verb_start))
+        # 파생어가 사전에 없어도, **붙여 쓴** '쳐+본용언'은 접두사 결합밖에 될 수 없다.
+        # '맞다'는 보조 용언이 아니므로 '치어 + 맞다'를 한 어절로 붙여 쓸 근거가 없다
+        # ('쳐맞고'는 틀린 표기, '처맞고'가 맞다 — 2026-08-03 사용자 지정).
+        undocumented = _undocumented_cheo_derivative(text, tokens, i)
+        if undocumented:
+            start, verb_start, _joined = undocumented
+            edits.append((start, verb_start))
     if not edits:
         return text, []
     corrected = text
@@ -295,33 +302,6 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
                 f"'마구/함부로'의 뜻이라면 접두사 '처-'를 써서 '{joined}'처럼 붙여 씁니다"
                 f"(사전 표제어). '치다'의 활용('박수를 쳐 주다')이면 원문이 맞으므로 "
                 "문맥 확인이 필요합니다."
-            ),
-        )
-    return None
-
-
-def check_undocumented_cheo_derivative(index: int, text: str) -> FlagItem | None:
-    """사전에 없는 '쳐+용언' 결합에 접두사 '처-' 표기를 후보로 알린다('쳐맞고').
-
-    '처맞다'·'쳐맞다'는 둘 다 표제어가 아니어서 사전으로는 정답을 확정할 수 없다.
-    그래도 접두사 '처-'는 뒤 용언에 붙여 쓰므로 표기 후보는 '처맞고'다
-    (2026-08-03 사용자 보고: "'처맞다'의 '처-'는 접사로서 붙여씀이 맞다").
-    """
-    tokens = _kiwi.tokenize(text)
-    for i in range(len(tokens) - 2):
-        found = _undocumented_cheo_derivative(text, tokens, i)
-        if not found:
-            continue
-        start, verb_start, joined = found
-        suggested = text[:start] + "처" + text[verb_start:]
-        return FlagItem(
-            line_index=index,
-            original_text=text,
-            suggested_fix=suggested,
-            reason=(
-                f"'마구/함부로'의 뜻이라면 접두사 '처-'를 써서 '{joined}'로 적습니다"
-                " — 접두사는 뒤 용언에 붙여 씁니다. 이 파생어는 사전 표제어가 아니어서"
-                " 자동으로 바꾸지 않았습니다('치다'의 활용이면 원문이 맞습니다)."
             ),
         )
     return None

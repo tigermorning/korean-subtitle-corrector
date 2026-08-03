@@ -86,7 +86,6 @@ from .spacing import (
 from .affix import (
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
-    check_undocumented_cheo_derivative,
     correct_action_noun_affix,
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
@@ -142,7 +141,6 @@ __all__ = [
     "_aux_verb_spacing",
     "check_honorific_dependent_noun",
     "check_intensive_prefix_cheo",
-    "check_undocumented_cheo_derivative",
     "correct_action_noun_affix",
     "correct_honorific_dependent_noun_spacing",
     "correct_intensive_prefix_cheo",

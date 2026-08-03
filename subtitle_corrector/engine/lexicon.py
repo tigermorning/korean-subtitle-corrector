@@ -155,3 +155,21 @@ def _is_verb_stem_mistagged_as_noun(tokens, i: int) -> bool:
     if nxt.start != tokens[i].start + tokens[i].len:
         return False
     return bool(word_exists(tokens[i].form + "다"))
+
+
+def is_hada_stem(tokens, token) -> bool:
+    """token 바로 뒤에 '하'(XSA/XSV)가 붙어 있고, 그 결합형이 사전 표제어인지.
+
+    '힙하다'·'쿨하다'처럼 외래어 어근에 '-하다'가 붙어 한 낱말이 된 경우, 그 어근은
+    외래어 표기 교정 대상이 아니다. 결합형이 사전에 등재됐는지까지 확인해 근거로 삼는다.
+    """
+    for i, candidate in enumerate(tokens):
+        if candidate is not token:
+            continue
+        if i + 1 >= len(tokens):
+            return False
+        nxt = tokens[i + 1]
+        if nxt.tag not in ("XSA", "XSV") or nxt.start != token.start + token.len:
+            return False
+        return word_exists(token.form + "하다")
+    return False
