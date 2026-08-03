@@ -19,6 +19,7 @@ from .text_utils import (
     _inserted_space_ranges,
     _inside_any_span,
     _removed_space_points,
+    _strip_space_before_punctuation,
 )
 from .kiwi_adapter import (
     _ATTACH_TAGS,
@@ -30,6 +31,7 @@ from .kiwi_adapter import (
     _token_index,
     _tokenization_unstable_near,
 )
+from .affix import _cheo_prefix_candidate, _undocumented_cheo_derivative
 from .lexicon import _PASSIVE_ONLY_BATDA_NOUNS, _is_action_noun
 from .spacing import _compound_candidate_spans, _normalize_aux_verb_spacing
 
@@ -432,6 +434,10 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     suggested = _protect_headword_run_splits(text, suggested)
     suggested = _protect_unfounded_joining(text, suggested)
     suggested = _protect_unresolvable_splits(text, suggested)
+    suggested = _protect_cheo_prefix_gap(text, suggested)
+    suggested = _protect_cheo_prefix_split(text, suggested)
+    # 구두점 앞 공백은 어떤 경우에도 제안하지 않는다(문맥 무관 규칙).
+    suggested = _strip_space_before_punctuation(suggested)
 
     if suggested != text:
         return FlagItem(
@@ -441,3 +447,66 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
             suggested_fix=suggested,
         )
     return None
+
+
+def _protect_cheo_prefix_gap(text: str, suggested: str) -> str:
+    """'쳐 하든가'의 공백을 그냥 없애자는 제안을 되돌린다.
+
+    이 자리는 접두사 '처-'를 쓸 자리일 수 있어(처하다) 표기가 '쳐'냐 '처'냐부터
+    갈린다. 그 판단은 check_intensive_prefix_cheo()가 근거와 함께 사람에게 묻는다 —
+    여기서 '쳐하든가'를 함께 제안하면 서로 어긋나는 제안 두 개가 리포트에 남는다
+    (2026-08-03 사용자 보고 처리 중 발견).
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 2):
+        found = _cheo_prefix_candidate(text, tokens, i)
+        if not found:
+            continue
+        start, verb_start, _joined, _tag = found
+        if not text[start:verb_start].endswith(" "):
+            continue  # 원문이 이미 붙어 있으면 되돌릴 것이 없다
+        word_end = text.find(" ", verb_start)
+        if word_end == -1:
+            word_end = len(text)
+        verb_word = text[verb_start:word_end]
+        suggested = _force_span(suggested, "쳐 " + verb_word, "쳐" + verb_word)
+    return suggested
+
+
+def _protect_cheo_prefix_split(text: str, suggested: str) -> str:
+    """'처맞고'를 '처 맞고'로 갈라놓자는 제안을 되돌린다.
+
+    '처-'는 '마구/함부로'의 뜻을 더하는 접두사이므로 뒤 용언에 붙여 쓴다(사전이
+    처-먹다·처-넣다처럼 하이픈으로 표시한다). 파생어가 사전에 없어도(처맞다는 미등재)
+    접두사 결합이라 띄어 쓸 근거가 없다 — kiwi는 이 '처'를 명사(NNG)로 읽어 뒤 용언과
+    가르자고 제안한다(2026-08-03 사용자 보고: '처맞고 들어오는 것보다…').
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 1):
+        head, verb = tokens[i], tokens[i + 1]
+        if head.form not in ("처", "쳐") or head.tag not in ("NNG", "NNP"):
+            continue
+        if verb.tag not in ("VV", "VA", "VX"):
+            continue
+        if head.start + head.len != verb.start:
+            continue  # 원문에서 이미 떨어져 있으면 이 규칙의 대상이 아니다
+        word_end = text.find(" ", verb.start)
+        if word_end == -1:
+            word_end = len(text)
+        joined = text[head.start:word_end]
+        suggested = _force_span(suggested, joined, head.form + " " + text[verb.start:word_end])
+
+    # kiwi가 '쳐맞고'를 '치'(VV)+'어'(EC)+'맞'(VV)으로 읽는 경우도 같은 자리다.
+    # 위 갈래는 '처/쳐'가 명사로 태깅될 때만 걸린다.
+    for i in range(len(tokens) - 2):
+        found = _undocumented_cheo_derivative(text, tokens, i)
+        if not found:
+            continue
+        start, verb_start, _joined = found
+        word_end = text.find(" ", verb_start)
+        if word_end == -1:
+            word_end = len(text)
+        suggested = _force_span(
+            suggested, text[start:word_end], "쳐 " + text[verb_start:word_end]
+        )
+    return suggested

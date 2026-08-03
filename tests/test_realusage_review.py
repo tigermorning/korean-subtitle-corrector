@@ -454,14 +454,136 @@ def test_noun_phrase_before_hada_is_not_merged():
     assert _run("어제 청소 했다")[0] == "어제 청소했다"
 
 
-def test_noun_phrase_before_hada_joined_is_flagged_not_split():
-    """반대 방향(붙여 쓴 '나물 타령하셨어')은 자동으로 나누지 않고 플래그만 남긴다.
+def test_sentence_final_contraction_is_not_split_by_comma():
+    """'그건 내 잘못이 아냐'가 '그건 내 잘못이, 아냐'로 잘리던 오류
+    (2026-08-03 사용자 보고).
 
-    온라인가나다는 같은 구성에 대해 "'수학을 공부하다'처럼 조사 '을'이 생략된
-    목적어로 이해할 수도 있다"고 답했다 — 해석이 둘이므로 사람이 판단한다.
+    '아냐'는 '아니야'의 준말(서술어)인데 kiwi가 감탄사(IC)로 태깅한다. 조사 뒤는
+    서술어나 체언이 오는 자리이므로 그 자리의 IC는 오분석으로 본다.
     """
-    text, flags = _run("나물 타령하셨어")
-    assert text == "나물 타령하셨어"
-    assert any(f.suggested_fix == "나물 타령 하셨어" for f in flags)
-    # 부사로도 읽히는 앞말('어제')에는 플래그를 만들지 않는다
-    assert not _run("어제 청소했다")[1]
+    assert _run("그건 내 잘못이 아냐")[0] == "그건 내 잘못이 아냐"
+    assert _run("네 책임이 아냐")[0] == "네 책임이 아냐"  # '네' = 너+의(관형어)
+    # 문장 맨 앞·맨 끝의 진짜 감탄사에는 그대로 쉼표를 넣는다
+    assert _run("아냐 그건 아니고")[0] == "아냐, 그건 아니고"
+    assert _run("싫다면 뭐")[0] == "싫다면, 뭐"
+
+
+def test_contraction_gets_full_form_flag_only():
+    """준말 '아냐'는 표준이므로 자동으로 바꾸지 않고 본말 후보만 플래그한다."""
+    text, flags = _run("그건 내 잘못이 아냐")
+    assert text == "그건 내 잘못이 아냐"
+    assert any(f.suggested_fix == "그건 내 잘못이 아니야" for f in flags)
+
+
+def test_honorific_dependent_noun_spacing():
+    """성명 뒤 '님'·'씨'는 의존명사라 띄어 쓴다(2026-08-03 사용자 보고).
+
+    근거: 표준국어대사전 '님'(의존 명사) "그 사람을 높여 이르는 말",
+    온라인가나다 — '김 씨', '길동 씨', '홍길동 씨'로 띄어 쓰고, 성씨 자체·가문을
+    뜻하는 접미사 '-씨'는 붙여 쓴다(김해 김씨).
+    """
+    assert _run("홍길동님 안녕하세요")[0] == "홍길동 님 안녕하세요"
+    assert _run("민수씨 왔어요")[0] == "민수 씨 왔어요"
+    # 직위·관계 뒤의 '-님'은 접미사 — 붙여 쓴 채로 둔다
+    assert _run("사장님 계세요")[0] == "사장님 계세요"
+    assert _run("고객님 반갑습니다")[0] == "고객님 반갑습니다"
+    # 성 한 글자 + 씨는 두 가지로 읽혀 자동 교정하지 않고 플래그만 남긴다
+    text, flags = _run("김씨는 밥을 차려 줬다")
+    assert text == "김씨는 밥을 차려 줬다"
+    assert any(f.suggested_fix == "김 씨는 밥을 차려 줬다" for f in flags)
+
+
+def test_intensive_prefix_cheo():
+    """접두사 '처-'를 '쳐'로 적은 것을 고친다(2026-08-03 사용자 보고).
+
+    근거: 표준국어대사전 '처-먹다'("'먹다'를 속되게 이르는 말"), '처-넣다'
+    ("마구 집어넣다")는 등재, '쳐먹다'·'쳐넣다'는 두 사전 모두 없음.
+    """
+    assert _run("쳐먹어라")[0] == "처먹어라"
+    assert _run("쳐 먹어라")[0] == "처먹어라"
+    assert _run("쳐넣었다")[0] == "처넣었다"
+    # 쳐-형 자체가 표제어인 말은 건드리지 않는다
+    assert _run("쳐다봤다")[0] == "쳐다봤다"
+    assert _run("쳐들어갔다")[0] == "쳐들어갔다"
+    # 보조 용언 자리는 '치다'의 활용일 수 있어 자동 교정하지 않는다
+    assert _run("박수를 쳐 줘")[0] == "박수를 쳐 줘"
+    text, flags = _run("이딴 거 너나 실컷 쳐 하든가")
+    assert text == "이딴 거 너나 실컷 쳐 하든가"
+    assert [f.suggested_fix for f in flags] == ["이딴 거 너나 실컷 처하든가"]
+
+
+def test_punctuation_never_gets_a_space_before_it():
+    """구두점 앞에는 공백을 두지 않는다 — 문맥과 무관한 규칙(2026-08-03 사용자 지정).
+
+    '지랄!'을 '지랄 !'로 제안하던 것을 막는다. 띄어쓰기 제안은 문장부호를 하나의
+    토막으로 보아 앞에 공백을 넣자고 할 때가 있다.
+    """
+    for line in ("지랄!", "이런 지랄!", "뭐라고?", "그래…", '"안녕"이라고 했다'):
+        text, flags = _run(line)
+        for f in flags:
+            assert " !" not in (f.suggested_fix or "")
+            assert " ?" not in (f.suggested_fix or "")
+            assert " ." not in (f.suggested_fix or "")
+
+
+def test_line_final_period_before_closing_quote():
+    """닫는 따옴표 앞의 줄 끝 마침표는 지우고, 따옴표는 붙여 쓴다.
+
+    2026-08-03 사용자 제공 자막: '"지영아, 나는 너를 좋아해. "'가 '좋아해, "'로
+    바뀌었다 — 마침표 뒤에 공백과 따옴표가 있어 문장이 이어진다고 본 탓이다.
+    """
+    entry = SubtitleEntry(
+        index=1, start="00:00:00,000", end="00:00:02,000", text='"지영아, 나는 너를 좋아해. "'
+    )
+    corrected, _flags, _log = correct_entries([entry], None, None, doc_type="subtitle")
+    assert corrected[0].text == '"지영아, 나는 너를 좋아해"'
+
+
+def test_subtitle_marker_needs_one_space_before_dialogue():
+    """[] · () 뒤에 말자막이 오면 한 칸 띄운다(설정과 무관한 규칙)."""
+    def _sub(text: str) -> str:
+        entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text)
+        return correct_entries([entry], None, None, doc_type="subtitle")[0][0].text
+
+    assert _sub("[지영]꺼져") == "[지영] 꺼져"
+    assert _sub("(민수)안녕하세요") == "(민수) 안녕하세요"
+    assert _sub("(철수) 왜 그래?") == "(철수) 왜 그래?"
+
+
+def test_joined_interjection_chamna():
+    """'참나'는 한 감탄사로 붙여 쓴다(2026-08-03 사용자 결정).
+
+    근거: 온라인가나다 — "'참나'가 사전에 실려 있지 않은데, 이를 띄어 쓸 근거도
+    분명하지 않습니다. … 하나의 감탄사로 쓰인다면 앞으로 사전에 실릴 수도 있다."
+    """
+    # 띄어 쓴 것을 쉼표로 가르지 않는다(예전에는 '참, 나 어이없네'가 됐다)
+    assert _run("참 나 어이없네")[0] == "참 나 어이없네"
+    # 붙여 쓴 것은 그대로 두고, 감탄사 뒤 쉼표만 넣는다
+    assert _run("참나 어이없네")[0] == "참나, 어이없네"
+    # 띄어 쓴 것은 플래그만 남긴다. 두 읽기를 함께 알리고 **자동 적용 후보는 주지
+    # 않는다** — '참나'(기막힘)와 '참, 나'(그런데/생각났는데)가 표기만으로 갈리지
+    # 않기 때문이다(2026-08-03 사용자 지정).
+    text, flags = _run("참 나 어이없네")
+    assert len(flags) == 1
+    assert not flags[0].suggested_fix
+    assert "참나 어이없네" in flags[0].reason and "참, 나 어이없네" in flags[0].reason
+    # 뒤에 조사가 붙으면 감탄사의 일부로 보지 않는다
+    assert _run("참 나는 그렇게 생각해") == ("참 나는 그렇게 생각해", [])
+
+
+def test_cheo_prefix_derivative_is_not_split():
+    """'처맞고'를 '처 맞고'로 가르지 않는다(2026-08-03 사용자 보고).
+
+    '처-'는 접두사이므로 뒤 용언에 붙여 쓴다. 파생어가 사전에 없어도(처맞다 미등재)
+    띄어 쓸 근거는 없는데, kiwi는 이 '처'를 명사로 읽어 가르자고 제안했다.
+    """
+    text, flags = _run("처맞고 들어오는 것보다 낫다고 칭찬 날렸지")
+    assert text == "처맞고 들어오는 것보다 낫다고 칭찬 날렸지"
+    assert not any("처 맞고" in (f.suggested_fix or "") for f in flags)
+
+
+def test_undocumented_cheo_derivative_is_flagged_not_corrected():
+    """'쳐맞고'는 사전에 근거가 없어 자동으로 바꾸지 않고 '처맞고'를 후보로 알린다."""
+    text, flags = _run("쳐맞고 들어왔다")
+    assert text == "쳐맞고 들어왔다"
+    assert [f.suggested_fix for f in flags] == ["처맞고 들어왔다"]

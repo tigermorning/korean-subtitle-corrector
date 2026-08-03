@@ -20,11 +20,18 @@ from .spacing import (
     correct_particle_spacing,
 )
 from .affix import (
-    check_noun_phrase_affix_spacing,
+    check_honorific_dependent_noun,
+    check_intensive_prefix_cheo,
+    check_undocumented_cheo_derivative,
     correct_action_noun_affix,
     correct_adnominal_noun_verb_split,
+    correct_honorific_dependent_noun_spacing,
+    correct_intensive_prefix_cheo,
 )
-from .punctuation import correct_interjection_vocative_comma
+from .punctuation import (
+    check_joined_interjection_spacing,
+    correct_interjection_vocative_comma,
+)
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
     correct_subtitle_ellipsis,
@@ -35,6 +42,7 @@ from .subtitle_rules import (
 from .loanwords import check_colloquial_loanword, correct_loanwords
 from .replacements import (
     check_ambiguous_particle,
+    check_contracted_form,
     correct_always_wrong,
     correct_discriminatory_terms,
     correct_former_terms,
@@ -162,6 +170,8 @@ def _correct_line(
     corrected_text, particle_fixes = correct_particle_spacing(corrected_text, markers)
     corrected_text, adnominal_fixes = correct_adnominal_noun_verb_split(corrected_text)
     corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
+    corrected_text, honorific_fixes = correct_honorific_dependent_noun_spacing(corrected_text)
+    corrected_text, cheo_fixes = correct_intensive_prefix_cheo(corrected_text)
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
     corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
     corrected_text, aux_verb_fixes, aux_verb_blocked = _aux_verb_spacing(
@@ -179,6 +189,8 @@ def _correct_line(
         + particle_fixes
         + adnominal_fixes
         + affix_fixes
+        + honorific_fixes
+        + cheo_fixes
         + comma_fixes
         + compound_fixes
         + aux_verb_fixes
@@ -244,8 +256,12 @@ def _correct_line(
         check_purified_terms(index, corrected_text),
         check_colloquial_loanword(index, corrected_text),
         check_ambiguous_compound(index, corrected_text),
-        check_noun_phrase_affix_spacing(index, corrected_text),
         check_ambiguous_particle(index, corrected_text),
+        check_contracted_form(index, corrected_text),
+        check_joined_interjection_spacing(index, corrected_text),
+        check_honorific_dependent_noun(index, corrected_text),
+        check_intensive_prefix_cheo(index, corrected_text),
+        check_undocumented_cheo_derivative(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
     for f in checks:

@@ -145,3 +145,25 @@ def _hangul_run_bounds(text: str, pos: int) -> tuple[int, int]:
     while right < len(text) and is_hangul(text[right]):
         right += 1
     return left, right
+
+
+# 앞에 공백을 둘 수 없는 부호. 문장부호(마침표·물음표·느낌표·쉼표·말줄임표)와 닫는
+# 짝(따옴표·괄호)이다. **문맥과 무관한 규칙**이므로(2026-08-03 사용자 지정: "마침표,
+# 물음표, 느낌표, 따옴표 모두 띄어쓰기 없이 사용") 판정 없이 늘 적용한다. 여는 짝
+# (여는 따옴표·괄호)은 앞에 공백이 오는 것이 정상이라 넣지 않는다.
+_NO_SPACE_BEFORE = ".,!?…)]}’”》›"
+
+
+def _strip_space_before_punctuation(text: str) -> str:
+    """구두점 바로 앞의 공백을 없앤다('지랄 !' -> '지랄!').
+
+    kiwi의 띄어쓰기 제안은 문장부호를 하나의 토막으로 보아 앞에 공백을 넣자고 할 때가
+    있다. 어느 규범도 그렇게 쓰지 않으므로 제안 단계에서 걸러 낸다.
+    """
+    out = []
+    for ch in text:
+        if ch in _NO_SPACE_BEFORE:
+            while out and out[-1] in " 	":
+                out.pop()
+        out.append(ch)
+    return "".join(out)

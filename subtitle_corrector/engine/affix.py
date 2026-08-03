@@ -117,58 +117,211 @@ def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
     return corrected, [_localized_change(text, corrected)]
 
 
-def _has_adverb_reading(text: str, token) -> bool:
-    """명사로 태깅된 토큰이 같은 자리에서 부사(MAG)로도 읽히는지.
-
-    '어제 청소했다'의 '어제'는 시간 부사어라 뒤 명사를 꾸미지 않는다. 그런데 kiwi는
-    같은 낱말을 문장에 따라 NNG로도 MAG로도 태깅한다('어제 청소 했다'에서는 MAG,
-    붙여 놓으면 NNG). 판정 근거는 kiwi 자신의 대안 분석이다 — 부사 읽기가 있으면
-    명사구 수식으로 단정하지 않는다(`_has_determiner_reading`과 같은 방식).
-    """
-    for tokens, _score in _kiwi.analyze(text, top_n=5):
-        for candidate in tokens:
-            if candidate.start == token.start and candidate.tag == "MAG":
-                return True
-    return False
+# 사람을 높여 부르는 의존명사. 성이나 이름 뒤에서는 띄어 쓴다(홍길동 님, 홍길동 씨).
+# 근거: 표준국어대사전 '님'(의존 명사) "그 사람을 높여 이르는 말. '씨'보다 높임의
+# 뜻을 나타낸다.", 온라인가나다 — "그 사람을 높이거나 대접하여 부르거나 이르는 말로
+# 쓸 때는 의존 명사이므로 앞말과 띄어 쓴다('김 씨', '길동 씨', '홍길동 씨')".
+# 직위·관계 뒤의 '-님'은 접미사라 붙여 쓴다(사장님, 부모님, 고객님) — kiwi가 이 둘을
+# 앞말 태그로 갈라 준다(고유명사 NNP = 사람 이름 / 일반명사 NNG = 직위·관계).
+_HONORIFIC_DEPENDENT_NOUNS = ("님", "씨")
 
 
-def check_noun_phrase_affix_spacing(index: int, text: str) -> FlagItem | None:
-    """'명사 + 명사 + 하다'가 한 어절로 붙어 있으면 띄어 쓸 후보를 플래그한다
-    (예: '나물 타령하셨어' → '나물 타령 하셨어').
+def correct_honorific_dependent_noun_spacing(text: str) -> tuple[str, list[str]]:
+    """성명 뒤에 붙여 쓴 '님'·'씨'를 띄어 쓴다('홍길동님' -> '홍길동 님').
 
-    **왜 자동 교정이 아니라 플래그인가**: 해석이 둘 다 열려 있다. 온라인가나다는
-    `수학 공부 하다` 문의에 "'수학'이 '공부'를 수식해 명사구를 만든 것으로 보면
-    띄어 쓰는 것이 바르다"고 하면서도 "'수학을 공부하다'처럼 조사 '을'이 생략된
-    목적어로 이해할 수도 있다"고 답했다. 앞 명사가 관형어인지 목적어인지는 표면만
-    보고 가릴 수 없으므로 사람에게 남긴다(2026-08-03 사용자 보고로 추가).
+    앞말이 **두 글자 이상의 고유명사(NNP)**일 때만 자동 교정한다. 한 글자 고유명사
+    (성 한 글자)는 '김씨'(성씨 가문·접미사)와 '김 씨'(그 사람·의존명사)가 표기만으로
+    갈리지 않아 자동으로 바꾸지 않고 check_honorific_dependent_noun()이 플래그한다.
+    일반명사 뒤('사장님', '고객님')는 접미사이므로 대상이 아니다.
 
-    관형사·관형형이 앞에 오는 경우(`뭔 생각하냐`)는 해석이 하나뿐이라
-    `correct_adnominal_noun_verb_split()`이 자동으로 나눈다 — 여기서 다루지 않는다.
-    """
+    반환값: (교정된 텍스트, 적용 로그)."""
     tokens = _kiwi.tokenize(text)
-    for i in range(2, len(tokens)):
-        hae, noun, prev = tokens[i], tokens[i - 1], tokens[i - 2]
-        if hae.tag != "XSV" or hae.form != "하":
+    cuts = []
+    for i in range(1, len(tokens)):
+        honorific, prev = tokens[i], tokens[i - 1]
+        if honorific.form not in _HONORIFIC_DEPENDENT_NOUNS:
             continue
-        if noun.tag != "NNG":
+        if prev.tag != "NNP" or len(prev.form) < 2:
             continue
-        if noun.start + noun.len != hae.start:
-            continue  # 명사와 '하'가 이미 떨어져 있으면 대상 아님
-        if prev.tag not in ("NNG", "NNP"):
+        if prev.start + prev.len != honorific.start:
+            continue  # 이미 띄어 써 있으면 대상 아님
+        cuts.append(honorific.start)
+    if not cuts:
+        return text, []
+    corrected = text
+    for pos in sorted(set(cuts), reverse=True):
+        corrected = corrected[:pos] + " " + corrected[pos:]
+    return corrected, [_localized_change(text, corrected)]
+
+
+def check_honorific_dependent_noun(index: int, text: str) -> FlagItem | None:
+    """성 한 글자 뒤에 붙여 쓴 '씨'·'님'을 확인 플래그한다('김씨').
+
+    '김씨'는 두 가지로 읽힌다 — 접미사 '-씨'(그 성씨 자체·가문: '김해 김씨')면 붙여
+    쓰고, 의존명사 '씨'(그 사람: '김 씨는 밥을 차려 주었다')면 띄어 쓴다. 표기만으로는
+    갈리지 않아 사람이 판단한다(온라인가나다 답변이 두 쓰임을 나란히 제시한다)."""
+    tokens = _kiwi.tokenize(text)
+    for i in range(1, len(tokens)):
+        honorific, prev = tokens[i], tokens[i - 1]
+        if honorific.form not in _HONORIFIC_DEPENDENT_NOUNS:
             continue
-        if text[prev.start + prev.len : noun.start] != " ":
-            continue  # 앞 명사가 바로 앞이 아니면 수식 관계로 볼 수 없다
-        if _has_adverb_reading(text, prev):
-            continue  # '어제 청소했다'의 '어제'처럼 부사로도 읽히면 수식 관계가 아니다
-        suggested = text[: hae.start] + " " + text[hae.start :]
+        if prev.tag != "NNP" or len(prev.form) != 1:
+            continue
+        if prev.start + prev.len != honorific.start:
+            continue
+        suggested = text[: honorific.start] + " " + text[honorific.start :]
         return FlagItem(
             line_index=index,
             original_text=text,
             suggested_fix=suggested,
             reason=(
-                f"'{prev.form} {noun.form}'이 명사구라면 뒤의 '하다'는 접사가 아니라 "
-                f"동사이므로 '{noun.form} 하…'처럼 띄어 씁니다(온라인가나다 qna_seq=320467). "
-                f"반대로 '{prev.form}'을 목적어로 보면 붙여 쓴 표기도 가능해 문맥 확인이 필요합니다."
+                f"'{prev.form}{honorific.form}'이 그 사람을 높여 부르는 말이면 의존명사라 "
+                f"'{prev.form} {honorific.form}'처럼 띄어 씁니다. 성씨 자체나 가문을 뜻하면"
+                f"(김해 김씨) 접미사라 붙여 쓰므로 문맥 확인이 필요합니다."
+            ),
+        )
+    return None
+
+
+def _cheo_prefix_candidate(text: str, tokens, i: int):
+    """'쳐'(치+어) 뒤에 용언이 오는 자리에서 접두사 '처-' 후보를 찾는다.
+
+    돌려주는 값: (쳐 시작 위치, 뒤 용언 시작 위치, 붙임형, 뒤 용언 태그) 또는 None.
+    """
+    stem, ending = tokens[i], tokens[i + 1]
+    if stem.tag != "VV" or stem.lemma != "치다":
+        return None
+    if ending.tag != "EC" or ending.form != "어":
+        return None
+    # 원문에 실제로 '쳐'로 줄어 있어야 한다('치어'는 대상 아님)
+    surface_end = ending.start + ending.len
+    if text[stem.start:surface_end] != "쳐":
+        return None
+    if i + 2 >= len(tokens):
+        return None
+    verb = tokens[i + 2]
+    if verb.tag not in ("VV", "VX"):
+        return None
+    joined = "처" + (verb.lemma or "")
+    if not joined.endswith("다"):
+        return None
+    # 사전 근거: 붙임형(처X)이 표제어이고 쳐X는 표제어가 아닐 때만 다룬다.
+    # '쳐다보다'·'쳐들다'·'쳐들어가다'는 쳐-형 자체가 표제어라 이 조건에서 빠진다.
+    if not word_exists(joined) or word_exists("쳐" + (verb.lemma or "")):
+        return None
+    return stem.start, verb.start, joined, verb.tag
+
+
+def correct_intensive_prefix_cheo(text: str) -> tuple[str, list[str]]:
+    """접두사 '처-'를 '쳐'로 잘못 적은 것을 고친다('쳐먹어라' -> '처먹어라',
+    '쳐 먹어라' -> '처먹어라').
+
+    '처-'는 '마구/함부로'의 뜻을 더하는 접두사이고, 사전은 그 파생어를 하이픈으로
+    표시해 등재한다(처-먹다 "'먹다'를 속되게 이르는 말", 처-넣다 "마구 집어넣다").
+    '쳐먹다'·'쳐넣다'는 어느 사전에도 없다. 접두사이므로 뒤 용언과 붙여 쓴다.
+
+    자동 교정은 **뒤가 본용언(VV)일 때만** 한다. 보조 용언(VX) 자리는 '치다'의 활용과
+    구분되지 않는다 — '박수를 쳐 줘'의 '쳐 주다'는 정상이고 '처주다'도 사전 표제어라
+    조건만으로는 걸러지지 않는다. 그 자리는 check_intensive_prefix_cheo()가 플래그한다.
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    edits = []  # (쳐 시작, 뒤 용언 시작, 붙임형)
+    for i in range(len(tokens) - 2):
+        found = _cheo_prefix_candidate(text, tokens, i)
+        if not found:
+            continue
+        start, verb_start, _joined, verb_tag = found
+        if verb_tag != "VV":
+            continue
+        edits.append((start, verb_start))
+    if not edits:
+        return text, []
+    corrected = text
+    for start, verb_start in sorted(edits, reverse=True):
+        # '쳐' -> '처'로 바꾸고, 사이 공백은 지워 붙인다.
+        corrected = corrected[:start] + "처" + corrected[verb_start:]
+    return corrected, [_localized_change(text, corrected)]
+
+
+def _undocumented_cheo_derivative(text: str, tokens, i: int):
+    """사전에 파생어가 없는 '쳐+용언' 결합을 찾는다('쳐맞고' — 처맞다·쳐맞다 모두 미등재).
+
+    접두사 '처-'는 뒤 용언에 붙여 쓰므로 파생어가 사전에 없어도 표기는 '처X'다. 다만
+    사전이 확인해 주지 않으니 자동으로 바꾸지 않고 후보만 알린다.
+
+    돌려주는 값: (쳐 시작 위치, 뒤 용언 시작 위치, 붙임형) 또는 None.
+    """
+    stem, ending = tokens[i], tokens[i + 1]
+    if stem.tag != "VV" or stem.lemma != "치다":
+        return None
+    if ending.tag != "EC" or ending.form != "어":
+        return None
+    if text[stem.start : ending.start + ending.len] != "쳐":
+        return None
+    if i + 2 >= len(tokens):
+        return None
+    verb = tokens[i + 2]
+    if verb.tag != "VV" or verb.start != ending.start + ending.len:
+        return None  # 붙여 쓴 경우만 — 띄어 쓴 '쳐 맞고'는 '치다'의 활용일 수 있다
+    lemma = verb.lemma or ""
+    if not lemma.endswith("다") or not word_exists(lemma):
+        return None
+    if word_exists("처" + lemma) or word_exists("쳐" + lemma):
+        return None  # 사전에 근거가 있으면 correct_intensive_prefix_cheo()가 다룬다
+    return stem.start, verb.start, "처" + lemma
+
+
+def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
+    """보조 용언 자리의 '쳐'를 접두사 '처-'로 볼지 확인 플래그한다('쳐 하든가').
+
+    '처하다'는 표준국어대사전에 있으나 뜻이 '어떤 형편이나 처지에 놓이다'(處하다)여서
+    접두사 '처-'의 뜻과 다르다. 즉 붙임형이 표제어라는 사실만으로 정답을 확정할 수
+    없다. 자동으로 바꾸지 않고 사람에게 넘긴다(2026-08-03 사용자 보고)."""
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 2):
+        found = _cheo_prefix_candidate(text, tokens, i)
+        if not found:
+            continue
+        start, verb_start, joined, verb_tag = found
+        if verb_tag != "VX":
+            continue
+        suggested = text[:start] + "처" + text[verb_start:]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"'마구/함부로'의 뜻이라면 접두사 '처-'를 써서 '{joined}'처럼 붙여 씁니다"
+                f"(사전 표제어). '치다'의 활용('박수를 쳐 주다')이면 원문이 맞으므로 "
+                "문맥 확인이 필요합니다."
+            ),
+        )
+    return None
+
+
+def check_undocumented_cheo_derivative(index: int, text: str) -> FlagItem | None:
+    """사전에 없는 '쳐+용언' 결합에 접두사 '처-' 표기를 후보로 알린다('쳐맞고').
+
+    '처맞다'·'쳐맞다'는 둘 다 표제어가 아니어서 사전으로는 정답을 확정할 수 없다.
+    그래도 접두사 '처-'는 뒤 용언에 붙여 쓰므로 표기 후보는 '처맞고'다
+    (2026-08-03 사용자 보고: "'처맞다'의 '처-'는 접사로서 붙여씀이 맞다").
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 2):
+        found = _undocumented_cheo_derivative(text, tokens, i)
+        if not found:
+            continue
+        start, verb_start, joined = found
+        suggested = text[:start] + "처" + text[verb_start:]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"'마구/함부로'의 뜻이라면 접두사 '처-'를 써서 '{joined}'로 적습니다"
+                " — 접두사는 뒤 용언에 붙여 씁니다. 이 파생어는 사전 표제어가 아니어서"
+                " 자동으로 바꾸지 않았습니다('치다'의 활용이면 원문이 맞습니다)."
             ),
         )
     return None

@@ -36,7 +36,11 @@ def _marker_unit_pattern(markers: "SubtitleMarkers | None") -> str:
     units = []
     if markers.position:
         units.append(re.escape(markers.position))
-    for pair in (markers.speaker, markers.tone):
+    # 대괄호와 소괄호는 설정과 무관하게 늘 표시로 본다. "[] 이나 () 뒤에 말자막이
+    # 오는 경우에는 띄어쓰기가 필요하다"는 것이 규칙이고 문맥과 무관하기 때문이다
+    # (2026-08-03 사용자 지정). 설정으로 받는 부호는 그 위에 더한다 — 다른 부호를
+    # 쓰는 납품처를 위한 것이지, 기본 두 부호를 빼기 위한 것이 아니다.
+    for pair in (markers.speaker, markers.tone, "[]", "()"):
         if pair and len(pair) >= 2:
             open_ch, close_ch = re.escape(pair[0]), re.escape(pair[-1])
             units.append(f"{open_ch}[^{close_ch}]*{close_ch}")

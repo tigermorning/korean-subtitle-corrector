@@ -84,11 +84,18 @@ from .spacing import (
     correct_particle_spacing,
 )
 from .affix import (
-    check_noun_phrase_affix_spacing,
+    check_honorific_dependent_noun,
+    check_intensive_prefix_cheo,
+    check_undocumented_cheo_derivative,
     correct_action_noun_affix,
     correct_adnominal_noun_verb_split,
+    correct_honorific_dependent_noun_spacing,
+    correct_intensive_prefix_cheo,
 )
-from .punctuation import correct_interjection_vocative_comma
+from .punctuation import (
+    check_joined_interjection_spacing,
+    correct_interjection_vocative_comma,
+)
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
     correct_subtitle_ellipsis,
@@ -99,6 +106,7 @@ from .subtitle_rules import (
 from .loanwords import check_colloquial_loanword, correct_loanwords
 from .replacements import (
     check_ambiguous_particle,
+    check_contracted_form,
     correct_always_wrong,
     correct_discriminatory_terms,
     correct_former_terms,
@@ -132,9 +140,14 @@ __all__ = [
     "correct_compound_spacing",
     "correct_aux_verb_spacing",
     "_aux_verb_spacing",
-    "check_noun_phrase_affix_spacing",
+    "check_honorific_dependent_noun",
+    "check_intensive_prefix_cheo",
+    "check_undocumented_cheo_derivative",
     "correct_action_noun_affix",
+    "correct_honorific_dependent_noun_spacing",
+    "correct_intensive_prefix_cheo",
     "correct_adnominal_noun_verb_split",
+    "check_joined_interjection_spacing",
     "correct_interjection_vocative_comma",
     "correct_always_wrong",
     "correct_nonstandard_terms",
@@ -150,6 +163,7 @@ __all__ = [
     "check_spacing",
     "check_ambiguous_compound",
     "check_ambiguous_particle",
+    "check_contracted_form",
     "check_colloquial_loanword",
     "check_dialect",
     "check_term_spacing_consistency",

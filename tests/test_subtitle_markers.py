@@ -121,10 +121,12 @@ class TestSpeakerToneBrackets:
         out, _flags, _log = _run("(민수)안녕하세요", markers)
         assert out == "(민수) 안녕하세요"
 
-    def test_unconfigured_bracket_is_left_alone(self):
-        """대괄호만 쓰는 원고에서 괄호까지 건드리면 정당한 표기를 망친다."""
+    def test_paren_is_a_marker_even_without_configuration(self):
+        """대괄호와 소괄호는 설정과 무관하게 표시로 본다(2026-08-03 사용자 지정:
+        "[] 이나 () 뒤에 말자막이 오는 경우에는 띄어쓰기가 필요하다"). 이전에는
+        설정한 부호만 표시로 보아 소괄호 원고에서 아무 일도 하지 않았다."""
         out, _flags, _log = _run("(민수)안녕하세요")
-        assert out == "(민수)안녕하세요"
+        assert out == "(민수) 안녕하세요"
 
     def test_single_char_input_infers_the_pair(self):
         assert normalize_subtitle_markers(speaker="(").speaker == "()"
@@ -196,7 +198,8 @@ class TestMarkerAdjacency:
         """효과음처럼 표시만 있고 대사가 없는 줄은 건드리지 않는다."""
         assert self._out("[문 여는 소리]") == "[문 여는 소리]"
 
-    def test_unset_markers_are_not_touched(self):
-        """설정하지 않은 부호는 표시로 보지 않는다."""
+    def test_default_brackets_are_markers_and_stay_joined(self):
+        """대괄호·소괄호는 설정하지 않아도 표시다 — 표시끼리는 붙여 쓴다
+        (2026-08-03 규칙 변경 전에는 설정한 부호만 표시로 보아 사이 공백이 남았다)."""
         only_speaker = normalize_subtitle_markers(speaker="[")
-        assert _run("[민수] (웃으며) 좋아", only_speaker)[0] == "[민수] (웃으며) 좋아"
+        assert _run("[민수] (웃으며) 좋아", only_speaker)[0] == "[민수](웃으며) 좋아"

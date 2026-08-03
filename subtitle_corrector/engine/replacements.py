@@ -1,6 +1,7 @@
 """어휘 치환 — 항상 틀린 표기, 비표준어, 차별적 표현, 전(前) 용어. 조사 이형태 보정 포함.
 """
 
+import re
 from ..common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from ..dictionary import (
     former_term_field,
@@ -265,3 +266,36 @@ def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[Fl
     if auto_replacements:
         corrected, applied = _apply_replacements(text, auto_replacements)
     return corrected, applied, flags
+
+
+# 준말 -> 본말. **둘 다 표준**이라 자동 교정하지 않고 확인 플래그만 남긴다
+# (2026-08-03 사용자 지정). 항목마다 사전 근거를 적는다 — 표준어끼리의 임의 치환은
+# 이 프로젝트가 막으려는 부류이므로(평가셋 t12: '도리어'를 '되레'로 바꾸지 않는다),
+# 근거 없이 늘리면 안 된다.
+_CONTRACTIONS_TO_FULL_FORM = {
+    # 표준국어대사전 '아냐'(감탄사): "'아니야'의 준말." 서술어로 쓰인 '아냐'
+    # ('내 잘못이 아냐' = 아니다 + -야)도 같은 준말이다.
+    "아냐": "아니야",
+}
+
+
+def check_contracted_form(index: int, text: str) -> FlagItem | None:
+    """준말을 본말로 펴는 후보를 확인 플래그한다('아냐' -> '아니야').
+
+    자동 교정하지 않는 이유: 준말도 본말도 표준이다. 어느 쪽을 쓸지는 대사의 말투와
+    납품처 기준이 정하는 문제라 사전으로 답이 나오지 않는다. 어절 단위로만 본다 —
+    '아냐도'처럼 조사가 붙은 형태나 낱말 안('개아냐')은 건드리지 않는다.
+    """
+    for short, full in _CONTRACTIONS_TO_FULL_FORM.items():
+        for match in re.finditer(rf"(?<![^\s(\[\"']){re.escape(short)}(?![^\s,.!?…)\]\"'])", text):
+            suggested = text[: match.start()] + full + text[match.end() :]
+            return FlagItem(
+                line_index=index,
+                original_text=text,
+                suggested_fix=suggested,
+                reason=(
+                    f"'{short}'는 표준국어대사전에 \"'{full}'의 준말\"로 등재된 표준 표기입니다. "
+                    f"둘 다 맞으므로 자동으로 바꾸지 않았습니다 — 본말로 펴려면 '{full}'입니다."
+                ),
+            )
+    return None

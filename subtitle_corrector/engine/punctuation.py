@@ -2,6 +2,7 @@
 """
 
 from ..dictionary import word_exists
+from ..report import FlagItem
 from .text_utils import _hangul_run_bounds, _localized_change
 from .kiwi_adapter import _has_determiner_reading, _is_punct_token, _kiwi
 
@@ -17,6 +18,27 @@ _QUOTED_COMMAND_ENDINGS = {"라", "으라", "자", "냐", "마", "래"}
 # 실사용에서 '어디 있는디 그려?'가 '어디 있는디, 그려?'로 잘못 교정됐다. 표준어
 # 감탄사가 아니므로 쉼표 규칙의 대상에서 아예 뺀다.
 _DIALECT_AGREEMENT_FORMS = {"그려", "그랴", "기여", "그라", "그자"}
+
+
+# 사전에 없지만 한 감탄사로 붙여 쓰기로 정한 말. 근거는 온라인가나다 답변이다 —
+# "'참나'가 사전에 실려 있지 않은데, 이를 띄어 쓸 근거도 분명하지 않습니다. …
+# '참나'가 하나의 감탄사로 쓰인다면 앞으로 사전에 실릴 수도 있다"(사용자 제공,
+# 2026-08-03). 띄어 쓸 근거가 없으므로 붙여 쓰는 쪽으로 정했다(사용자 결정).
+# 이 목록은 **쉼표를 그 안에 넣지 않기 위한** 것이다. 늘릴 때는 같은 수준의 근거를
+# 함께 적을 것 — 사전에 없는 말을 한 단어로 못 박는 결정이라 근거 없이 늘리면 안 된다.
+_JOINED_INTERJECTIONS = {"참나"}
+
+
+def _splits_joined_interjection(text: str, tokens, ic_pos: int) -> bool:
+    """감탄사 뒤에 쉼표를 넣으면 한 덩어리로 쓰는 감탄사를 가르는지.
+
+    '참 나 어이없네'는 '참'(IC) 다음이 '나'라서 쉼표 규칙이 '참, 나 어이없네'로
+    만들었다. '참나'를 한 감탄사로 보기로 했으므로 그 사이를 가르지 않는다.
+    """
+    if ic_pos + 1 >= len(tokens):
+        return False
+    joined = tokens[ic_pos].form + tokens[ic_pos + 1].form
+    return joined in _JOINED_INTERJECTIONS
 
 
 def _is_quoted_command(tokens, ic_pos: int) -> bool:
@@ -82,6 +104,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
         and is_content(tokens[1])
         and tokens[0].form not in _DIALECT_AGREEMENT_FORMS
         and not _has_determiner_reading(text, tokens[0])
+        and not _splits_joined_interjection(text, tokens, 0)
     ):
         pos = tokens[0].start + tokens[0].len
         if pos < len(text) and text[pos - 1] != "," and text[pos] not in ",.!?…":
@@ -94,8 +117,18 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
 
     if last >= 1:
         lt = tokens[last]
-        # 2) 문장 맨 끝 감탄사(내용어 뒤) → 감탄사 앞에 쉼표
-        if lt.tag == "IC" and is_content(tokens[last - 1]) and not _is_quoted_command(tokens, last):
+        # 2) 문장 맨 끝 감탄사(내용어 뒤) → 감탄사 앞에 쉼표.
+        #    **앞말이 조사면 넣지 않는다.** 조사 뒤는 서술어나 체언이 오는 자리이므로
+        #    그 자리의 IC 태그는 오분석이다 — '그건 내 잘못이 아냐'에서 '아냐'
+        #    ('아니야'의 준말, 서술어)를 kiwi가 감탄사로 읽어 '잘못이, 아냐'로
+        #    쉼표를 넣어 서술어를 잘라 버렸다(2026-08-03 사용자 보고). 보격 조사
+        #    '이'(JKC) 뒤라면 '아니다/되다'가 와야 하는 자리라는 것이 규정상 확실하다.
+        if (
+            lt.tag == "IC"
+            and is_content(tokens[last - 1])
+            and not tokens[last - 1].tag.startswith("J")
+            and not _is_quoted_command(tokens, last)
+        ):
             j = lt.start
             while j > 0 and text[j - 1] == " ":
                 j -= 1
@@ -143,3 +176,43 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
     for pos in sorted(insert_positions, reverse=True):
         corrected = corrected[:pos] + "," + corrected[pos:]
     return corrected, [_localized_change(text, corrected)]
+
+
+def check_joined_interjection_spacing(index: int, text: str) -> FlagItem | None:
+    """한 덩어리로 쓰는 감탄사를 띄어 쓴 것을 플래그한다('참 나' -> '참나').
+
+    자동으로 붙이지 않는 이유: 뒤 낱말이 감탄사의 일부인지('참 나 어이없네') 다음
+    문장 성분인지('참 나는 그렇게 생각해') 표면으로 갈린다고 단정할 수 없다. 뒤 낱말이
+    조사 없이 한 어절로 끝날 때만 후보로 보고, 판단은 사람에게 남긴다.
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 1):
+        if tokens[i].tag != "IC":
+            continue
+        nxt = tokens[i + 1]
+        joined = tokens[i].form + nxt.form
+        if joined not in _JOINED_INTERJECTIONS:
+            continue
+        if text[tokens[i].start + tokens[i].len : nxt.start] != " ":
+            continue  # 이미 붙어 있다
+        end = nxt.start + nxt.len
+        if end < len(text) and text[end] not in " ,.!?…":
+            continue  # 뒤에 조사·어미가 붙어 있으면 감탄사의 일부로 볼 수 없다
+        joined_form = text[: tokens[i].start] + joined + text[nxt.start + nxt.len :]
+        comma_form = (
+            text[: tokens[i].start + tokens[i].len] + "," + text[tokens[i].start + tokens[i].len :]
+        )
+        # 자동 적용 후보(suggested_fix)를 일부러 주지 않는다. 두 읽기 중 어느 쪽인지는
+        # 문맥이 정하고, 하나를 후보로 내놓으면 리포트 적용 기능이 그쪽으로 굳힌다
+        # (2026-08-03 사용자 지정: "헷갈린다면 자동교정하지 말고 플래깅할 것").
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{joined}'(기가 막히고 어이없다는 감탄사)로 쓴 것이면 붙여 써 "
+                f"'{joined_form}'이고, '{tokens[i].form}'이 '그런데/생각났는데'의 뜻이면 "
+                f"쉼표를 넣어 '{comma_form}'입니다. 표기만으로 갈리지 않아 문맥 확인이 "
+                "필요합니다(사전에 실려 있지 않으나 띄어 쓸 근거도 없다는 국립국어원 답변)."
+            ),
+        )
+    return None

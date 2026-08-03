@@ -6,6 +6,12 @@ from .text_utils import _localized_change
 from .options import PunctuationStyle, SubtitleMarkers
 from .markers import _marker_unit_pattern
 
+# 줄 끝에서 마침표 뒤에 올 수 있는 닫는 부호. 마침표 뒤에 이 부호(와 공백)만 남았으면
+# 문장이 이어지는 것이 아니라 줄 끝 마침표다(2026-08-03 사용자 제공 자막에서 발견:
+# '"지영아, 나는 너를 좋아해. "'가 '좋아해, "'로 바뀌었다).
+_CLOSING_MARKS = "\"'’”)]}》›"
+
+
 def _is_sentence_period(text: str, i: int) -> bool:
     """text[i]의 '.'가 문장 종결 마침표인지 판정한다(소수점 3.14, 말줄임표
     ... 제외)."""
@@ -31,12 +37,17 @@ def correct_subtitle_final_period(text: str) -> tuple[str, list[str]]:
     for line in text.split("\n"):
         stripped = line.rstrip()
         trailing_ws = line[len(stripped) :]
+        # 줄 끝이 닫는 따옴표·괄호면 그 앞의 마침표가 줄 끝 마침표다
+        # ('좋아해. "' -> '좋아해"'). 닫는 부호는 공백 없이 붙여 되돌린다 — 구두점
+        # 앞에는 공백을 두지 않는다(2026-08-03 사용자 지정 규칙).
+        core = stripped.rstrip(_CLOSING_MARKS + " \t")
+        closing = "".join(ch for ch in stripped[len(core) :] if ch not in " \t")
         if (
-            stripped.endswith(".")
-            and not stripped.endswith("..")
-            and _is_sentence_period(stripped, len(stripped) - 1)
+            core.endswith(".")
+            and not core.endswith("..")
+            and _is_sentence_period(core, len(core) - 1)
         ):
-            new_lines.append(stripped[:-1] + trailing_ws)
+            new_lines.append(core[:-1] + closing + trailing_ws)
             changed = True
         else:
             new_lines.append(line)
@@ -103,7 +114,10 @@ def correct_subtitle_internal_period(text: str) -> tuple[str, list[str]]:
         if ch != "." or not _is_sentence_period(text, i):
             continue
         nxt = text[i + 1] if i + 1 < len(text) else ""
-        if nxt == " " and text[i + 1 :].strip():
+        # 뒤에 남은 것이 닫는 따옴표·괄호뿐이면 문장이 이어지는 것이 아니라 줄 끝
+        # 마침표다 — correct_subtitle_final_period()가 지운다. 여기서 쉼표로 바꾸면
+        # '좋아해. "'가 '좋아해, "'가 된다(2026-08-03 사용자 보고).
+        if nxt == " " and text[i + 1 :].strip().strip(_CLOSING_MARKS):
             positions.append(i)
     if not positions:
         return text, []

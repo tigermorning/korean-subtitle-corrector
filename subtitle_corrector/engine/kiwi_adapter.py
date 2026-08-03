@@ -148,10 +148,20 @@ def _has_determiner_reading(text: str, token) -> bool:
     kiwi가 관형사 '그'를 감탄사(IC)로 태깅했기 때문이다. 판정 근거는 kiwi 자신의
     대안 분석이다 — 같은 자리를 관형사(MM)로 읽는 후보가 있으면 둘 중 어느 쪽인지는
     문맥이 정하므로, 쉼표를 넣지 않는다('에서' 과교정에서 쓴 것과 같은 방식).
+
+    소유격 준말('네 책임이 아냐'의 '네' = 너+의)도 같은 부류다. kiwi는 이 자리를
+    대명사+관형격 조사(NP+JKG)로 읽는 후보를 내놓는다 — 그 후보가 있으면 뒤 체언을
+    꾸미는 관형어일 수 있으므로 쉼표를 넣지 않는다(2026-08-03 사용자 보고로 추가:
+    '네 책임이 아냐'가 '네, 책임이 아냐'로 바뀌었다).
     """
     for tokens, _score in _kiwi.analyze(text, top_n=5):
-        for candidate in tokens:
-            if candidate.start == token.start and candidate.tag == "MM":
+        for i, candidate in enumerate(tokens):
+            if candidate.start != token.start:
+                continue
+            if candidate.tag == "MM":
+                return True
+            # 대명사 + 관형격 조사('너'+'의') = 관형어 읽기
+            if candidate.tag == "NP" and i + 1 < len(tokens) and tokens[i + 1].tag == "JKG":
                 return True
     return False
 
