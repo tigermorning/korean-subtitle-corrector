@@ -89,9 +89,14 @@ def is_contemporary_general_word(word: str) -> bool:
         if isinstance(senses, dict):
             senses = [senses]
         for sense in senses:
+            # 우리말샘은 분야를 `cat`, 어휘 구분을 `type`으로 따로 준다. 방언·북한어·
+            # 옛말은 `cat`이 비고 `type`에만 들어오는 항목이 있다("깨끗히" -> cat="",
+            # type="방언"). `cat`만 보던 코드는 이런 표제어를 일반어로 통과시켜,
+            # 방언 표기가 붙여쓰기 근거로 쓰였다(2026-08-03 평가셋 라벨 검증 중 발견).
             field = (sense.get("cat") or "").strip()
+            lexical_type = (sense.get("type") or "").strip()
             definition = sense.get("definition") or ""
-            marked = field in _NON_CONTEMPORARY_FIELDS or any(
+            marked = field in _NON_CONTEMPORARY_FIELDS or lexical_type in _NON_CONTEMPORARY_FIELDS or any(
                 phrase in definition for phrase in _NON_CONTEMPORARY_PHRASES
             )
             fields.append(marked)

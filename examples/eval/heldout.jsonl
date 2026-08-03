@@ -11,4 +11,31 @@
 {"id": "d01", "category": "사투리-protect", "input": "밥 뭇나?", "speaker": "철수", "region": "경상도", "mode": "protect", "gold": "밥 뭇나?", "basis": "protect 기본: 의도된 사투리, 무변경·무플래그", "verify": false, "expect_no_flag": true}
 {"id": "d02", "category": "사투리-protect", "input": "거시기 좀 갖고 오랑께", "speaker": "순자", "region": "전라도", "mode": "protect", "gold": "거시기 좀 갖고 오랑께", "basis": "protect: 전라도 사투리 원문 보존", "verify": false, "expect_no_flag": true}
 {"id": "d03", "category": "사투리-protect", "input": "혼저 옵서예", "speaker": "삼춘", "region": "제주도", "mode": "protect", "gold": "혼저 옵서예", "basis": "protect: 제주도 사투리 원문 보존", "verify": false, "expect_no_flag": true}
-{"id": "d04", "category": "사투리-assist", "input": "빨리 와라", "speaker": "철수", "region": "경상도", "mode": "assist", "gold": "빨리 와라", "basis": "assist: 텍스트 무변경, 사투리 제안 플래그(suggested_fix)만 기대", "verify": false, "expect_flag": true}
+{"id": "d04", "category": "사투리-assist", "input": "빨리 와라", "speaker": "철수", "region": "경상도", "mode": "assist", "gold": "빨리 와라", "basis": "assist: 텍스트 무변경. 제안 플래그는 **사전으로 확인된 대응 표현이 있을 때만** 나온다 — '빨리'에 대응하는 경상도 표현은 근거를 만들 수 없다(지역어 API 500 장애, 우리말샘 뜻풀이 검색 0건). 근거 없는 제안을 하지 않는 것이 정상 동작이므로 무플래그를 기대한다(2026-08-03 정정, 그 전에는 손으로 적은 표를 근거로 플래그를 기대했다).", "verify": false, "expect_no_flag": true}
+{"id": "g07", "category": "외래어", "input": "초콜렛을 선물했다", "gold": "초콜릿을 선물했다", "basis": "'초콜렛'은 우리말샘에 규범 표기 안내가 달린 비표준, '초콜릿'은 표준국어대사전 표제어 (tools/verify_eval_labels.py 2026-08-03 확인)", "verify": true}
+{"id": "g08", "category": "외래어", "input": "메세지를 보냈다", "gold": "메시지를 보냈다", "basis": "'메세지' 비표준 / '메시지' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g09", "category": "외래어", "input": "악세사리 가게에 들렀다", "gold": "액세서리 가게에 들렀다", "basis": "'악세사리' 비표준 / '액세서리' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g10", "category": "외래어", "input": "후라이팬을 달궜다", "gold": "프라이팬을 달궜다", "basis": "'후라이팬' 비표준 / '프라이팬' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g11", "category": "외래어", "input": "바베큐 파티를 열었다", "gold": "바비큐 파티를 열었다", "basis": "'바베큐' 비표준 / '바비큐' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g12", "category": "외래어", "input": "컨텐츠가 부족하다", "gold": "콘텐츠가 부족하다", "basis": "'컨텐츠' 비표준 / '콘텐츠' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g13", "category": "외래어", "input": "카페트 위에 앉았다", "gold": "카펫 위에 앉았다", "basis": "'카페트' 비표준 / '카펫' 표준국어대사전 표제어. 받침이 바뀌는 조사 자리를 피해 문장을 만들었다 (2026-08-03 확인)", "verify": true}
+{"id": "g14", "category": "외래어", "input": "로케트 발사를 봤다", "gold": "로켓 발사를 봤다", "basis": "'로케트' 비표준 / '로켓' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g15", "category": "맞춤법", "input": "오랫만에 만났다", "gold": "오랜만에 만났다", "basis": "'오랫만' 비표준 / '오랜만' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g16", "category": "맞춤법", "input": "설겆이를 미뤘다", "gold": "설거지를 미뤘다", "basis": "'설겆이'는 표준국어대사전에 실려 있으나 뜻풀이가 '→ 설거지.'인 비표준 표기 (2026-08-03 확인)", "verify": true}
+{"id": "g17", "category": "맞춤법", "input": "일찌기 없던 일이다", "gold": "일찍이 없던 일이다", "basis": "'일찌기' 비표준 / '일찍이' 표준국어대사전 표제어(부사) (2026-08-03 확인)", "verify": true}
+{"id": "g18", "category": "맞춤법", "input": "곰곰히 생각해 봤다", "gold": "곰곰이 생각해 봤다", "basis": "'곰곰히'는 두 사전 모두 표제어 없음 / '곰곰이' 표준국어대사전 표제어(부사) (2026-08-03 확인)", "verify": true}
+{"id": "g19", "category": "맞춤법", "input": "개거품을 물고 화냈다", "gold": "게거품을 물고 화냈다", "basis": "'개거품' 표제어 없음 / '게거품' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "g20", "category": "맞춤법", "input": "눈쌀을 찌푸렸다", "gold": "눈살을 찌푸렸다", "basis": "'눈쌀' 비표준 / '눈살' 표준국어대사전 표제어 (2026-08-03 확인)", "verify": true}
+{"id": "t05", "category": "함정-동음이의", "input": "지긋이 나이 든 어르신", "gold": "지긋이 나이 든 어르신", "basis": "나이 문맥이라 '지긋이'가 맞음 — g/t01('지그시')의 반대 방향 함정. 둘 다 표준국어대사전 표제어(부사)", "verify": false, "trap": true}
+{"id": "t06", "category": "함정-맞춤법", "input": "웬일로 이렇게 일찍 왔어", "gold": "웬일로 이렇게 일찍 왔어", "basis": "'웬일' 표준국어대사전 표제어(명사) — '왠일'로 바꾸면 오교정", "verify": false, "trap": true}
+{"id": "t07", "category": "함정-동음이의", "input": "편지를 부쳤다", "gold": "편지를 부쳤다", "basis": "우편은 '부치다'가 맞음 — '붙이다'로 바꾸면 오교정. 표준국어대사전 표제어(동사)", "verify": false, "trap": true}
+{"id": "t08", "category": "함정-맞춤법", "input": "감기가 다 나았다", "gold": "감기가 다 나았다", "basis": "'낫다'의 활용 '나았다'가 맞음 — '낳았다'로 바꾸면 오교정", "verify": false, "trap": true}
+{"id": "t09", "category": "함정-동음이의", "input": "금세 끝나 버렸다", "gold": "금세 끝나 버렸다", "basis": "시간 문맥은 '금세'(부사)가 맞음. '금새'도 표준국어대사전 표제어(명사, 물건 값)라 표기만으로는 못 가른다 — 이 방향의 자동 교정은 하지 말 것", "verify": false, "trap": true}
+{"id": "t10", "category": "함정-띄어쓰기", "input": "며칠 만에 다시 만났다", "gold": "며칠 만에 다시 만났다", "basis": "시간 경과의 '만'은 의존명사라 띄어 씀이 맞음 — '며칠만에'로 붙이면 오교정", "verify": false, "trap": true}
+{"id": "t11", "category": "함정-조사", "input": "학생으로서 할 일을 했다", "gold": "학생으로서 할 일을 했다", "basis": "자격은 '로서'가 맞음 — '로써'로 바꾸면 오교정", "verify": false, "trap": true}
+{"id": "t12", "category": "함정-맞춤법", "input": "도리어 내가 미안하다", "gold": "도리어 내가 미안하다", "basis": "'도리어' 표준국어대사전 표제어(부사) — '되레'로 바꿀 이유 없음(둘 다 표준). 표준어끼리의 임의 치환을 하지 않는지 본다", "verify": false, "trap": true}
+{"id": "s01", "category": "띄어쓰기-의존명사", "input": "먹을만큼 먹었다", "gold": "먹을만큼 먹었다", "basis": "의존명사 '만큼'(표준국어대사전 표제어) 띄어쓰기는 제42항이나 자동교정 대상 아님 — 텍스트 무변경 + 제안 플래그가 정상. suggested_fix='먹을 만큼 먹었다'", "verify": false, "expect_flag": true}
+{"id": "s02", "category": "띄어쓰기-의존명사", "input": "아는것이 힘이다", "gold": "아는것이 힘이다", "basis": "의존명사 '것' 띄어쓰기 — 자동교정 대상 아님, 제안 플래그 기대. suggested_fix='아는 것이 힘이다'", "verify": false, "expect_flag": true}
+{"id": "d05", "category": "사투리-protect", "input": "우야노 이 일을", "speaker": "영수", "region": "경상도", "mode": "protect", "gold": "우야노 이 일을", "basis": "protect: 경상도 사투리 보존. '우야노'는 두 사전 모두 표제어 없음이라 맞춤법 오탐 후보이기도 하다 — 사투리 보호가 우선하는지 본다", "verify": false, "expect_no_flag": true}
+{"id": "d06", "category": "사투리-protect", "input": "그류 알았슈", "speaker": "덕배", "region": "충청도", "mode": "protect", "gold": "그류 알았슈", "basis": "protect: 충청도 사투리 보존. 두 사전 모두 표제어 없음", "verify": false, "expect_no_flag": true}
+{"id": "d07", "category": "사투리-protect", "input": "머시기 좀 챙겨라", "speaker": "순자", "region": "전라도", "mode": "protect", "gold": "머시기 좀 챙겨라", "basis": "protect: '머시기'는 우리말샘에 방언 표제어로만 등재 — 사전에 있는 사투리도 고치지 않는지 본다", "verify": false, "expect_no_flag": true}
