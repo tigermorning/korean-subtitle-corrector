@@ -5,6 +5,7 @@ from ..dictionary import word_exists
 from ..report import FlagItem
 from .text_utils import _hangul_run_bounds, _localized_change
 from .kiwi_adapter import (
+    _has_adnominal_phrase_reading,
     _has_content_word_reading,
     _has_determiner_reading,
     _has_predicate_reading,
@@ -111,6 +112,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
         and tokens[0].form not in _DIALECT_AGREEMENT_FORMS
         and not _has_determiner_reading(text, tokens[0])
         and not _has_content_word_reading(text, tokens[0])
+        and not _has_adnominal_phrase_reading(text, tokens[0])
         and not _splits_joined_interjection(text, tokens, 0)
     ):
         pos = tokens[0].start + tokens[0].len
@@ -244,7 +246,7 @@ def check_ambiguous_interjection_comma(index: int, text: str) -> FlagItem | None
         return None
     if _has_determiner_reading(text, first) or _splits_joined_interjection(text, tokens, 0):
         return None  # 관형어 읽기·붙여 쓰는 감탄사는 쉼표 자체가 대상이 아니다
-    if not _has_content_word_reading(text, first):
+    if not (_has_content_word_reading(text, first) or _has_adnominal_phrase_reading(text, first)):
         return None  # 애매하지 않으면 이미 자동으로 넣었다
     position = first.start + first.len
     if position >= len(text) or text[position] in ",.!?…":

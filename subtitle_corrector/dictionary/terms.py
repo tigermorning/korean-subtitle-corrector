@@ -161,6 +161,10 @@ def _closest_segment(token: str, korean_mark: str) -> str:
     return max(parts, key=lambda p: difflib.SequenceMatcher(None, token, p).ratio())
 
 
+# kornorms의 용례 분류. 이 분류만 근거일 때는 자동 반영하지 않는다(위 loanword_fix 참고).
+_PERSON_PLACE_CATEGORIES = frozenset({"인명", "지명"})
+
+
 def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:
     """token이 국립국어원이 명시적으로 틀렸다고 표시한 외래어 표기(relate_mark_o에
     '(X)'로 표시)와 일치하면, 공식 정답(korean_mark 중 token에 해당하는 부분)을
@@ -193,6 +197,14 @@ def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:
         return None, False, None
 
     distinct_segments = {segment for segment, _ in matches}
+    # **인명·지명 용례만 근거이면 자동 반영하지 않는다.** 사람 이름의 정답은 원어가
+    # 무엇인지 알아야 갈리는데, 텍스트만으로는 알 수 없다 — 2026-08-04 사용자 제공 자막
+    # 7강 123번에서 등장인물 '러스'(Russ)가 '루스'로 바뀌었다. kornorms에 'Ruth, Babe'와
+    # 'Luce, Henry Robinson'의 오표기로 '러스(X)'가 등재돼 있어 정답이 하나로 모인 것처럼
+    # 보였을 뿐이다. 일반 용어('초코렛' -> '초콜릿')는 원어가 갈릴 일이 없어 그대로 자동이다.
+    if all(item.get("foreign_gubun") in _PERSON_PLACE_CATEGORIES for _segment, item in matches):
+        segment, item = matches[0]
+        return segment, True, f"{item.get('srclang_mark')} -> {item.get('korean_mark')} (인명·지명 용례)"
     if len(distinct_segments) == 1:
         return matches[0][0], False, None
 

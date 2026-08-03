@@ -298,3 +298,25 @@ def _has_reading(text: str, token, tags) -> bool:
             ):
                 return True
     return False
+
+
+def _has_adnominal_phrase_reading(text: str, token) -> bool:
+    """감탄사로 태깅된 자리를 **용언 + 관형사형 어미**로 읽는 대안 분석이 있는지.
+
+    '빌어먹을 차 안 세우면'의 '빌어먹을'은 감탄사(욕)로도, '빌어먹다'의 관형사형(그 망할)
+    으로도 읽힌다. 관형어면 뒤 체언을 꾸미므로 쉼표를 넣으면 문장이 갈라진다 —
+    2026-08-04 사용자 제공 자막 7강 374번에서 '빌어먹을, 차 안 세우면'이 됐다.
+    `_has_content_word_reading`은 **같은 길이**의 한 토큰만 보므로 이 경우를 놓친다
+    (대안은 '빌어먹'(VV, 3자) + '을'(ETM, 1자) 두 토큰이다).
+
+    판정: 토큰 구간이 관형사형 어미(ETM)로 정확히 끝나는 후보가 있으면 참.
+    """
+    end = token.start + token.len
+    for tokens, _score in _kiwi.analyze(text, top_n=5):
+        inside = [t for t in tokens if t.start >= token.start and t.start + t.len <= end]
+        if not inside or len(inside) < 2:
+            continue
+        last = inside[-1]
+        if last.start + last.len == end and last.tag == "ETM":
+            return True
+    return False

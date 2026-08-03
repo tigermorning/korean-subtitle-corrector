@@ -44,7 +44,10 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
         # 붙이면 그 분리를 되돌리게 되므로 건너뛴다.
         if i >= 2:
             prev = tokens[i - 2]
-            if prev.tag in ("MM", "ETM") and text[prev.start + prev.len : noun.start] in (" ", ""):
+            # 관형격 조사(JKG)도 관형어를 만든다 — '내'는 kiwi가 '나'(NP)+'의'(JKG)로
+            # 읽으므로 MM/ETM 조건에 걸리지 않았다. 2026-08-04 사용자 제공 자막 7강
+            # 147번에서 '내 탓 하지 마'가 '내 탓하지 마'로 붙었다.
+            if prev.tag in ("MM", "ETM", "JKG") and text[prev.start + prev.len : noun.start] in (" ", ""):
                 continue
             # 앞말이 **명사**여도 붙이지 않는다. 명사가 명사를 꾸며 명사구를 이루면
             # ('나물 타령', '수학 공부', '순간 이동') 그 뒤의 '하다'는 접사가 아니라

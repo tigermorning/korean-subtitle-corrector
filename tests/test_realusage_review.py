@@ -658,3 +658,50 @@ def test_no_space_before_punctuation_in_auto_correction():
     """
     assert _run("다 해 볼 겁니다, 하지만...")[0] == "다 해 볼 겁니다, 하지만..."
     assert _run("'하지만'이라뇨?")[0] == "'하지만'이라뇨?"
+
+
+def test_person_name_is_not_rewritten_by_loanword_rule():
+    """등장인물 '러스'(Russ)가 '루스'로 바뀌던 오류
+    (2026-08-04 사용자 제공 자막 7강 123번).
+
+    kornorms에 'Ruth, Babe'·'Luce, Henry Robinson'의 오표기로 '러스(X)'가 등재돼 있어
+    정답이 하나로 모인 것처럼 보였다. 사람 이름의 정답은 원어를 알아야 갈리는데 텍스트만
+    으로는 알 수 없다 — 인명·지명 용례만 근거이면 자동 반영하지 않고 플래그한다.
+    kiwi 1순위 태그도 믿을 수 없어(같은 이름이 문장에 따라 NNG로 태깅된다) 대안 분석에
+    고유명사 읽기가 있으면 고유명사로 본다.
+    """
+    text, flags = _run("- 연락 안 했다고? 세상에, 러스\n- 당신이랑 같이 하려고 했지")
+    assert "러스" in text and "루스" not in text
+    assert flags  # 확인 항목으로는 남는다
+    # 일반 용어 외래어 교정은 그대로 자동이다
+    assert _run("저는 초코렛을 좋아해요")[0] == "저는 초콜릿을 좋아해요"
+    assert _run("리모콘 어디 있어")[0] == "리모컨 어디 있어"
+
+
+def test_possessive_adnominal_blocks_affix_join():
+    """'내 탓 하지 마'가 '내 탓하지 마'로 붙던 오류(7강 147번).
+
+    '내'를 kiwi가 '나'(NP)+'의'(JKG)로 읽어 MM/ETM 조건에 걸리지 않았다. 관형격 조사도
+    관형어를 만들므로 그 뒤 명사에 붙는 '하다'는 띄어 쓴다.
+    """
+    assert _run("내 탓 하지 마")[0] == "내 탓 하지 마"
+    assert _run("네 탓 하지 마")[0] == "네 탓 하지 마"
+    # 관형어가 없으면 예전처럼 붙인다
+    assert _run("선물 받았어")[0] == "선물받았어"
+
+
+def test_adnominal_reading_interjection_is_flagged_not_auto_comma():
+    """'빌어먹을 차 안 세우면'이 '빌어먹을, 차 안 세우면'으로 갈라지던 오류
+    (2026-08-04 사용자 제공 자막 7강 374번, 사용자 판정: 플래깅 대상).
+
+    '빌어먹을'은 감탄사(욕)로도, '빌어먹다'의 관형사형(그 망할)으로도 읽힌다. 관형어면 뒤
+    체언을 꾸미므로 쉼표를 넣으면 문장이 갈라진다. 대안 분석이 두 토큰('빌어먹'+'을')이라
+    같은 길이 한 토큰만 보는 기존 가드로는 잡히지 않았다.
+    """
+    text, flags = _run("빌어먹을 차 안 세우면 뛰어내릴 줄 알아")
+    assert text == "빌어먹을 차 안 세우면 뛰어내릴 줄 알아"
+    assert any(
+        f.suggested_fix == "빌어먹을, 차 안 세우면 뛰어내릴 줄 알아" for f in flags
+    )
+    # 관형어 읽기가 없는 감탄사는 예전처럼 자동으로 넣는다
+    assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"
