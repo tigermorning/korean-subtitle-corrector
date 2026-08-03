@@ -83,7 +83,11 @@ from .spacing import (
     correct_compound_spacing,
     correct_particle_spacing,
 )
-from .affix import correct_action_noun_affix, correct_adnominal_noun_verb_split
+from .affix import (
+    check_noun_phrase_affix_spacing,
+    correct_action_noun_affix,
+    correct_adnominal_noun_verb_split,
+)
 from .punctuation import correct_interjection_vocative_comma
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -128,6 +132,7 @@ __all__ = [
     "correct_compound_spacing",
     "correct_aux_verb_spacing",
     "_aux_verb_spacing",
+    "check_noun_phrase_affix_spacing",
     "correct_action_noun_affix",
     "correct_adnominal_noun_verb_split",
     "correct_interjection_vocative_comma",

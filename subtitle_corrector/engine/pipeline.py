@@ -19,7 +19,11 @@ from .spacing import (
     correct_compound_spacing,
     correct_particle_spacing,
 )
-from .affix import correct_action_noun_affix, correct_adnominal_noun_verb_split
+from .affix import (
+    check_noun_phrase_affix_spacing,
+    correct_action_noun_affix,
+    correct_adnominal_noun_verb_split,
+)
 from .punctuation import correct_interjection_vocative_comma
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -240,6 +244,7 @@ def _correct_line(
         check_purified_terms(index, corrected_text),
         check_colloquial_loanword(index, corrected_text),
         check_ambiguous_compound(index, corrected_text),
+        check_noun_phrase_affix_spacing(index, corrected_text),
         check_ambiguous_particle(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
@@ -361,16 +366,13 @@ def correct_entries(
             continue
 
         # 여기부터: 사투리 미지정 화자 또는 to_standard 화자.
-        # to_standard는 먼저 사투리→표준어로 변환한 뒤, 변환된 표준어 텍스트에
-        # 일반 표준화 파이프라인을 적용한다(이 화자는 표준 출력을 원한다).
+        # to_standard도 사투리 부분은 **바꾸지 않고 제안 플래그만** 받는다(2026-08-03
+        # 변경, `engine/dialect.py` 참고). 그 뒤 원문 그대로 일반 표준화 파이프라인을
+        # 적용한다 — 이 화자는 표준 출력을 원하므로 맞춤법·띄어쓰기 교정은 계속한다.
         corrected_text = e.text
         if region is not None and mode == "to_standard":
-            corrected_text, dialect_flags = check_dialect(
-                e.index, corrected_text, region, mode,
-            )
+            _, dialect_flags = check_dialect(e.index, corrected_text, region, mode)
             flags.extend(dialect_flags)
-            if corrected_text != e.text:
-                applied_log.append(f"[{e.index}] 사투리→표준어 변환: {corrected_text}")
 
         corrected_text, line_flags, line_applied = _correct_line_with_markers(
             e.index, corrected_text, doc_type, spacing_mode, markers, style

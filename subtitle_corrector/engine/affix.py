@@ -2,6 +2,7 @@
 """
 
 from ..dictionary import word_exists
+from ..report import FlagItem
 from .text_utils import _localized_change
 from .kiwi_adapter import _kiwi
 from .lexicon import _is_action_noun
@@ -44,6 +45,18 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
         if i >= 2:
             prev = tokens[i - 2]
             if prev.tag in ("MM", "ETM") and text[prev.start + prev.len : noun.start] in (" ", ""):
+                continue
+            # 앞말이 **명사**여도 붙이지 않는다. 명사가 명사를 꾸며 명사구를 이루면
+            # ('나물 타령', '수학 공부', '순간 이동') 그 뒤의 '하다'는 접사가 아니라
+            # 동사이므로 띄어 쓴 표기가 맞다 — 온라인가나다 `qna_seq=320467`(2025-09-11):
+            # "'순간 이동을 하다'처럼 구 구성이면 띄어 씁니다". 사용자가 이미 맞게 띄어
+            # 놓은 '나물 타령 하셨어'를 '나물 타령하셨어'로 붙여 버리던 과교정이었다
+            # (2026-08-03 사용자 보고).
+            #
+            # 대가: 앞 명사가 관형어가 아닌 경우(예: '어제 청소 했다'의 '어제'는 시간
+            # 부사어)의 정당한 붙임을 놓친다. 표면만으로는 관형어인지 부사어인지 가릴
+            # 수 없으므로, **맞는 표기를 깨뜨리지 않는 쪽**을 택했다.
+            if prev.tag in ("NNG", "NNP") and text[prev.start + prev.len : noun.start] == " ":
                 continue
         n = noun.form
         if n in _AFFIX_ACTION_EXCLUDE:
@@ -102,3 +115,60 @@ def correct_adnominal_noun_verb_split(text: str) -> tuple[str, list[str]]:
     for pos in sorted(set(cuts), reverse=True):
         corrected = corrected[:pos] + " " + corrected[pos:]
     return corrected, [_localized_change(text, corrected)]
+
+
+def _has_adverb_reading(text: str, token) -> bool:
+    """명사로 태깅된 토큰이 같은 자리에서 부사(MAG)로도 읽히는지.
+
+    '어제 청소했다'의 '어제'는 시간 부사어라 뒤 명사를 꾸미지 않는다. 그런데 kiwi는
+    같은 낱말을 문장에 따라 NNG로도 MAG로도 태깅한다('어제 청소 했다'에서는 MAG,
+    붙여 놓으면 NNG). 판정 근거는 kiwi 자신의 대안 분석이다 — 부사 읽기가 있으면
+    명사구 수식으로 단정하지 않는다(`_has_determiner_reading`과 같은 방식).
+    """
+    for tokens, _score in _kiwi.analyze(text, top_n=5):
+        for candidate in tokens:
+            if candidate.start == token.start and candidate.tag == "MAG":
+                return True
+    return False
+
+
+def check_noun_phrase_affix_spacing(index: int, text: str) -> FlagItem | None:
+    """'명사 + 명사 + 하다'가 한 어절로 붙어 있으면 띄어 쓸 후보를 플래그한다
+    (예: '나물 타령하셨어' → '나물 타령 하셨어').
+
+    **왜 자동 교정이 아니라 플래그인가**: 해석이 둘 다 열려 있다. 온라인가나다는
+    `수학 공부 하다` 문의에 "'수학'이 '공부'를 수식해 명사구를 만든 것으로 보면
+    띄어 쓰는 것이 바르다"고 하면서도 "'수학을 공부하다'처럼 조사 '을'이 생략된
+    목적어로 이해할 수도 있다"고 답했다. 앞 명사가 관형어인지 목적어인지는 표면만
+    보고 가릴 수 없으므로 사람에게 남긴다(2026-08-03 사용자 보고로 추가).
+
+    관형사·관형형이 앞에 오는 경우(`뭔 생각하냐`)는 해석이 하나뿐이라
+    `correct_adnominal_noun_verb_split()`이 자동으로 나눈다 — 여기서 다루지 않는다.
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(2, len(tokens)):
+        hae, noun, prev = tokens[i], tokens[i - 1], tokens[i - 2]
+        if hae.tag != "XSV" or hae.form != "하":
+            continue
+        if noun.tag != "NNG":
+            continue
+        if noun.start + noun.len != hae.start:
+            continue  # 명사와 '하'가 이미 떨어져 있으면 대상 아님
+        if prev.tag not in ("NNG", "NNP"):
+            continue
+        if text[prev.start + prev.len : noun.start] != " ":
+            continue  # 앞 명사가 바로 앞이 아니면 수식 관계로 볼 수 없다
+        if _has_adverb_reading(text, prev):
+            continue  # '어제 청소했다'의 '어제'처럼 부사로도 읽히면 수식 관계가 아니다
+        suggested = text[: hae.start] + " " + text[hae.start :]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"'{prev.form} {noun.form}'이 명사구라면 뒤의 '하다'는 접사가 아니라 "
+                f"동사이므로 '{noun.form} 하…'처럼 띄어 씁니다(온라인가나다 qna_seq=320467). "
+                f"반대로 '{prev.form}'을 목적어로 보면 붙여 쓴 표기도 가능해 문맥 확인이 필요합니다."
+            ),
+        )
+    return None
