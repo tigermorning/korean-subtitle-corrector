@@ -128,7 +128,12 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     """
     replacements = {}
     for t in _kiwi.tokenize(text):
-        if t.tag not in ("NNG", "NNP"):
+        # 부사(MAG)를 뺐던 탓에 '일찌기'('일찍이'의 비표준 표기, 우리말샘이 규범
+        # 표기를 명시)가 그대로 나갔다 — 같은 성격의 명사 '눈쌀'·'설겆이'는 잡히는데
+        # 부사만 새던 것이다(2026-08-03 평가셋 확대에서 g17로 드러남). 코퍼스의
+        # 부사 90종을 전수 조회해 새로 바뀌는 것이 '일찌기'->'일찍이', '웬지'->'왠지'
+        # 둘뿐이고 둘 다 정답임을 확인한 뒤 넓혔다.
+        if t.tag not in ("NNG", "NNP", "MAG"):
             continue
         # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 규범 표기로 자동 바꾸지 않고
         # check_colloquial_loanword()가 말투 보존 여부를 사람에게 묻는다.

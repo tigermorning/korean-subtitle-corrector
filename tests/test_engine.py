@@ -300,6 +300,24 @@ class TestAlwaysWrong:
             ["그리고는 -> 그러고는"],
         )
 
+    def test_gomgomhi(self):
+        """'곰곰히'는 두 사전 모두 표제어가 없어 동적 조회로는 못 잡는다.
+        근거는 한글 맞춤법 제51항 해설의 '-이' 예시와 온라인가나다
+        qna_seq=306238 (2026-08-03 확인). 평가셋 g18."""
+        assert correct_always_wrong("곰곰히 생각해 봤다") == (
+            "곰곰이 생각해 봤다",
+            ["곰곰히 -> 곰곰이"],
+        )
+
+    def test_gaegeopum(self):
+        """'게거품'은 표준국어대사전 표제어, '개거품'은 두 사전 모두 없음.
+        kiwi가 '개'+'거품'으로 쪼개 읽어 낱말 단위 동적 조회에는 걸리지
+        않는 자리다. 평가셋 g19."""
+        assert correct_always_wrong("개거품을 물고 화냈다") == (
+            "게거품을 물고 화냈다",
+            ["개거품 -> 게거품"],
+        )
+
 
 class TestParticleSpacing:
     """제41항(조사)/제1항(어미): 문맥과 무관하게 정답이 하나뿐인 지점만
@@ -375,6 +393,16 @@ class TestNonstandardTermReplacement:
         assert correct_nonstandard_terms("요오드가 필요합니다") == (
             "아이오딘이 필요합니다",
             ["요오드 -> 아이오딘"],
+        )
+
+    def test_adverb_nonstandard_form_corrected(self):
+        """부사(MAG)도 조회 대상이다. '일찌기'는 우리말샘이 "규범 표기는
+        '일찍이'"라고 명시하는데, 태그를 NNG/NNP로만 막아 두었던 탓에
+        같은 성격의 명사('눈쌀'·'설겆이')는 잡히면서 부사만 새고 있었다
+        (2026-08-03 평가셋 g17로 발견)."""
+        assert correct_nonstandard_terms("일찌기 없던 일이다") == (
+            "일찍이 없던 일이다",
+            ["일찌기 -> 일찍이"],
         )
 
     def test_homograph_with_standard_sense_not_falsely_corrected(self):
