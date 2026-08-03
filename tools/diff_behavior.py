@@ -37,6 +37,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HANGUL = re.compile(r"[가-힣]")
 
+# 콘솔이 cp949면 대조 결과를 찍다가 UnicodeEncodeError로 죽는다(줄표 '—' 하나에
+# 터졌다, 2026-08-03). 덤프까지 다 돌려 놓고 마지막 출력에서 잃는 건 아깝다.
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def build_corpus() -> list[str]:
     lines: list[str] = []
