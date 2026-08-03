@@ -24,6 +24,7 @@
   .idx / .sup       그림(비트맵) 자막이라 텍스트가 없다. OCR이 선행되어야 한다.
 """
 
+from .decoding import read_text as read_source_text
 import re
 from pathlib import Path
 
@@ -68,7 +69,7 @@ _VTT_TIME = re.compile(
 
 def parse_vtt(path: Path) -> list[SubtitleEntry]:
     """WebVTT를 읽는다. 큐 식별자·큐 설정·NOTE/STYLE 블록은 보존한다."""
-    raw = Path(path).read_text(encoding="utf-8-sig")
+    raw = read_source_text(path)
     entries: list[SubtitleEntry] = []
     for block in raw.split("\n\n"):
         lines = block.strip().splitlines()
@@ -125,7 +126,7 @@ def parse_smi(path: Path) -> list[SubtitleEntry]:
     종료 시각이 따로 없고 **다음 SYNC가 시작 시각**이므로 그렇게 계산한다.
     빈 자막(&nbsp;)은 화면을 비우는 표시라 교정 대상이 아니다.
     """
-    raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(path)
     found = list(_SMI_SYNC.finditer(raw))
     entries: list[SubtitleEntry] = []
     for order, match in enumerate(found):
@@ -166,7 +167,7 @@ def write_smi(entries: list[SubtitleEntry], path: Path, original: Path) -> None:
     SAMI는 머리말에 CSS 스타일 정의가 들어가고 우리가 다루지 않는 태그도 많다.
     통째로 다시 쓰지 않고 원문에서 대사 부분만 바꾸는 편이 안전하다.
     """
-    raw = Path(original).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(original)
     for entry in entries:
         old = (entry.raw_prefix or "") + (entry.original_text or entry.text)
         new = (entry.raw_prefix or "") + entry.text
@@ -188,7 +189,7 @@ def parse_ass(path: Path) -> list[SubtitleEntry]:
     ({\\i1} 등)는 텍스트의 일부로 그대로 둔다 — 우리가 판단할 대상이 아니다.
     줄바꿈은 ASS 관례대로 \\N이므로 교정 중에만 실제 줄바꿈으로 바꾼다.
     """
-    raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(path)
     entries: list[SubtitleEntry] = []
     for line in raw.splitlines(keepends=True):
         stripped = line.rstrip("\r\n")
@@ -214,7 +215,7 @@ def parse_ass(path: Path) -> list[SubtitleEntry]:
 
 
 def write_ass(entries: list[SubtitleEntry], path: Path, original: Path) -> None:
-    raw = Path(original).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(original)
     for entry in entries:
         old_text = (entry.original_text or entry.text).replace("\n", "\\N")
         new_text = entry.text.replace("\n", "\\N")
@@ -232,7 +233,7 @@ _SBV_TIME = re.compile(r"^(\d+:\d{2}:\d{2}\.\d{3}),(\d+:\d{2}:\d{2}\.\d{3})$")
 
 def parse_sbv(path: Path) -> list[SubtitleEntry]:
     """YouTube 자막(.sbv). 타임코드 두 개를 쉼표로 잇고 다음 줄부터 대사다."""
-    raw = Path(path).read_text(encoding="utf-8-sig")
+    raw = read_source_text(path)
     entries: list[SubtitleEntry] = []
     for block in raw.split("\n\n"):
         lines = block.strip().splitlines()
@@ -283,7 +284,7 @@ def parse_ttml(path: Path) -> list[SubtitleEntry]:
     <br/>는 줄바꿈으로 바꿔 교정하고 저장할 때 되돌린다. 그 밖의 인라인 태그
     (<span> 등)는 텍스트의 일부로 그대로 두고 손대지 않는다.
     """
-    raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(path)
     entries: list[SubtitleEntry] = []
     for match in _TTML_P.finditer(raw):
         attrs = dict((key.lower(), value) for key, value in _TTML_ATTR.findall(match.group(1)))
@@ -306,7 +307,7 @@ def parse_ttml(path: Path) -> list[SubtitleEntry]:
 
 
 def write_ttml(entries: list[SubtitleEntry], path: Path, original: Path) -> None:
-    raw = Path(original).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(original)
     for entry in entries:
         old_inner = (entry.original_text or entry.text).replace("\n", "<br/>")
         new_inner = entry.text.replace("\n", "<br/>")
@@ -325,7 +326,7 @@ _SUBVIEWER_TIME = re.compile(r"^(\d+:\d{2}:\d{2}\.\d{2}),(\d+:\d{2}:\d{2}\.\d{2}
 
 def parse_subviewer(path: Path) -> list[SubtitleEntry]:
     """SubViewer(.sub). 타임코드 줄 다음에 대사가 오고, 줄바꿈은 [br]다."""
-    raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    raw = read_source_text(path)
     entries: list[SubtitleEntry] = []
     for block in raw.split("\n\n"):
         lines = block.strip().splitlines()

@@ -5,3 +5,12 @@ __pycache__/
 examples/*_corrected.srt
 examples/*_report.csv
 .omc/
+
+# 실사용 감수용 임시 원고(저작권 있는 원문은 커밋하지 않는다)
+_check*.srt
+_check*.txt
+_check*.vtt
+
+# 과제 원고(실사용 감수용, 저작권 있는 번역물이라 커밋하지 않는다)
+*강*과제*.srt
+*_ko_TL.srt

@@ -23,6 +23,7 @@ from fastapi import FastAPI, Form, HTTPException, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from . import store
+from .decoding import decode_bytes, verify_ingest_fidelity
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS
 from .engine import (
@@ -163,6 +164,23 @@ def correct_subtitle(
     # 파서/저장 함수만 갈아 끼운다 — 교정 로직 자체는 완전히 동일하다.
     with _materialized(ext, raw) as in_path:
         entries = _parse_entries(ext, in_path)
+
+        # **읽어 낸 원문이 업로드한 파일과 같은지 매번 증명한다.** 파싱이 원문을 조금이라도
+        # 바꿔 놓으면 그 뒤 교정이 정확해도 다른 문서를 고친 것이 된다(2026-08-03 사용자
+        # 요구). 어긋나면 교정하지 않고 무엇이 어긋났는지 알린다 — 조용히 진행하는 것이
+        # 가장 나쁘다. 바이너리(.docx/.pdf)는 텍스트를 뽑아내는 것이라 이 비교가 성립하지
+        # 않으므로 건너뛴다.
+        ingest_problems: list[str] = []
+        if ext not in (".docx", ".pdf"):
+            source_text, source_encoding = decode_bytes(raw)
+            ingest_problems = verify_ingest_fidelity(source_text, [e.text for e in entries])
+            if ingest_problems:
+                raise HTTPException(
+                    422,
+                    "업로드한 파일을 그대로 읽지 못했습니다. 교정을 진행하지 않았습니다 — "
+                    f"읽은 인코딩: {source_encoding}. "
+                    + " / ".join(ingest_problems[:3]),
+                )
 
         # dialect_modes 파싱: JSON 문자열 → dict.
         # 허용 모드: protect(기본값, 사투리 보호) / assist(사투리 제안) /

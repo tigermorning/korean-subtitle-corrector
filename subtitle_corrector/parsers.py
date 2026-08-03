@@ -1,5 +1,6 @@
 """SRT 자막 파일 파싱/저장"""
 
+from .decoding import read_text as read_source_text
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,7 +48,7 @@ def _extract_speaker(first_line: str) -> str | None:
 
 def parse_srt(path: Path) -> list[SubtitleEntry]:
     entries = []
-    blocks = Path(path).read_text(encoding="utf-8-sig").strip().split("\n\n")
+    blocks = read_source_text(path).strip().split("\n\n")
     for block in blocks:
         lines = block.strip().splitlines()
         if len(lines) < 2:
@@ -86,7 +87,7 @@ def parse_plain_text(path: Path) -> list[SubtitleEntry]:
     index/start/end는 SRT 저장에만 쓰이므로, 일반 텍스트에서는 이 필드들을
     빈 값으로 채운다. 빈 줄도 그대로 하나의 항목으로 유지해서, 원본의 줄
     구성(문단 구분 등)을 그대로 보존한다."""
-    lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
+    lines = read_source_text(path).splitlines()
     return [
         SubtitleEntry(index=i, start="", end="", text=line, speaker=None, original_text=line)
         for i, line in enumerate(lines)
