@@ -92,6 +92,7 @@ from .affix import (
     correct_intensive_prefix_cheo,
 )
 from .punctuation import (
+    check_ambiguous_interjection_comma,
     check_joined_interjection_spacing,
     correct_interjection_vocative_comma,
 )
@@ -145,6 +146,7 @@ __all__ = [
     "correct_honorific_dependent_noun_spacing",
     "correct_intensive_prefix_cheo",
     "correct_adnominal_noun_verb_split",
+    "check_ambiguous_interjection_comma",
     "check_joined_interjection_spacing",
     "correct_interjection_vocative_comma",
     "correct_always_wrong",

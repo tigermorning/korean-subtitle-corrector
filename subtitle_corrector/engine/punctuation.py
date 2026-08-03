@@ -4,7 +4,13 @@
 from ..dictionary import word_exists
 from ..report import FlagItem
 from .text_utils import _hangul_run_bounds, _localized_change
-from .kiwi_adapter import _has_determiner_reading, _is_punct_token, _kiwi
+from .kiwi_adapter import (
+    _has_content_word_reading,
+    _has_determiner_reading,
+    _has_predicate_reading,
+    _is_punct_token,
+    _kiwi,
+)
 
 # 간접인용 축약에서 '그래' 앞에 오는 어미. "말라 그래"는 "말라고 해"의 준말이라
 # '그래'가 감탄사가 아니라 인용을 받는 서술어다(2026-08-02 실사용에서 발견).
@@ -104,6 +110,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
         and is_content(tokens[1])
         and tokens[0].form not in _DIALECT_AGREEMENT_FORMS
         and not _has_determiner_reading(text, tokens[0])
+        and not _has_content_word_reading(text, tokens[0])
         and not _splits_joined_interjection(text, tokens, 0)
     ):
         pos = tokens[0].start + tokens[0].len
@@ -128,6 +135,7 @@ def correct_interjection_vocative_comma(text: str) -> tuple[str, list[str]]:
             and is_content(tokens[last - 1])
             and not tokens[last - 1].tag.startswith("J")
             and not _is_quoted_command(tokens, last)
+            and not _has_predicate_reading(text, lt)
         ):
             j = lt.start
             while j > 0 and text[j - 1] == " ":
@@ -216,3 +224,39 @@ def check_joined_interjection_spacing(index: int, text: str) -> FlagItem | None:
             ),
         )
     return None
+
+
+def check_ambiguous_interjection_comma(index: int, text: str) -> FlagItem | None:
+    """감탄사 쉼표를 **자동으로 넣지 못한 자리**를 제안으로 남긴다.
+
+    같은 낱말이 명사·용언으로도 읽히면(kiwi 대안 분석) 쉼표를 자동으로 넣지 않는다 —
+    '아이 심장이 선천적으로'가 '아이, 심장이'로 갈라지는 사고를 막기 위한 것이다
+    (2026-08-04 사용자 제공 자막 5강). 다만 정말 감탄사인 경우('야 이리 와')도 같은
+    조건에 걸리므로, 그냥 버리지 않고 사람이 판단할 후보로 넘긴다.
+    """
+    tokens = _kiwi.tokenize(text)
+    if len(tokens) < 2:
+        return None
+    first = tokens[0]
+    if first.tag != "IC" or _is_punct_token(tokens[1]):
+        return None
+    if first.form in _DIALECT_AGREEMENT_FORMS:
+        return None
+    if _has_determiner_reading(text, first) or _splits_joined_interjection(text, tokens, 0):
+        return None  # 관형어 읽기·붙여 쓰는 감탄사는 쉼표 자체가 대상이 아니다
+    if not _has_content_word_reading(text, first):
+        return None  # 애매하지 않으면 이미 자동으로 넣었다
+    position = first.start + first.len
+    if position >= len(text) or text[position] in ",.!?…":
+        return None
+    suggested = text[:position] + "," + text[position:]
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        suggested_fix=suggested,
+        reason=(
+            f"'{first.form}'이 감탄사라면 뒤에 쉼표를 넣습니다. 같은 표기가 명사·용언으로도"
+            " 읽혀(예: '아이 심장이'의 '아이') 자동으로 넣지 않았습니다 — 문맥 확인이"
+            " 필요합니다."
+        ),
+    )

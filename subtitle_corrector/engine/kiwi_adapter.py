@@ -251,3 +251,48 @@ _NUMBER_SYMBOL_TAGS = {"SN", "SW"}
 # 안쪽에만 나타나고 앞말과 항상 붙으므로, 빼면 '강력팀'·'골수성'에서 후보가
 # 끊겨 같은 용어의 두 표기를 짝지을 수 없다.
 _TERM_RUN_TAGS = _TERM_COMPOUND_TAGS | {"XR", "XSN"}
+
+
+def _has_predicate_reading(text: str, token) -> bool:
+    """감탄사로 태깅된 자리를 **용언으로 읽는 대안 분석**이 있는지.
+
+    '무슨 일인데 그래?'의 '그래'는 '그렇다'의 활용(서술어)이다. 서술어 앞에 쉼표를 넣으면
+    문장이 갈라진다(2026-08-04 사용자 제공 자막 5강 334번). 대명사·명사 읽기까지 넓히면
+    '싫다면 뭐'(대명사 '뭐'도 있다)처럼 이미 정답으로 확정한 교정까지 막히므로, 문장 끝
+    자리에서는 용언 읽기만 근거로 쓴다.
+    """
+    return _has_reading(text, token, ("VV", "VA", "VA-I", "VV-I", "VCP", "VCN"))
+
+
+def _has_content_word_reading(text: str, token) -> bool:
+    """감탄사로 태깅된 자리를 **명사나 용언으로 읽는 대안 분석**이 있는지.
+
+    감탄사 뒤·앞에 쉼표를 넣는 규칙은 그 낱말이 정말 감탄사일 때만 맞다. kiwi는 명사와
+    감탄사가 형태가 같은 말('아이' = 어린아이/감탄사, '참' = 참말로/감탄사)이나 서술어로
+    읽히는 말('그래' = 그렇다의 활용)을 감탄사로 태깅할 때가 있다. 그 자리에 쉼표를
+    넣으면 문장이 갈라진다 — 2026-08-04 사용자 제공 자막에서 '아이 심장이 선천적으로'가
+    '아이, 심장이'로, '무슨 일인데 그래?'가 '무슨 일인데, 그래?'로 바뀌었다.
+
+    판정 근거는 kiwi 자신의 대안 분석이다(확률적 추측이 아니라 "다른 읽기가 존재한다"는
+    사실). 다른 읽기가 있으면 어느 쪽인지는 문맥이 정하므로 쉼표를 넣지 않는다.
+
+    같은 자리에서 **같은 길이**로 읽는 후보만 본다. 길이를 안 보면 '아이고'(감탄사, 3자)를
+    '아이'(명사, 2자)+'고'로 읽는 후보에 걸려 정당한 쉼표까지 막힌다 — 그건 같은 낱말을
+    다르게 읽은 것이 아니라 아예 다른 분석이다.
+    """
+    return _has_reading(
+        text, token, ("NNG", "NNP", "NNB", "NR", "VV", "VA", "VA-I", "VV-I", "VCP", "VCN")
+    )
+
+
+def _has_reading(text: str, token, tags) -> bool:
+    """token 자리를 같은 길이로 tags 중 하나로 읽는 대안 분석이 있는지."""
+    for tokens, _score in _kiwi.analyze(text, top_n=5):
+        for candidate in tokens:
+            if (
+                candidate.start == token.start
+                and candidate.len == token.len
+                and candidate.tag in tags
+            ):
+                return True
+    return False

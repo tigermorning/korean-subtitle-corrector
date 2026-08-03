@@ -2,6 +2,7 @@
 """
 
 from dataclasses import replace
+from ..dictionary import failed_lookups, reset_failed_lookups
 from ..parsers import SubtitleEntry
 from ..report import FlagItem
 from .kiwi_adapter import detect_recurring_unknown_words, register_custom_words
@@ -28,6 +29,7 @@ from .affix import (
     correct_intensive_prefix_cheo,
 )
 from .punctuation import (
+    check_ambiguous_interjection_comma,
     check_joined_interjection_spacing,
     correct_interjection_vocative_comma,
 )
@@ -297,6 +299,7 @@ def _correct_line(
         check_ambiguous_particle(index, corrected_text),
         check_contracted_form(index, corrected_text),
         check_joined_interjection_spacing(index, corrected_text),
+        check_ambiguous_interjection_comma(index, corrected_text),
         check_honorific_dependent_noun(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
         check_spacing(index, corrected_text),
@@ -359,6 +362,11 @@ def correct_entries(
     corrected_entries = []
     flags = []
     applied_log = []
+    # 이번 실행에서 어느 사전 API가 죽었는지 기록하려고 초기화한다. 조회 실패는
+    # "등재된 표기 없음"으로 흡수되므로(크래시보다 안전하다) 교정이 조용히 건너뛰어진다 —
+    # 그 사실을 사용자에게 알려야 한다(2026-08-04: kornorms가 안 붙는 동안
+    # '판넬 -> 패널'이 그냥 통과했고, 화면에는 아무 표시도 없었다).
+    reset_failed_lookups()
     protected_indices: set[int] = set()
     spacing_mode = normalize_spacing_mode(spacing_mode)
     if dialect_region:
@@ -447,6 +455,13 @@ def correct_entries(
     # 현재 표지 사전으로는 표준어 화자와 갈리지 않는다 — 실측에서 전라도 화자의
     # 평균 사투리 비율 0.080 vs 표준어 화자 0.073으로, 어떤 문턱을 잡아도 오탐이
     # 생긴다. 근거가 이 정도면 알리지 않는 편이 낫다.
+
+    outages = failed_lookups()
+    if outages:
+        applied_log.append(
+            "[사전 조회 실패] " + ", ".join(outages) + " — 이 사전이 담당하는 교정은 "
+            "이번 결과에 반영되지 않았습니다(네트워크·서버 상태를 확인하고 다시 돌려 주세요)."
+        )
 
     return corrected_entries, flags, applied_log
 

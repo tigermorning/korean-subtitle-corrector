@@ -19,6 +19,8 @@
 """
 
 from .clients import (
+    failed_lookups,
+    reset_failed_lookups,
     search_dialect,
     search_kornorms,
     search_krdict,
@@ -57,6 +59,8 @@ __all__ = [
     "search_kornorms",
     "search_onyongeo",
     "search_krdict",
+    "failed_lookups",
+    "reset_failed_lookups",
     "search_dialect",
     "word_exists",
     "compound_status",

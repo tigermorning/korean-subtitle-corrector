@@ -63,6 +63,26 @@ def _empty_channel() -> dict:
     return {"channel": {"total": 0, "item": []}}
 
 
+# 조회에 실패한 API 이름. 조회 실패는 "등재된 표기 없음"과 같은 경로로 흡수하는데
+# (크래시보다 안전하다), 그러면 **교정이 조용히 건너뛰어진다** — 2026-08-04에 kornorms가
+# DNS 단계에서 안 붙는 동안 '판넬 -> 패널'·'리모콘 -> 리모컨'이 그냥 통과했고, 사용자는
+# 교정이 안 된 것을 알 방법이 없었다. 그래서 어느 API가 죽었는지 기록해 리포트에 싣는다.
+_FAILED_LOOKUPS: set[str] = set()
+
+
+def note_lookup_failure(api: str) -> None:
+    _FAILED_LOOKUPS.add(api)
+
+
+def failed_lookups() -> list[str]:
+    """이번 실행에서 조회에 실패한 API 목록(정렬)."""
+    return sorted(_FAILED_LOOKUPS)
+
+
+def reset_failed_lookups() -> None:
+    _FAILED_LOOKUPS.clear()
+
+
 @lru_cache(maxsize=4096)
 def search_stdict(query: str) -> dict:
     if not STDICT_API_KEY:
@@ -72,6 +92,7 @@ def search_stdict(query: str) -> dict:
         response = requests.get(STDICT_URL, params=params, timeout=10)
         response.raise_for_status()
     except requests.RequestException:
+        note_lookup_failure("표준국어대사전")
         # 국립국어원 서버가 느리거나 응답을 안 주는 경우, "찾지 못함"과 똑같이
         # 처리한다 — 이 함수의 판단 결과가 불확실하다는 뜻이므로, 호출부는
         # 이미 "등재 안 됨/판단 근거 불충분"일 때와 같은 경로(확인 플래그)로
@@ -92,6 +113,7 @@ def search_opendict(query: str) -> dict:
         response = requests.get(OPENDICT_URL, params=params, timeout=10)
         response.raise_for_status()
     except requests.RequestException:
+        note_lookup_failure("우리말샘")
         return _empty_channel()
     if not response.text.strip():
         return _empty_channel()
@@ -140,6 +162,7 @@ def search_kornorms(keyword: str) -> list[dict]:
         response.raise_for_status()
         data = response.json()
     except requests.RequestException:
+        note_lookup_failure("어문 규범 용례(kornorms)")
         # search_stdict/search_opendict와 같은 원칙: 조회 실패는 "등재된
         # 표기 없음"과 동일하게 처리해 loanword_fix()가 자동 반영 없이
         # 넘어가게 한다(원문 그대로 유지, 크래시 대신 안전하게 무처리).
@@ -178,6 +201,7 @@ def search_onyongeo(query: str, glossary_type: str = "다듬은 말") -> list[di
         response.raise_for_status()
         data = response.json()
     except requests.RequestException:
+        note_lookup_failure("온용어(다듬은 말)")
         return []
     if not data:
         return []
@@ -220,6 +244,7 @@ def search_krdict(query: str) -> dict:
         response = requests.get(KRDICT_URL, params=params, timeout=10)
         response.raise_for_status()
     except requests.RequestException:
+        note_lookup_failure("한국어기초사전")
         return {"channel": {"total": 0, "items": []}}
     if not response.text.strip():
         return {"channel": {"total": 0, "items": []}}
@@ -272,6 +297,7 @@ def search_dialect(query: str) -> list[dict]:
         response.raise_for_status()
         data = response.json()
     except requests.RequestException:
+        note_lookup_failure("지역어 종합 정보")
         return []
     if not data:
         return []

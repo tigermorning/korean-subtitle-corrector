@@ -132,6 +132,10 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
             t1.tag == "MAJ"
             and gap_start == gap_end
             and t2.tag not in _ATTACH_TAGS
+            # 구두점 앞에는 공백을 두지 않는다(문맥 무관 규칙, 2026-08-03 사용자 지정).
+            # 이 조건이 없어 '하지만...'이 '하지만 ...'으로, "'하지만'이라뇨?"가
+            # "'하지만 '이라뇨?"로 벌어졌다(2026-08-04 사용자 제공 자막 5강 401·402번).
+            and not t2.tag.startswith(_PUNCT_TAG_PREFIX)
         ):
             # 연결부사("그래서", "그런데", "하지만" 등)는 항상 새 어절의 시작이므로
             # 뒤에 공백이 있어야 한다. 조사(J*) 뒤에는 붙는 경우("그런데도")가 있어

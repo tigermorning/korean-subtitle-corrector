@@ -104,3 +104,26 @@ class TestEditGuard:
         )
         assert accepted == "그래 노래를 불렀다"  # 원문을 그대로 유지한다
         assert refusal and "자동 교정 차단" in refusal
+
+
+def test_api_outage_is_reported_not_silent(monkeypatch):
+    """사전 조회가 실패하면 그 사실을 리포트에 남긴다(2026-08-04 추가).
+
+    조회 실패는 "등재된 표기 없음"과 같은 경로로 흡수된다 — 크래시보다 안전하지만, 그러면
+    그 부류 교정이 **조용히** 건너뛰어진다. kornorms가 DNS 단계에서 안 붙는 동안
+    '판넬 -> 패널'이 그냥 통과했고 화면에는 아무 표시도 없었다.
+    """
+    from subtitle_corrector import parsers
+    from subtitle_corrector.dictionary import clients
+    from subtitle_corrector.engine import correct_entries
+
+    def boom(*_args, **_kwargs):
+        clients.note_lookup_failure("어문 규범 용례(kornorms)")
+        return []
+
+    monkeypatch.setattr("subtitle_corrector.dictionary.terms.search_kornorms", boom)
+    monkeypatch.setattr("subtitle_corrector.engine.loanwords.search_kornorms", boom, raising=False)
+
+    entry = parsers.SubtitleEntry(index=1, start="", end="", text="판넬 작업을 부탁해서")
+    _corrected, _flags, log = correct_entries([entry])
+    assert any("[사전 조회 실패]" in line and "kornorms" in line for line in log)
