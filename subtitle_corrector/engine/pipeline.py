@@ -4,7 +4,7 @@
 from dataclasses import replace
 from ..dictionary import failed_lookups, reset_failed_lookups
 from ..parsers import SubtitleEntry
-from ..report import FlagItem
+from ..report import AppliedNote, FlagItem
 from .kiwi_adapter import detect_recurring_unknown_words, register_custom_words
 from .options import (
     PunctuationStyle,
@@ -63,7 +63,7 @@ def _correct_line_with_markers(
     spacing_mode: str,
     markers: SubtitleMarkers | None = None,
     style: PunctuationStyle | None = None,
-) -> tuple[str, list[FlagItem], list[str]]:
+) -> tuple[str, list[FlagItem], list[AppliedNote]]:
     """자막 편집 표지를 지킨 채로 교정한다.
 
     표지가 없거나 자막 모드가 아니면 그냥 _correct_line()이다. 표지가 있으면:
@@ -98,7 +98,7 @@ def _correct_line_with_markers(
     #    그래야 줄 끝 마침표 규칙이 화면에 보이는 줄과 같은 기준으로 적용된다.
     out_parts = []
     flags: list[FlagItem] = []
-    applied: list[str] = []
+    applied: list[AppliedNote] = []
     for piece, protected in pieces:
         if protected or not piece.strip():
             out_parts.append(piece)
@@ -129,7 +129,7 @@ def _correct_line_with_markers(
     # 공백을 볼 수 없다.
     if doc_type == "subtitle":
         corrected, adjacency_log = correct_subtitle_bracket_spacing(corrected, markers)
-        applied.extend(adjacency_log)
+        applied.extend(AppliedNote(message=m, is_edit=True) for m in adjacency_log)
 
     # 3. 플래그를 줄 전체 기준으로 되돌린다.
     whole_flags = []
@@ -155,7 +155,7 @@ def _correct_line(
     spacing_mode: str,
     markers: "SubtitleMarkers | None" = None,
     style: "PunctuationStyle | None" = None,
-) -> tuple[str, list[FlagItem], list[str]]:
+) -> tuple[str, list[FlagItem], list[AppliedNote]]:
     """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
 
     correct_entries()의 줄 단위 본문을 **그대로 떼어낸 것**이다(순수 이동, 로직 변경
@@ -163,10 +163,11 @@ def _correct_line(
     쪼개 "보호할 구간은 건너뛰고 나머지만" 교정해야 하는데, 파이프라인이
     correct_entries 안에 박혀 있으면 그렇게 부를 수 없어서 분리했다.
 
-    반환값: (교정된 텍스트, 플래그, 자동 교정 로그 메시지 — 줄 번호 접두사 없음)
+    반환값: (교정된 텍스트, 플래그, 자동 교정 로그 — line_index는 아직 비어 있고
+    correct_entries()가 채운다)
     """
     flags: list[FlagItem] = []
-    applied: list[str] = []
+    applied: list[AppliedNote] = []
     corrected_text = text
 
     # 규칙 하나가 끝날 때마다 edit_guard가 "이 변경을 규칙이 설명할 수 있는가"를 검사한다.
@@ -209,7 +210,9 @@ def _correct_line(
         corrected_text, spacing_mode
     )
     corrected_text = _guard("보조 용언 띄어쓰기", before, corrected_text, aux_verb_fixes)
-    applied.extend(f"[붙임 불가] {note}" for note in aux_verb_blocked)
+    applied.extend(
+        AppliedNote(message=f"[붙임 불가] {note}", is_edit=False) for note in aux_verb_blocked
+    )
     before = corrected_text
     corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
     corrected_text = _guard("확정 오류 표현", before, corrected_text, always_wrong_fixes)
@@ -224,21 +227,25 @@ def _correct_line(
         index, corrected_text
     )
     corrected_text = _guard("전 용어", before, corrected_text, former_term_fixes)
-    applied.extend(blocked)
+    # edit_guard가 거부한 건은 "무엇을 하지 않았는지" 알리는 안내이지 교정이 아니다.
+    applied.extend(AppliedNote(message=m, is_edit=False) for m in blocked)
     applied.extend(
-        applied_fixes
-        + particle_fixes
-        + adnominal_fixes
-        + affix_fixes
-        + honorific_fixes
-        + cheo_fixes
-        + comma_fixes
-        + compound_fixes
-        + aux_verb_fixes
-        + always_wrong_fixes
-        + nonstandard_fixes
-        + discriminatory_fixes
-        + former_term_fixes
+        AppliedNote(message=m, is_edit=True)
+        for m in (
+            applied_fixes
+            + particle_fixes
+            + adnominal_fixes
+            + affix_fixes
+            + honorific_fixes
+            + cheo_fixes
+            + comma_fixes
+            + compound_fixes
+            + aux_verb_fixes
+            + always_wrong_fixes
+            + nonstandard_fixes
+            + discriminatory_fixes
+            + former_term_fixes
+        )
     )
     flags.extend(former_term_flags)
 
@@ -277,16 +284,15 @@ def _correct_line(
     # 오인하지 않고, 문장 사이 마침표를 쉼표로 바꾼 뒤에 줄 끝 마침표를 지워야
     # "보여 주세요. 궁금해요."가 "보여 주세요, 궁금해요"로 한 번에 정리된다.
     if doc_type == "subtitle":
-        corrected_text, bracket_log = correct_subtitle_bracket_spacing(corrected_text, markers)
-        applied.extend(bracket_log)
-        corrected_text, ellipsis_log = correct_subtitle_ellipsis(corrected_text, style)
-        applied.extend(ellipsis_log)
-        corrected_text, quote_log = correct_subtitle_quotes(corrected_text, style)
-        applied.extend(quote_log)
-        corrected_text, internal_log = correct_subtitle_internal_period(corrected_text)
-        applied.extend(internal_log)
-        corrected_text, period_log = correct_subtitle_final_period(corrected_text)
-        applied.extend(period_log)
+        for rule in (
+            lambda t: correct_subtitle_bracket_spacing(t, markers),
+            lambda t: correct_subtitle_ellipsis(t, style),
+            lambda t: correct_subtitle_quotes(t, style),
+            correct_subtitle_internal_period,
+            correct_subtitle_final_period,
+        ):
+            corrected_text, log = rule(corrected_text)
+            applied.extend(AppliedNote(message=m, is_edit=True) for m in log)
 
     # 같은 지점을 여러 검사가 같은 suggested_fix로 중복 플래그하는 경우
     # (예: 행 끝 '나'를 check_ambiguous_particle과 check_spacing이 모두
@@ -328,10 +334,14 @@ def correct_entries(
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
     style: PunctuationStyle | None = None,
-) -> tuple[list[SubtitleEntry], list[FlagItem], list[str]]:
+) -> tuple[list[SubtitleEntry], list[FlagItem], list[AppliedNote]]:
     """entries를 처리한다.
 
     반환값: (자동 교정 반영된 entries, 플래그 목록, 확인 불필요 자동 교정 로그)
+
+    자동 교정 로그는 `AppliedNote` 목록이다. 어느 줄의 기록인지(`line_index`)와
+    텍스트를 실제로 바꿨는지(`is_edit`)를 구조로 들고 있어서, 화면이 줄 단위
+    "되돌리기"를 제공할 수 있다. 사람이 읽는 한 줄은 `AppliedNote.text()`다.
     나머지 검사(맞춤법/띄어쓰기)는 자동 교정이 끝난 텍스트를 기준으로 수행한다.
 
     본격적인 처리 전에, 문서 전체에서 반복 등장하는 미등록 단어(주로
@@ -363,7 +373,7 @@ def correct_entries(
     """
     corrected_entries = []
     flags = []
-    applied_log = []
+    applied_log: list[AppliedNote] = []
     # 이번 실행에서 어느 사전 API가 죽었는지 기록하려고 초기화한다. 조회 실패는
     # "등재된 표기 없음"으로 흡수되므로(크래시보다 안전하다) 교정이 조용히 건너뛰어진다 —
     # 그 사실을 사용자에게 알려야 한다(2026-08-04: kornorms가 안 붙는 동안
@@ -373,15 +383,21 @@ def correct_entries(
     spacing_mode = normalize_spacing_mode(spacing_mode)
     if dialect_region:
         applied_log.append(
-            f"[사투리 기준] 문서 전체를 '{dialect_region}' 사투리로 보고 "
-            f"'{normalize_dialect_mode(dialect_mode)}' 모드로 처리합니다"
-            " (화자별 지정이 있으면 그 화자는 화자별 설정을 따릅니다)."
+            AppliedNote(
+                message=(
+                    f"[사투리 기준] 문서 전체를 '{dialect_region}' 사투리로 보고 "
+                    f"'{normalize_dialect_mode(dialect_mode)}' 모드로 처리합니다"
+                    " (화자별 지정이 있으면 그 화자는 화자별 설정을 따릅니다)."
+                )
+            )
         )
     if spacing_mode == "allowance":
         # 기본값(원칙)이 아닌 쪽을 골랐을 때만 남긴다 — 문서 전체가 어떤 기준으로
         # 통일됐는지 결과만 보고도 알 수 있어야 하기 때문이다.
         applied_log.append(
-            "[띄어쓰기 기준] 제47항 허용(보조 용언 붙여 씀)으로 문서 전체를 통일합니다."
+            AppliedNote(
+                message="[띄어쓰기 기준] 제47항 허용(보조 용언 붙여 씀)으로 문서 전체를 통일합니다."
+            )
         )
 
     # 자막에서 화자명이 없는 줄은 **직전 화자가 계속 말하는 것**이다(사용자 지정
@@ -399,7 +415,11 @@ def correct_entries(
     auto_detected = detect_recurring_unknown_words(entries)
     if auto_detected:
         register_custom_words(auto_detected, tag="NNP")
-        applied_log.append(f"[자동 감지] 반복 등장하는 고유명사로 인식해 등록: {', '.join(auto_detected)}")
+        applied_log.append(
+            AppliedNote(
+                message=f"[자동 감지] 반복 등장하는 고유명사로 인식해 등록: {', '.join(auto_detected)}"
+            )
+        )
 
     for e in entries:
         # 사투리 모드를 가장 먼저 결정한다 — 표준화 파이프라인을 돌리기 전에
@@ -441,7 +461,9 @@ def correct_entries(
             e.index, corrected_text, doc_type, spacing_mode, markers, style
         )
         flags.extend(line_flags)
-        applied_log.extend(f"[{e.index}] {m}" for m in line_applied)
+        for note in line_applied:
+            note.line_index = e.index
+        applied_log.extend(line_applied)
 
         # dataclasses.replace로 만들면 형식별 원문 조각(raw_prefix/raw_suffix,
         # original_text)이 그대로 따라온다 — 필드를 하나 늘릴 때마다 여기를 고치는
@@ -462,8 +484,12 @@ def correct_entries(
     outages = failed_lookups()
     if outages:
         applied_log.append(
-            "[사전 조회 실패] " + ", ".join(outages) + " — 이 사전이 담당하는 교정은 "
-            "이번 결과에 반영되지 않았습니다(네트워크·서버 상태를 확인하고 다시 돌려 주세요)."
+            AppliedNote(
+                message=(
+                    "[사전 조회 실패] " + ", ".join(outages) + " — 이 사전이 담당하는 교정은 "
+                    "이번 결과에 반영되지 않았습니다(네트워크·서버 상태를 확인하고 다시 돌려 주세요)."
+                )
+            )
         )
 
     return corrected_entries, flags, applied_log

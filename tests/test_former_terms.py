@@ -77,7 +77,7 @@ class TestCorrectEntriesIntegration:
     def test_unambiguous_autocorrected_in_pipeline(self):
         entries, flags, applied_log = correct_entries([self._entry("그는 정신분열증 진단을 받았다")])
         assert entries[0].text == "그는 조현병 진단을 받았다"
-        assert any("정신분열증 -> 조현병" in line for line in applied_log)
+        assert any("정신분열증 -> 조현병" in note.message for note in applied_log)
         assert not any(f.suggested_fix == "조현병" for f in flags)
 
     def test_ambiguous_flagged_in_pipeline(self):

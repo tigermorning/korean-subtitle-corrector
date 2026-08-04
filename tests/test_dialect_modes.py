@@ -105,7 +105,7 @@ class TestDocumentLevelDialect:
             dialect_region="충청도",
             dialect_mode="to_standard",
         )
-        assert any("[사투리 기준]" in line for line in applied_log)
+        assert any("[사투리 기준]" in note.text() for note in applied_log)
         assert corrected[0].text == "기냥 가자"
         assert any(f.suggested_fix == "그냥 가자" for f in flags)
 
@@ -113,12 +113,12 @@ class TestDocumentLevelDialect:
         _, _, applied_log = correct_entries(
             [_entry(1, "밥 무라")], dialect_region="경상도", dialect_mode="to_standard"
         )
-        assert any("경상도" in line and "to_standard" in line for line in applied_log)
+        assert any("경상도" in note.text() and "to_standard" in note.text() for note in applied_log)
 
     def test_without_document_setting_prose_is_untouched_by_dialect(self):
         """설정이 없으면 예전처럼 사투리 처리가 걸리지 않는다."""
         _, _, applied_log = correct_entries([_entry(1, "밥 무라")], doc_type="prose")
-        assert not any("[사투리 기준]" in line for line in applied_log)
+        assert not any("[사투리 기준]" in note.text() for note in applied_log)
 
 
 class TestProtectMode:

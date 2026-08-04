@@ -89,7 +89,7 @@ def test_c4_onomatopoeia_not_flagged_foreign():
 def _applied_log(text: str):
     entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text, speaker=None)
     _corrected, _flags, applied = correct_entries([entry], None, None)
-    return applied
+    return [n.text() for n in applied]
 
 
 def test_d_long_line_log_localized():

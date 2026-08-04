@@ -86,6 +86,11 @@
   .opt-label-sub{display:block;font-weight:400;font-size:0.88em;color:#777;margin-top:3px}
   .opt-note{color:#666;font-size:0.85em;margin:6px 0 0;line-height:1.35}
   .step-label{display:block;font-weight:600;color:#444;font-size:0.9em;margin-bottom:10px}
+  /* 자동 교정 로그의 되돌리기. 로그 문구보다 눈에 덜 띄어야 한다 — 기본은 교정을
+     그대로 두는 것이고, 되돌리기는 잘못 고쳤을 때만 쓰는 예외 조작이다. */
+  .revert-pick{display:inline-block;margin-right:8px;font-size:0.85em;color:#a04040;
+               white-space:nowrap;cursor:pointer}
+  .revert-pick input{margin-right:3px;vertical-align:middle}
   /* 업로드 상자는 가운데 정렬이 관례지만, 단계 제목까지 가운데로 가면 2·3단계
      제목과 축이 어긋나 보인다. 제목만 왼쪽으로 맞춘다. */
   .drop .step-label{text-align:left}
@@ -260,6 +265,7 @@
     <h3>교정된 결과</h3>
     <pre id="correctedSrt"></pre>
     <h3>자동 교정 로그 (<span id="appliedCount">0</span>건)</h3>
+    <p class="opt-note" style="margin-bottom:10px">근거가 확실해 자동으로 고친 것들입니다. 잘못 고쳤다면 <b>되돌리기</b>를 체크한 뒤 아래 "선택 반영하기"를 누르세요 — 그 줄만 원문 그대로 돌아갑니다. 되돌리기는 <b>줄 단위</b>입니다(한 줄에 교정이 여럿이면 그 줄의 자동 교정이 함께 돌아갑니다).</p>
     <ul id="appliedList"></ul>
     <h3>확인이 필요한 항목 (<span id="flagCount">0</span>건)</h3>
     <p class="opt-note" style="margin-bottom:10px">제안을 채택할 항목만 체크한 뒤 아래 버튼을 누르면 결과에 반영됩니다. 반영하지 않은 항목은 원문 그대로 남습니다.</p>
@@ -268,7 +274,7 @@
       <tbody id="flagBody"></tbody>
     </table>
     <div class="result-actions">
-      <button id="applyBtn">선택한 제안 반영하기</button>
+      <button id="applyBtn">선택 반영하기 (제안 채택 + 자동 교정 되돌리기)</button>
       <span class="opt-note" id="applyNote" style="margin:0"></span>
     </div>
 
@@ -400,25 +406,86 @@ document.querySelectorAll('input[name="docType"]').forEach(radio => {
 });
 updateMarkerVisibility();
 
-// 교정 결과와 원본 파일명을 들고 있는다. 내려받기와 "제안 반영"이 이 상태를 고쳐 쓴다.
+// 교정 결과와 원본 파일명을 들고 있는다. 내려받기와 "선택 반영"이 이 상태를 고쳐 쓴다.
 // 서버를 다시 부르지 않는 이유: 반영은 사용자가 고른 문장을 그대로 갈아 끼우는
 // 일이라 교정 판단이 전혀 없다. 다시 교정을 돌리면 시간만 더 걸린다.
-let resultState = { text: '', filename: 'corrected.txt', flags: [], entries: [] };
+//
+// 진짜 상태는 entries다(줄마다 original=교정 전, corrected=서버가 고친 것, text=현재).
+// baseText는 서버가 돌려준 파일 전문이고, resultState.text는 entries를 그 위에 얹어
+// 다시 만든 것이다 — 예전에는 반영이 text만 고치고 entries는 그대로 둬서, 제안을
+// 반영한 뒤 .srt/.vtt/.smi/.md로 받으면 반영이 사라졌다(그 형식들은 entries로 만든다).
+let resultState = { baseText: '', text: '', filename: 'corrected.txt', flags: [], entries: [] };
+
+// 저장된 리포트(2026-08-04 이전)는 자동 교정 로그가 문자열 목록이다. 그때는 줄 정보가
+// 없으므로 문서 전체 안내처럼 취급한다 — 되돌리기는 제공하지 않는다.
+function normalizeAppliedLog(raw) {
+  return (raw || []).map(n =>
+    typeof n === 'string' ? { message: n, line_index: null, is_edit: false } : n);
+}
+
+// entries를 baseText 위에 얹어 결과 전문을 다시 만든다. 앞에서부터 순서대로 찾으므로
+// 같은 대사가 여러 번 나와도(자막에서 흔하다) 엉뚱한 줄을 건드리지 않는다.
+function rebuildText() {
+  if (!resultState.entries.length) return;
+  let out = '', cursor = 0;
+  for (const e of resultState.entries) {
+    const at = resultState.baseText.indexOf(e.corrected, cursor);
+    if (at === -1) continue;  // 못 찾으면 그 줄은 손대지 않는다(원문 훼손 방지)
+    out += resultState.baseText.slice(cursor, at) + e.text;
+    cursor = at + e.corrected.length;
+  }
+  resultState.text = out + resultState.baseText.slice(cursor);
+}
+
+// 자동 교정 로그를 줄 단위로 묶어 보여준다. 되돌리기 단위가 줄이기 때문이다 —
+// 로그의 '원문조각 -> 교정조각'은 긴 줄에서 '…'로 축약돼 있어(서버 `_localized_change`)
+// 그 조각만 되돌릴 수는 없다. 대신 그 줄 전체를 교정 전 원문으로 돌린다.
+//
+// 텍스트를 바꾸지 않은 안내(문서 전체 설정, "[붙임 불가] …", 사전 조회 실패)는
+// 되돌릴 것이 없으므로 체크박스를 주지 않는다.
+function renderAppliedLog(notes) {
+  const canRevert = resultState.entries.length > 0;
+  const groups = new Map();
+  const docNotes = [];
+  for (const n of notes) {
+    if (n.line_index === null || n.line_index === undefined) { docNotes.push(n.message); continue; }
+    if (!groups.has(n.line_index)) groups.set(n.line_index, { messages: [], editable: false });
+    const g = groups.get(n.line_index);
+    g.messages.push(n.message);
+    if (n.is_edit) g.editable = true;
+  }
+
+  const rows = [];
+  for (const [lineIndex, g] of groups) {
+    const box = (canRevert && g.editable)
+      ? `<label class="revert-pick"><input type="checkbox" class="auto-revert" data-line="${lineIndex}"> 되돌리기</label> `
+      : '';
+    rows.push(`<li>${box}<b>[${lineIndex}]</b> ${g.messages.map(escapeHtml).join('<br>')}</li>`);
+  }
+  for (const message of docNotes) {
+    rows.push(`<li>${escapeHtml(message)}</li>`);
+  }
+  document.getElementById('appliedList').innerHTML =
+    rows.join('') || '<li style="color:#999">없음</li>';
+}
 
 function renderResult(data) {
   resultEl.classList.add('show');
+  resultState.baseText = data.corrected_srt;
   resultState.text = data.corrected_srt;
   resultState.flags = data.flags || [];
-  resultState.entries = data.entries || [];
+  // corrected는 서버가 고친 결과를 그대로 붙들어 둔다 — 되돌리기 체크를 풀면
+  // 이 값으로 되돌아가야 하므로 text와 따로 들고 있어야 한다.
+  resultState.entries = (data.entries || []).map(e => ({ ...e, corrected: e.text }));
   const source = document.getElementById('fileInput').files[0];
   resultState.filename = suggestFilename(source ? source.name : '');
   document.getElementById('correctedSrt').textContent = data.corrected_srt;
   document.getElementById('downloadNote').textContent = `파일 이름: ${resultState.filename}`;
   document.getElementById('applyNote').textContent = '';
 
-  const appliedList = document.getElementById('appliedList');
-  appliedList.innerHTML = (data.applied_log || []).map(l => `<li>${escapeHtml(l)}</li>`).join('') || '<li style="color:#999">없음</li>';
-  document.getElementById('appliedCount').textContent = (data.applied_log || []).length;
+  const notes = normalizeAppliedLog(data.applied_log);
+  renderAppliedLog(notes);
+  document.getElementById('appliedCount').textContent = notes.length;
 
   const flagBody = document.getElementById('flagBody');
   flagBody.innerHTML = resultState.flags.map((f, i) => `
@@ -687,32 +754,64 @@ function downloadResult() {
   URL.revokeObjectURL(url);
 }
 
-// 선택한 제안을 결과 텍스트에 반영한다. 플래그의 original_text/suggested_fix는
-// 줄 전체이므로(자막 편집 표지 처리에서 그렇게 맞춰 두었다) 그 줄을 통째로
-// 갈아 끼우면 된다. 한 줄에 제안이 여러 개면 앞의 반영 결과 위에 다음 반영을
-// 얹는다 — 그래서 비교 대상은 원문이 아니라 '현재 줄'이다.
+// 화면에서 고른 것(자동 교정 되돌리기 + 확인 항목 제안)을 결과에 반영한다.
+//
+// 매번 **처음부터 다시 계산한다** — 체크를 풀면 그 되돌리기도 취소되어야 하므로,
+// 지금 상태에 덧칠하는 대신 서버 결과에서 출발해 선택을 다시 얹는다. 그래서 몇 번을
+// 눌러도 같은 선택이면 같은 결과가 나온다.
 function applySelectedFixes() {
+  const revertBoxes = [...document.querySelectorAll('.auto-revert:checked')];
   const picked = [...document.querySelectorAll('.flag-pick:checked')]
     .map(box => resultState.flags[Number(box.dataset.flag)]);
-  if (!picked.length) {
-    document.getElementById('applyNote').textContent = '반영할 항목을 먼저 체크하세요.';
+  if (!picked.length && !revertBoxes.length) {
+    document.getElementById('applyNote').textContent =
+      '반영할 항목을 먼저 체크하세요 (제안 채택 또는 자동 교정 되돌리기).';
     return;
   }
+
   let applied = 0;
   let missed = 0;
-  for (const flag of picked) {
-    if (resultState.text.includes(flag.original_text)) {
-      resultState.text = resultState.text.replace(flag.original_text, flag.suggested_fix);
-      applied++;
-    } else {
-      missed++;  // 앞선 반영으로 그 줄이 이미 바뀐 경우
+  let reverted = 0;
+
+  if (resultState.entries.length) {
+    // 1) 자동 교정: 되돌리기로 고른 줄만 교정 전 원문으로, 나머지는 서버 결과로.
+    const revertLines = new Set(revertBoxes.map(b => Number(b.dataset.line)));
+    for (const e of resultState.entries) {
+      const revert = revertLines.has(e.index);
+      e.text = revert ? e.original : e.corrected;
+      if (revert && e.original !== e.corrected) reverted++;
+    }
+    // 2) 확인 항목 제안. 플래그는 교정된 줄을 기준으로 만들어졌으므로, 그 줄을
+    //    되돌렸거나 같은 줄에 다른 제안이 이미 얹혔으면 적용하지 않고 건너뛴다.
+    const byIndex = new Map(resultState.entries.map(e => [e.index, e]));
+    for (const flag of picked) {
+      const entry = byIndex.get(flag.line_index);
+      if (entry && entry.text === flag.original_text) {
+        entry.text = flag.suggested_fix;
+        applied++;
+      } else {
+        missed++;
+      }
+    }
+    rebuildText();
+  } else {
+    // 저장된 리포트를 다시 불러온 경우에는 줄 정보가 없다. 예전처럼 결과 전문에서
+    // 그 줄을 찾아 갈아 끼운다(되돌리기는 애초에 제공하지 않는다).
+    for (const flag of picked) {
+      if (resultState.text.includes(flag.original_text)) {
+        resultState.text = resultState.text.replace(flag.original_text, flag.suggested_fix);
+        applied++;
+      } else {
+        missed++;
+      }
     }
   }
+
   document.getElementById('correctedSrt').textContent = resultState.text;
   document.getElementById('applyNote').textContent =
-    `${applied}건 반영했습니다.` +
-    (missed ? ` ${missed}건은 같은 줄이 이미 바뀌어 건너뛰었습니다 — 위 결과를 확인하세요.` : '') +
-    ' 위 "교정 결과 내려받기"로 반영된 파일을 받으세요.';
+    `제안 ${applied}건 반영, 자동 교정 ${reverted}건 되돌림.` +
+    (missed ? ` ${missed}건은 그 줄이 이미 바뀌어 건너뛰었습니다 — 위 결과를 확인하세요.` : '') +
+    ' 아래 "교정 결과 내려받기"로 반영된 파일을 받으세요.';
 }
 
 document.getElementById('downloadBtn').addEventListener('click', downloadResult);

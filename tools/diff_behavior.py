@@ -130,7 +130,9 @@ def dump(out_path: Path) -> None:
         corrected, flags, applied = correct_entries(entries(), **kwargs)
         result[name] = {
             "texts": [e.text for e in corrected],
-            "applied_log": applied,
+            # 옛 커밋의 덤프와 대조해야 하므로 사람이 읽는 한 줄로 눌러 담는다
+            # (2026-08-04에 applied_log가 AppliedNote 목록이 됐다).
+            "applied_log": [n.text() for n in applied],
             "flags": [asdict(f) for f in flags],
         }
         print(f"{name}: 자동 교정 {len(applied)}건, 플래그 {len(flags)}건", file=sys.stderr)

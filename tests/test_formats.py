@@ -287,3 +287,46 @@ class TestDocxExport:
         response = self._client().post("/api/export/docx", data={"text": ""})
         assert response.status_code == 200
         assert len(response.content) > 0
+
+
+class TestCorrectApiRevertContract:
+    """화면의 "되돌리기"가 기대는 응답 계약 (2026-08-04).
+
+    되돌리기는 줄 단위로 동작한다 — 자동 교정 로그의 '원문조각 -> 교정조각'은 긴
+    줄에서 '…'로 축약되므로(`_localized_change`) 복원에 쓸 수 없기 때문이다. 그래서
+    응답이 두 가지를 반드시 줘야 한다: 줄마다 교정 전 원문(`entries[].original`),
+    그리고 각 로그가 어느 줄의 기록이며 텍스트를 실제로 바꿨는지(`applied_log`).
+    """
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+
+        from subtitle_corrector.api import app
+
+        return TestClient(app)
+
+    def _correct(self, body: str):
+        response = self._client().post(
+            "/api/correct",
+            files={"file": ("t.srt", body.encode("utf-8"), "text/plain")},
+        )
+        assert response.status_code == 200
+        return response.json()
+
+    def test_entries_carry_pre_correction_text(self):
+        data = self._correct(
+            "1\n00:00:01,000 --> 00:00:02,000\n초코렛 좋아\n\n"
+            "2\n00:00:03,000 --> 00:00:04,000\n그대로 둘 줄\n"
+        )
+        by_index = {e["index"]: e for e in data["entries"]}
+        assert by_index[1]["original"] == "초코렛 좋아"
+        assert by_index[1]["text"] == "초콜릿 좋아"
+        # 자동 교정이 없었던 줄은 원문과 결과가 같다 — 되돌려도 달라지지 않는다.
+        assert by_index[2]["original"] == by_index[2]["text"] == "그대로 둘 줄"
+
+    def test_applied_log_is_structured_per_line(self):
+        data = self._correct("1\n00:00:01,000 --> 00:00:02,000\n초코렛 좋아\n")
+        edits = [n for n in data["applied_log"] if n["is_edit"]]
+        assert edits, "자동 교정이 한 건은 있어야 계약을 확인할 수 있다"
+        assert all(n["line_index"] == 1 for n in edits)
+        assert any("초콜릿" in n["message"] for n in edits)

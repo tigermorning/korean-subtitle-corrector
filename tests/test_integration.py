@@ -34,9 +34,9 @@ def test_sample_srt_full_pipeline():
 
     assert [e.text for e in corrected] == EXPECTED_CORRECTED_TEXTS
     assert len(applied) == 5
-    assert any("초코렛 -> 초콜릿" in a for a in applied)
-    assert any("그 일은 할만하다 -> 그 일은 할 만하다" in a for a in applied)
-    assert any("벙어리장갑 -> 손모아장갑" in a for a in applied)
+    assert any("초코렛 -> 초콜릿" in n.message for n in applied)
+    assert any("그 일은 할만하다 -> 그 일은 할 만하다" in n.message for n in applied)
+    assert any("벙어리장갑 -> 손모아장갑" in n.message for n in applied)
 
     # 9번 줄('그는 손모아장갑을 꼈다')은 2026-08-02부터 플래그가 나지 않는다.
     # kiwi가 '손 모아 장갑을'로 쪼개자고 제안했는데, 그건 우리가 방금 자동 교정으로

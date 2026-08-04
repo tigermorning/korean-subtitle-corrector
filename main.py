@@ -128,8 +128,8 @@ def correct(
     typer.echo(f"교정된 자막: {output}")
     if applied_log:
         typer.echo(f"자동 교정 {len(applied_log)}건:")
-        for line in applied_log:
-            typer.echo(f"  {line}")
+        for note in applied_log:
+            typer.echo(f"  {note.text()}")
     typer.echo(f"플래그 항목 {len(flags)}건 -> 리포트: {report_path}")
 
 

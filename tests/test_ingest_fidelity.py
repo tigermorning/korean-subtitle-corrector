@@ -126,4 +126,4 @@ def test_api_outage_is_reported_not_silent(monkeypatch):
 
     entry = parsers.SubtitleEntry(index=1, start="", end="", text="판넬 작업을 부탁해서")
     _corrected, _flags, log = correct_entries([entry])
-    assert any("[사전 조회 실패]" in line and "kornorms" in line for line in log)
+    assert any("[사전 조회 실패]" in n.message and "kornorms" in n.message for n in log)

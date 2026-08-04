@@ -169,7 +169,7 @@ class TestAuxVerbSpacingAllowanceMode:
     def test_allowance_choice_is_logged(self):
         entries = [SubtitleEntry(index=1, start="", end="", text="비가 올 듯하다")]
         _, _, applied_log = correct_entries(entries, spacing_mode="allowance")
-        assert any("[띄어쓰기 기준]" in line for line in applied_log)
+        assert any("[띄어쓰기 기준]" in note.text() for note in applied_log)
 
     def test_joined_form_is_not_flagged_for_spacing(self):
         """허용 기준으로 붙인 형태를 kiwi가 다시 띄우자고 제안해 '확인 필요'

@@ -202,6 +202,11 @@ def correct_subtitle(
         if normalized_dialect_region not in DIALECT_MARKERS:
             normalized_dialect_region = None
 
+        # 교정 전 원문을 줄 번호로 붙들어 둔다. 화면의 "되돌리기"가 이 값으로
+        # 그 줄만 원래대로 되돌린다 — 자동 교정 로그의 '원문조각 -> 교정조각'은
+        # 긴 줄에서 '…'로 축약되므로(`_localized_change`) 복원에 쓸 수 없다.
+        originals = {e.index: e.text for e in entries}
+
         corrected_entries, flags, applied_log = correct_entries(
             entries,
             dialect_map=_parse_json_object(dialect_map),
@@ -238,24 +243,36 @@ def correct_subtitle(
         else:
             original_text = raw.decode("utf-8-sig")
 
+    # 자동 교정 로그는 구조로 내보낸다({message, line_index, is_edit}). 화면이
+    # 줄 단위 되돌리기를 제공하려면 어느 줄의 기록인지 알아야 하는데, 문자열을
+    # 다시 파싱하면 줄 기록과 문서 전체 안내가 구분되지 않는다.
+    applied_payload = [asdict(n) for n in applied_log]
+
     return {
-        "id": _try_save_report(original_text, corrected_text, flags, applied_log),
+        "id": _try_save_report(original_text, corrected_text, flags, applied_payload),
         "original_srt": original_text,
         "corrected_srt": corrected_text,
         "flags": [asdict(f) for f in flags],
-        "applied_log": applied_log,
+        "applied_log": applied_payload,
         # 항목별 타임코드까지 함께 준다. 화면에서 다른 자막 형식(.srt/.vtt/.smi)으로
         # 바꿔 받으려면 시각 정보가 필요한데, 완성된 파일 텍스트만으로는 형식을
         # 되짚어 파싱해야 해서 불필요하게 취약해진다.
         "entries": [
-            {"index": e.index, "start": e.start, "end": e.end, "text": e.text}
+            {
+                "index": e.index,
+                "start": e.start,
+                "end": e.end,
+                "text": e.text,
+                # 되돌리기용 교정 전 원문. 자동 교정이 없었던 줄은 text와 같다.
+                "original": originals.get(e.index, e.text),
+            }
             for e in corrected_entries
         ],
     }
 
 
 def _try_save_report(
-    original_text: str, corrected_text: str, flags: list, applied_log: list[str]
+    original_text: str, corrected_text: str, flags: list, applied_log: list[dict]
 ) -> str | None:
     """저장(Supabase)을 시도하고, 실패하면 None을 돌려준다.
 

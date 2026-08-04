@@ -30,8 +30,12 @@ def _headers() -> dict:
     }
 
 
-def save_report(original_srt: str, corrected_srt: str, flags: list, applied_log: list[str]) -> str:
-    """교정 결과를 저장하고, 나중에 다시 불러올 수 있는 id를 반환한다."""
+def save_report(original_srt: str, corrected_srt: str, flags: list, applied_log: list[dict]) -> str:
+    """교정 결과를 저장하고, 나중에 다시 불러올 수 있는 id를 반환한다.
+
+    `applied_log`는 `AppliedNote`를 asdict한 목록이다. 2026-08-04 이전에 저장된
+    행에는 문자열 목록이 들어 있으므로, 불러오는 쪽(화면)이 두 형태를 모두 받아야 한다.
+    """
     report_id = str(uuid.uuid4())
     payload = {
         "id": report_id,
