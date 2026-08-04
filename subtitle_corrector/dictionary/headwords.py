@@ -171,6 +171,55 @@ def definition_markers(word: str) -> frozenset:
     return frozenset(markers)
 
 
+def only_sino_korean_headword(word: str) -> bool:
+    """word와 정확히 일치하는 표준국어대사전 표제어가 **전부 한자어**인지 확인한다.
+
+    한자 원어 정보(`origin`)가 있으면 그 표제어는 한자어이고, 접두사·접미사가 붙은
+    고유어 파생어가 아니다. 이 구분이 필요한 이유(2026-08-04 사용자 지적):
+
+        처-먹다   origin=''        접두사 '처-'(마구/속되게) 파생어  -> '쳐먹다'의 정답
+        처-하다   origin='處하다'   한자어 處하다(형편에 놓이다)      -> '쳐 하다'의 정답이 아니다
+
+    `word_exists('처하다')`는 True라서, 그것만 근거로 삼으면 `쳐 하든가`를
+    `처하든가`로 고치자고 제안한다 — 뜻이 전혀 다른 낱말이다(§58이 말하는
+    긍정 근거 사고). 조회 실패·미등재는 False로 흡수한다(근거 없음).
+    """
+    try:
+        items = search_stdict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return False
+    if isinstance(items, dict):
+        items = [items]
+    matches = [
+        item
+        for item in items
+        if (item.get("word") or "").replace("-", "").replace("^", "") == word
+    ]
+    if not matches:
+        return False
+    return all((item.get("origin") or "").strip() for item in matches)
+
+
+def sino_korean_origin(word: str) -> str:
+    """word 표제어의 한자 원어 표기를 돌려준다('처하다' -> '處하다'). 없으면 빈 문자열.
+
+    플래그 사유에 **근거를 그대로 싣기 위한** 도우미다 — "그 표제어는 한자어 處하다라
+    뜻이 다르다"고 말할 수 있어야 번역가가 판단할 수 있다."""
+    try:
+        items = search_stdict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return ""
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        if (item.get("word") or "").replace("-", "").replace("^", "") != word:
+            continue
+        origin = (item.get("origin") or "").strip()
+        if origin:
+            return origin
+    return ""
+
+
 def word_exists(query: str) -> bool:
     """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
 

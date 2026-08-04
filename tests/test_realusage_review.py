@@ -510,9 +510,11 @@ def test_intensive_prefix_cheo():
     assert _run("쳐들어갔다")[0] == "쳐들어갔다"
     # 보조 용언 자리는 '치다'의 활용일 수 있어 자동 교정하지 않는다
     assert _run("박수를 쳐 줘")[0] == "박수를 쳐 줘"
+    # '하다' 자리는 **제안도 하지 않는다** — 붙임형 '처하다'는 한자어 處하다뿐이라
+    # 대안이 못 된다(2026-08-04 사용자 지적, §64). 아래 전용 테스트 참고.
     text, flags = _run("이딴 거 너나 실컷 쳐 하든가")
     assert text == "이딴 거 너나 실컷 쳐 하든가"
-    assert [f.suggested_fix for f in flags] == ["이딴 거 너나 실컷 처하든가"]
+    assert [f.suggested_fix for f in flags] == [""]
 
 
 def test_punctuation_never_gets_a_space_before_it():
@@ -720,3 +722,29 @@ def test_loanword_flag_carries_source_lookup_token():
     assert any(f.source_lookup_token == "러스" for f in lookup_flags)
     # 사유 문구가 "무엇을 확인해야 하는지"를 말해 준다(`docs/BACKLOG.md` 28번).
     assert any("원어가 무엇인지 확인" in f.reason for f in lookup_flags)
+
+
+def test_cheo_hada_has_no_valid_joined_form():
+    """'쳐 하다'·'쳐하다'는 **둘 다 비표준**이고 대안도 없다(2026-08-04 사용자 지적, §64).
+
+    전에는 `쳐 하든가`에 `처하든가`를 제안했다. 그 표제어는 한자어 處하다(어떤 형편에
+    놓이다)여서 접두사 '처-'(마구/속되게) 용법이 아니다 — 붙임형이 표제어라는 사실만
+    근거로 삼은 긍정 근거 사고다(§58). 이제 제안 없이 사유만 알린다.
+    """
+    from subtitle_corrector.engine import check_intensive_prefix_cheo
+
+    for text in ("알아서 쳐 하든가", "쳐하든가", "쳐 하지 마"):
+        flag = check_intensive_prefix_cheo(1, text)
+        assert flag is not None, text
+        assert not flag.suggested_fix  # 대안을 만들 수 없다
+        assert "處하다" in flag.reason and "표준 표기가 아닙니다" in flag.reason
+        # 텍스트는 절대 바뀌지 않는다.
+        assert _run(text)[0] == text
+
+    # 고유어 파생어(처먹다·처박다)는 지금까지처럼 자동 교정한다.
+    assert _run("쳐먹어라")[0] == "처먹어라"
+    assert _run("쳐 먹어라")[0] == "처먹어라"
+    assert _run("쳐박혀 있어")[0] == "처박혀 있어"
+    # '치다'의 활용 자리는 건드리지 않는다.
+    assert _run("박수를 쳐 줘")[0] == "박수를 쳐 줘"
+    assert _run("공을 쳐 봐")[0] == "공을 쳐 봐"

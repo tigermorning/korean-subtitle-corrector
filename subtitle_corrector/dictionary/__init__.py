@@ -38,6 +38,8 @@ from .headwords import (
     is_contemporary_general_word,
     registered_ending,
     usage_examples,
+    only_sino_korean_headword,
+    sino_korean_origin,
     word_exists,
 )
 from .terms import (
@@ -69,6 +71,8 @@ __all__ = [
     "note_lookup_attempt",
     "reset_failed_lookups",
     "search_dialect",
+    "only_sino_korean_headword",
+    "sino_korean_origin",
     "word_exists",
     "compound_status",
     "appears_in_standard_headword",

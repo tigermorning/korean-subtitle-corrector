@@ -1,7 +1,7 @@
 """접사 붙임 규칙(하다/시키다/당하다/받다) 및 관형어+명사 분리.
 """
 
-from ..dictionary import word_exists
+from ..dictionary import only_sino_korean_headword, sino_korean_origin, word_exists
 from ..report import FlagItem
 from .text_utils import _localized_change
 from .kiwi_adapter import _kiwi
@@ -305,8 +305,11 @@ def correct_intensive_prefix_cheo(text: str) -> tuple[str, list[str]]:
     for i in range(len(tokens) - 2):
         found = _cheo_prefix_candidate(text, tokens, i)
         if found:
-            start, verb_start, _joined, verb_tag = found
-            if verb_tag == "VV":
+            start, verb_start, joined, verb_tag = found
+            # 붙임형이 **한자어뿐**이면 접두사 '처-' 파생어가 아니다('처하다'=處하다).
+            # 그 표기로 바꾸면 뜻이 다른 낱말이 된다 — check_intensive_prefix_cheo()가
+            # "둘 다 비표준"으로 알린다(2026-08-04 사용자 지적, §64).
+            if verb_tag == "VV" and not only_sino_korean_headword(joined):
                 edits.append((start, verb_start))
             continue
         # 파생어가 사전에 없어도, **붙여 쓴** '쳐+본용언'은 접두사 결합밖에 될 수 없다.
@@ -358,15 +361,38 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
 
     '처하다'는 표준국어대사전에 있으나 뜻이 '어떤 형편이나 처지에 놓이다'(處하다)여서
     접두사 '처-'의 뜻과 다르다. 즉 붙임형이 표제어라는 사실만으로 정답을 확정할 수
-    없다. 자동으로 바꾸지 않고 사람에게 넘긴다(2026-08-03 사용자 보고)."""
+    없다. 자동으로 바꾸지 않고 사람에게 넘긴다(2026-08-03 사용자 보고).
+
+    **붙임형이 한자어뿐인 자리는 대안을 제시하지 않는다**(2026-08-04 사용자 지적):
+    `쳐 하다`·`쳐하다`는 둘 다 비표준인데, 전에는 `처하다`를 제안했다 — 그 표제어는
+    한자어 處하다여서 이 자리의 대안이 못 된다(§64). 정답은 문맥에 맞는 다른 표현이라
+    도구가 만들 수 없으므로, 무엇이 문제인지만 알린다(제안 없음)."""
     tokens = _kiwi.tokenize(text)
     for i in range(len(tokens) - 2):
         found = _cheo_prefix_candidate(text, tokens, i)
         if not found:
             continue
         start, verb_start, joined, verb_tag = found
-        if verb_tag != "VX":
+        sino_only = only_sino_korean_headword(joined)
+        if verb_tag != "VX" and not sino_only:
             continue
+        if sino_only:
+            # 사람이 볼 문구에는 원문 어절을 그대로 인용한다 — 무엇을 지적하는지
+            # 바로 보이지 않으면 판단할 수 없다.
+            word_end = text.find(" ", verb_start)
+            quoted = text[start : len(text) if word_end == -1 else word_end]
+            origin = sino_korean_origin(joined)
+            return FlagItem(
+                line_index=index,
+                original_text=text,
+                reason=(
+                    f"'{quoted}'는 표준 표기가 아닙니다 — 접두사는 '처-'이므로 '쳐'로 적은 "
+                    "이 표기는 띄어 쓰든 붙여 쓰든 맞지 않습니다. 그렇다고 붙여 쓴 "
+                    f"'{joined}'로 바꿀 수도 없습니다: 그 표제어는 한자어 "
+                    f"{origin or '다른 낱말'}(어떤 형편이나 처지에 놓이다)로 뜻이 전혀 "
+                    "다릅니다. 문맥에 맞는 다른 표현으로 고쳐 주세요."
+                ),
+            )
         suggested = text[:start] + "처" + text[verb_start:]
         return FlagItem(
             line_index=index,

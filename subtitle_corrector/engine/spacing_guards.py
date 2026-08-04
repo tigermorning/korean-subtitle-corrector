@@ -436,6 +436,7 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
     suggested = _protect_unresolvable_splits(text, suggested)
     suggested = _protect_cheo_prefix_gap(text, suggested)
     suggested = _protect_cheo_prefix_split(text, suggested)
+    suggested = _protect_myeoch_number_spacing(text, suggested)
     # 구두점 앞 공백은 어떤 경우에도 제안하지 않는다(문맥 무관 규칙).
     suggested = _strip_space_before_punctuation(suggested)
 
@@ -447,6 +448,38 @@ def check_spacing(index: int, text: str) -> FlagItem | None:
             suggested_fix=suggested,
         )
     return None
+
+
+def _protect_myeoch_number_spacing(text: str, suggested: str) -> str:
+    """'몇' + 수사(몇만·몇백만·몇십) 자리의 원문 표기를 그대로 지킨다.
+
+    `docs/BACKLOG.md` 4번을 조사한 결과다. 이 자리는 **사전으로 갈리지 않는다** —
+    `몇만`·`몇십`·`몇백`·`몇천`·`몇억`·`몇백만`이 표준국어대사전·우리말샘에
+    **전부 미등재**인데(반면 접두사 '수-' 파생어 `수만`·`수백만`·`수십만`은 등재),
+    그렇다고 갈라 써야 한다는 근거도 없다. 한글 맞춤법 제44항은 "수를 적을 적에는
+    만 단위로 띄어 쓴다"로 수의 자릿수 띄어쓰기를 정한 조항이라 '몇'과 수사의
+    결합 문제를 직접 답하지 않는다(2026-08-04 조사).
+
+    그런데도 kiwi는 붙여 쓴 `몇만 원`을 `몇 만 원`으로 갈라 쓰자고 제안했다.
+    근거는 토큰 경계뿐이다 — 이 프로젝트에서 자동 교정도 제안도 하지 않기로 한
+    부류다(사전 근거 없이 임의 판단 금지). 어느 쪽이 맞는지는 '몇'이 정확한 수를
+    묻는 의문인지 막연한 큰 수인지에 달렸고, 그건 텍스트만으로 가릴 수 없다.
+
+    그래서 **원문 표기를 그대로 둔다** — 붙여 썼으면 붙인 채로, 띄어 썼으면 띄운
+    채로. 근거 없는 제안을 지우는 것이므로 원문을 바꾸지 않는다.
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(len(tokens) - 1):
+        myeoch, number = tokens[i], tokens[i + 1]
+        if myeoch.form != "몇" or number.tag != "NR":
+            continue
+        gap = text[myeoch.start + myeoch.len : number.start]
+        if gap not in ("", " "):
+            continue
+        original = text[myeoch.start : number.start + number.len]
+        other = original.replace(" ", "") if gap == " " else f"{myeoch.form} {number.form}"
+        suggested = _force_span(suggested, original, other)
+    return suggested
 
 
 def _protect_cheo_prefix_gap(text: str, suggested: str) -> str:
