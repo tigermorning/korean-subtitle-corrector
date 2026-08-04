@@ -20,9 +20,12 @@
 
 from .clients import (
     failed_lookups,
+    lookup_stats,
+    note_lookup_attempt,
     reset_failed_lookups,
     search_dialect,
     search_kornorms,
+    search_kornorms_partial,
     search_krdict,
     search_onyongeo,
     search_opendict,
@@ -42,6 +45,7 @@ from .terms import (
     former_term_lookup,
     get_purified_terms,
     loanword_fix,
+    lookup_by_source,
     standard_term_replacement,
 )
 from .dialect import (
@@ -57,9 +61,12 @@ __all__ = [
     "search_stdict",
     "search_opendict",
     "search_kornorms",
+    "search_kornorms_partial",
     "search_onyongeo",
     "search_krdict",
     "failed_lookups",
+    "lookup_stats",
+    "note_lookup_attempt",
     "reset_failed_lookups",
     "search_dialect",
     "word_exists",
@@ -73,6 +80,7 @@ __all__ = [
     "former_term_field",
     "former_term_lookup",
     "loanword_fix",
+    "lookup_by_source",
     "get_purified_terms",
     "DIALECT_MARKERS",
     "DIALECT_TO_STANDARD",

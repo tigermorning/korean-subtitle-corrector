@@ -705,3 +705,18 @@ def test_adnominal_reading_interjection_is_flagged_not_auto_comma():
     )
     # 관형어 읽기가 없는 감탄사는 예전처럼 자동으로 넣는다
     assert _run("아이고 어떻기는")[0] == "아이고, 어떻기는"
+
+
+def test_loanword_flag_carries_source_lookup_token():
+    """외래어 음차 플래그는 **원어 입력칸**을 띄울 토막을 함께 실어야 한다(§61).
+
+    음차의 정답은 원어가 무엇이냐로 갈린다 — '러스'는 원어가 Ruth면 '루스',
+    Russ면 '러스'가 맞다(7강 123번). 화면이 그 자리에서 원어를 받아
+    `/api/loanword-source`로 확인할 수 있게 토막을 내보낸다.
+    """
+    _text, flags = _run("- 연락 안 했다고? 세상에, 러스\n- 당신이랑 같이 하려고 했지")
+    lookup_flags = [f for f in flags if f.source_lookup_token]
+    assert lookup_flags, "외래어 음차 플래그에 원어 조회 토막이 없다"
+    assert any(f.source_lookup_token == "러스" for f in lookup_flags)
+    # 사유 문구가 "무엇을 확인해야 하는지"를 말해 준다(`docs/BACKLOG.md` 28번).
+    assert any("원어가 무엇인지 확인" in f.reason for f in lookup_flags)

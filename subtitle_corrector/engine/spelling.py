@@ -111,9 +111,12 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
 
     reason = (
         f"사전에 없는 단어: {', '.join(unknown)} — 외국어 음차·고유명사일 수 있음. "
-        "국립국어원 용례, 발음기호(Longman/Collins 등), 한글라이즈(hangulize.org)로 "
-        "직접 확인 필요. 반복 등장하는 이름·요리명이면 위쪽의 고유명사/요리명 목록에 "
-        "추가하면 이후 잘못 쪼개지지 않습니다."
+        # 음차라면 정답은 원어가 정한다. 아래 칸에 원어를 넣으면 국립국어원 용례로
+        # 확정 표기를 찾아 주므로, 세칙을 직접 읽지 않고도 판단할 수 있다(§61).
+        f"음차라면 아래 칸에 원어(로마자)를 넣어 '{unknown[0]}'의 국립국어원 확정 표기를 "
+        "확인하세요. 용례에 없으면 발음기호(Longman/Collins 등), "
+        "한글라이즈(hangulize.org)로 직접 확인해야 합니다. 반복 등장하는 이름·요리명이면 "
+        "위쪽의 고유명사/요리명 목록에 추가하면 이후 잘못 쪼개지지 않습니다."
     )
     if hints:
         reason += " " + ". ".join(hints) + "."
@@ -122,6 +125,7 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
         original_text=text,
         reason=reason,
         suggested_fix=suggested_fix or "",
+        source_lookup_token=unknown[0],
     )
 
 

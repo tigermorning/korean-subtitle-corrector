@@ -8,7 +8,13 @@
 import difflib
 import re
 from functools import lru_cache
-from .clients import search_kornorms, search_onyongeo, search_opendict, search_stdict
+from .clients import (
+    search_kornorms,
+    search_kornorms_partial,
+    search_onyongeo,
+    search_opendict,
+    search_stdict,
+)
 from .headwords import _opendict_item_is_standard
 
 _STANDARD_REPLACEMENT_RE = re.compile(
@@ -163,6 +169,93 @@ def _closest_segment(token: str, korean_mark: str) -> str:
 
 # kornorms의 용례 분류. 이 분류만 근거일 때는 자동 반영하지 않는다(위 loanword_fix 참고).
 _PERSON_PLACE_CATEGORIES = frozenset({"인명", "지명"})
+
+
+# 원어 표기를 조각으로 쪼개는 구분자. 인명 용례는 `Ruth, Babe`, `Strathairn, David
+# (Russell)`처럼 성·이름·별칭을 한 필드에 담고, 일반 용어는 `Russell-Einstein 선언`,
+# `Ruth記`처럼 원어에 한글·기호가 섞인다.
+_SOURCE_SPLIT = re.compile(r"[,\(\)\[\]/·ㆍ\s]+")
+
+
+def _source_pieces(srclang_mark: str) -> list[str]:
+    return [p for p in _SOURCE_SPLIT.split(srclang_mark or "") if p]
+
+
+def _segment_for_source_piece(source: str, pieces: list[str], korean: str, token: str) -> str:
+    """입력한 원어 조각에 대응하는 한글 조각을 고른다.
+
+    **자리로 고른다** — 원어와 한글이 같은 순서로 나열되기 때문이다
+    (`Dreifuss, Ruth` / `드라이푸스, 루트`에서 `Ruth`는 둘째이므로 `루트`).
+    표기 유사도로 고르면 엉뚱한 조각이 뽑힌다: `러스`와 가장 비슷한 것은 `드라이푸스`라
+    성(姓)이 답으로 나온다(2026-08-04 로컬 서버 확인).
+
+    자리로 맞출 수 없으면(조각 수가 다르거나 원어에 그 조각이 없으면) 기존
+    `_closest_segment()`로 물러난다."""
+    parts = [p.strip() for p in korean.split(",") if p.strip()]
+    lowered = [p.lower() for p in pieces]
+    if len(parts) == len(pieces) and source.lower() in lowered:
+        return parts[lowered.index(source.lower())]
+    return _closest_segment(token, korean) if token else korean
+
+
+def lookup_by_source(source: str, token: str = "") -> list[dict]:
+    """**원어(로마자) 표기로** 국립국어원 확정 한글 표기를 찾는다.
+
+    번역가가 자막에서 만나는 문제는 "이 음차가 맞나"인데, 그 정답은 원어가 무엇이냐로
+    갈린다 — `러스`는 원어가 Ruth면 `루스`가 맞고 Russ면 `러스`가 맞다(§57, 7강 123번의
+    실제 사고). 화면에서 원어를 입력받아 이 함수로 조회하면, 사용자가 외래어 표기법
+    세칙을 직접 읽지 않고도 국립국어원 용례라는 확정 근거로 판단할 수 있다.
+
+    판정 등급을 함께 돌려준다 — **추측하지 않고 근거의 강도를 밝히는 것**이 이 프로젝트
+    원칙이다.
+
+    - `확정`: 원어 표기가 입력과 완전히 같다(`Snow` -> `스노`).
+    - `일치`: 원어 조각 하나가 입력과 정확히 같다(`Ruth, Babe`의 `Ruth`).
+    - `참고`: 원어에 입력이 포함되기만 한다(`Russ` -> `Russell`, `truss교`).
+      **정답 근거가 아니다** — 비슷한 이름의 등재 표기를 참고로 보여 주는 용도다.
+
+    `token`(자막에 실제로 쓰인 음차)을 주면 각 후보의 `korean` 필드를 그 토큰에
+    대응하는 조각으로 좁힌다(`러더퍼드, 어니스트` -> `러더퍼드`) — 이름 전체가
+    문장에 삽입되는 것을 막는 `_closest_segment()`와 같은 안전장치다.
+
+    반환값: `[{source, korean, segment, category, wrong_marks, match}, ...]`
+    (등급 순, 같은 등급이면 API 순서). 조회 실패·미등재면 빈 목록이다.
+    """
+    source = (source or "").strip()
+    if not source:
+        return []
+
+    seen: set[tuple[str, str]] = set()
+    ranked: dict[str, list[dict]] = {"확정": [], "일치": [], "참고": []}
+    for item in list(search_kornorms(source)) + list(search_kornorms_partial(source)):
+        korean = item.get("korean_mark") or ""
+        srclang = item.get("srclang_mark") or ""
+        if not korean:
+            continue
+        key = (srclang, korean)
+        if key in seen:
+            continue
+        seen.add(key)
+        pieces = _source_pieces(srclang)
+        lowered = [p.lower() for p in pieces]
+        if srclang.strip().lower() == source.lower():
+            match = "확정"
+        elif source.lower() in lowered:
+            match = "일치"
+        else:
+            match = "참고"
+        wrong = [w for w in (item.get("relate_mark_o") or "").split(",") if w.strip()]
+        ranked[match].append(
+            {
+                "source": srclang,
+                "korean": korean,
+                "segment": _segment_for_source_piece(source, pieces, korean, token),
+                "category": item.get("foreign_gubun") or "",
+                "wrong_marks": wrong,
+                "match": match,
+            }
+        )
+    return ranked["확정"] + ranked["일치"] + ranked["참고"]
 
 
 def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:

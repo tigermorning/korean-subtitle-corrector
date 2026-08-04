@@ -469,6 +469,112 @@ function renderAppliedLog(notes) {
     rows.join('') || '<li style="color:#999">없음</li>';
 }
 
+// 외래어 음차 플래그의 원어 입력칸. 음차의 정답은 **원어가 무엇이냐**로 갈린다 —
+// '러스'는 원어가 Ruth면 '루스', Russ면 '러스'가 맞다(실제로 등장인물 이름이 바뀐
+// 사고가 있었다). 번역가가 외래어 표기법 세칙을 직접 읽지 않고도 국립국어원 용례로
+// 확인할 수 있게, 플래그마다 원어를 넣어 조회하는 칸을 둔다.
+function sourceLookupBox(flag, i) {
+  if (!flag.source_lookup_token) return '';
+  return `
+    <div style="margin-top:6px;padding:6px;background:#f6f8fa;border-radius:4px">
+      <label style="font-size:0.9em">원어(로마자)
+        <input type="text" class="src-input" data-flag="${i}" placeholder="예: Ruth"
+               style="width:130px" autocomplete="off">
+      </label>
+      <button type="button" class="src-btn" data-flag="${i}">국립국어원 용례 확인</button>
+      <div class="src-result" data-flag="${i}" style="margin-top:4px;font-size:0.9em"></div>
+    </div>`;
+}
+
+// 확인 항목 한 줄. **원어 칸이 있는 플래그는 제안이 아직 없어도 체크칸을 만든다** —
+// 원어를 조회해 표기를 고르면 그 자리에서 제안이 생기므로, 그때 체크칸이 없으면
+// 반영할 방법이 없다(사전 미등재 단어 플래그가 대부분 이 경우다).
+function flagRowHtml(f, i) {
+  const pickable = f.suggested_fix || f.source_lookup_token;
+  const pick = pickable
+    ? `<input type="checkbox" class="flag-pick" data-flag="${i}"${f.suggested_fix ? '' : ' disabled title="원어를 조회해 표기를 고르면 켜집니다"'}>`
+    : '<span style="color:#aaa">—</span>';
+  return `
+    <tr>
+      <td>${pick}</td>
+      <td>${f.line_index}</td>
+      <td>${escapeHtml(f.original_text)}</td>
+      <td>${escapeHtml(f.reason)}${sourceLookupBox(f, i)}</td>
+      <td class="flag-suggestion">${escapeHtml(f.suggested_fix || '')}</td>
+    </tr>`;
+}
+
+// 조회 결과를 그린다. '확정'·'일치'만 정답 근거이고 '참고'는 비슷한 원어일 뿐이라,
+// 등급을 문구로 구분하고 반영 버튼도 정답 근거에만 준다 — 이 도구는 추측으로
+// 표기를 정하지 않는다.
+function renderSourceCandidates(box, data, flag) {
+  if (!data.candidates.length) {
+    box.innerHTML = `<span style="color:#b00">'${escapeHtml(data.source)}'로 등재된 외래어 용례가 없습니다.</span>` +
+      ' 원어 철자를 확인하거나(성·이름 중 하나만 넣어 보세요), 실제 발음으로 판단해야 합니다.';
+    return;
+  }
+  const rows = data.candidates.slice(0, 8).map(c => {
+    const label = `${escapeHtml(c.source)} → <b>${escapeHtml(c.korean)}</b>` +
+      (c.category ? ` <span style="color:#666">(${escapeHtml(c.category)})</span>` : '') +
+      (c.wrong_marks.length ? ` <span style="color:#b00">오표기: ${escapeHtml(c.wrong_marks.join(' '))}</span>` : '');
+    if (c.match === '참고') return `<div style="color:#666">· 참고 ${label}</div>`;
+    const canApply = flag.original_text.includes(flag.source_lookup_token);
+    const apply = canApply
+      ? `<button type="button" class="src-apply" data-flag="${box.dataset.flag}"
+                 data-segment="${escapeHtml(c.segment)}">'${escapeHtml(c.segment)}'로 반영</button>`
+      : '<span style="color:#999">(이 줄에서 그 토막을 찾지 못해 반영 버튼을 주지 않습니다)</span>';
+    return `<div>· <b>${escapeHtml(c.match)}</b> ${label} ${apply}</div>`;
+  }).join('');
+  const head = data.confirmed
+    ? ''
+    : `<div style="color:#b00">'${escapeHtml(data.source)}'와 정확히 일치하는 용례는 없습니다 — 아래는 비슷한 원어 참고용이며 정답 근거가 아닙니다.</div>`;
+  box.innerHTML = head + rows;
+}
+
+async function lookupSource(i) {
+  const flag = resultState.flags[i];
+  const input = document.querySelector(`.src-input[data-flag="${i}"]`);
+  const box = document.querySelector(`.src-result[data-flag="${i}"]`);
+  const source = (input.value || '').trim();
+  if (!source) { box.textContent = '원어(로마자) 표기를 넣어 주세요.'; return; }
+  box.textContent = '조회 중…';
+  try {
+    const params = new URLSearchParams({ source, token: flag.source_lookup_token || '' });
+    const res = await fetch(`/api/loanword-source?${params}`);
+    const data = await res.json();
+    if (!res.ok) { box.textContent = data.detail || '조회에 실패했습니다.'; return; }
+    renderSourceCandidates(box, data, flag);
+  } catch (err) {
+    box.textContent = '조회에 실패했습니다(네트워크). 잠시 후 다시 시도해 주세요.';
+  }
+}
+
+// 고른 표기를 그 플래그의 제안으로 바꿔 넣고 반영까지 한다. 줄 전체를 새로 만들지
+// 않고 **음차 토막만** 갈아 끼운다 — 인명 용례의 한글 표기는 전체 이름('러더퍼드,
+// 어니스트')이라 그대로 넣으면 문장이 망가진다(서버가 골라 준 segment를 쓴다).
+function applySourceChoice(i, segment) {
+  const flag = resultState.flags[i];
+  const token = flag.source_lookup_token;
+  if (!token || !flag.original_text.includes(token)) return;
+  flag.suggested_fix = flag.original_text.replace(token, segment);
+  const pick = document.querySelector(`.flag-pick[data-flag="${i}"]`);
+  if (pick) {
+    pick.disabled = false;  // 제안이 생겼으니 체크할 수 있다
+    pick.checked = true;
+    const row = pick.closest('tr');
+    const cell = row && row.querySelector('.flag-suggestion');
+    if (cell) cell.textContent = flag.suggested_fix;
+  }
+  applySelectedFixes();
+}
+
+document.getElementById('flagBody').addEventListener('click', event => {
+  const lookupBtn = event.target.closest('.src-btn');
+  if (lookupBtn) { lookupSource(Number(lookupBtn.dataset.flag)); return; }
+  const applyBtn = event.target.closest('.src-apply');
+  if (applyBtn) applySourceChoice(Number(applyBtn.dataset.flag), applyBtn.dataset.segment);
+});
+
 function renderResult(data) {
   resultEl.classList.add('show');
   resultState.baseText = data.corrected_srt;
@@ -488,14 +594,8 @@ function renderResult(data) {
   document.getElementById('appliedCount').textContent = notes.length;
 
   const flagBody = document.getElementById('flagBody');
-  flagBody.innerHTML = resultState.flags.map((f, i) => `
-    <tr>
-      <td>${f.suggested_fix ? `<input type="checkbox" class="flag-pick" data-flag="${i}">` : '<span style="color:#aaa">—</span>'}</td>
-      <td>${f.line_index}</td>
-      <td>${escapeHtml(f.original_text)}</td>
-      <td>${escapeHtml(f.reason)}</td>
-      <td>${escapeHtml(f.suggested_fix || '')}</td>
-    </tr>`).join('') || '<tr><td colspan="5" style="color:#999">없음</td></tr>';
+  flagBody.innerHTML = resultState.flags.map(flagRowHtml).join('')
+    || '<tr><td colspan="5" style="color:#999">없음</td></tr>';
   document.getElementById('flagCount').textContent = (data.flags || []).length;
 
   const shareBox = document.getElementById('shareBox');
@@ -761,8 +861,11 @@ function downloadResult() {
 // 눌러도 같은 선택이면 같은 결과가 나온다.
 function applySelectedFixes() {
   const revertBoxes = [...document.querySelectorAll('.auto-revert:checked')];
+  // 제안이 없는 플래그는 절대 반영하지 않는다 — 빈 문자열로 그 줄을 덮어쓰면
+  // 대사가 사라진다(원어 칸이 있는 플래그는 조회 전에도 체크칸이 있다).
   const picked = [...document.querySelectorAll('.flag-pick:checked')]
-    .map(box => resultState.flags[Number(box.dataset.flag)]);
+    .map(box => resultState.flags[Number(box.dataset.flag)])
+    .filter(flag => flag && flag.suggested_fix);
   if (!picked.length && !revertBoxes.length) {
     document.getElementById('applyNote').textContent =
       '반영할 항목을 먼저 체크하세요 (제안 채택 또는 자동 교정 되돌리기).';

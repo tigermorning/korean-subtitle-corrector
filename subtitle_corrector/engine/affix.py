@@ -210,6 +210,53 @@ def check_honorific_dependent_noun(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def check_adnominal_noun_verb_split(index: int, text: str) -> FlagItem | None:
+    """관형어 뒤에 붙여 쓴 '명사+하다'에서 kiwi가 '하'를 **동사(VV)**로 읽은 자리를
+    확인 플래그한다('이런 말하지 마', '첫 방송했어').
+
+    자동 교정(`correct_adnominal_noun_verb_split`)은 '하'가 접미사(XSV)로 태깅된
+    자리만 가른다. 같은 문장을 띄어 써 온 원문에서는 kiwi가 '하'를 동사로 읽는
+    일이 잦아 그 자리는 규칙이 아예 발동하지 않았다(`docs/BACKLOG.md` 30번).
+
+    **왜 자동 교정이 아니라 플래그인가**(2026-08-04 사용자 결정): VV까지 자동으로
+    가르면 붙임형이 사전 표제어인 고정 표현이 깨진다 — kiwi가 '두말하지'를
+    '두'(MM)+'말'(NNG)+'하'(VV)로, '한잔했어'를 '한'(MM)+'잔'+'하'로 쪼개기 때문에
+    `두말하다`·`한잔하다`·`딴말하다`·`딴짓하다`가 모두 갈릴 후보로 잡혔다(실측 4건).
+    사전 조회로 막을 수는 있으나 사전 API 장애 때 `word_exists`가 미등재와 같은
+    False를 돌려주므로 가드가 열린다. 자동 교정은 정답이 100% 하나일 때만 한다는
+    원칙에 따라 사람 확인으로 남긴다."""
+    tokens = _kiwi.tokenize(text)
+    for i in range(2, len(tokens)):
+        hae, noun, adnom = tokens[i], tokens[i - 1], tokens[i - 2]
+        if hae.tag != "VV" or hae.form != "하":
+            continue
+        if noun.tag != "NNG":
+            continue
+        if noun.start + noun.len != hae.start:
+            continue  # 이미 띄어 써 있으면 확인할 것이 없다
+        if adnom.tag != "MM" and adnom.tag != "ETM":
+            continue
+        # 자동 교정 쪽과 같은 가드: 어절 중간의 MM은 kiwi가 모르는 낱말을 쪼갠 결과다.
+        if adnom.tag == "MM" and adnom.start > 0 and not text[adnom.start - 1].isspace():
+            continue
+        if text[adnom.start + adnom.len : noun.start] not in (" ", ""):
+            continue
+        suggested = text[: hae.start] + " " + text[hae.start :]
+        adnom_form = text[adnom.start : adnom.start + adnom.len]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"관형어 '{adnom_form}'이 '{noun.form}'을 꾸미면 그 뒤의 '하다'는 동사라 "
+                f"'{noun.form} 하…'처럼 띄어 씁니다. 다만 '{adnom_form}{noun.form}하다'가 "
+                f"사전에 한 낱말로 오른 고정 표현이면(두말하다·한잔하다·딴짓하다) 붙여 쓴 "
+                f"표기가 맞으므로, 어느 쪽인지 확인한 뒤 반영하세요."
+            ),
+        )
+    return None
+
+
 def _cheo_prefix_candidate(text: str, tokens, i: int):
     """'쳐'(치+어) 뒤에 용언이 오는 자리에서 접두사 '처-' 후보를 찾는다.
 

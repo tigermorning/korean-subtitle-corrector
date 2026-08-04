@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from . import store
 from .decoding import decode_bytes, verify_ingest_fidelity
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
-from .dictionary import DIALECT_MARKERS
+from .dictionary import DIALECT_MARKERS, lookup_by_source
 from .engine import (
     SubtitleEntry,
     correct_entries,
@@ -357,6 +357,37 @@ def get_speakers(file: UploadFile):
 def get_dialect_regions():
     """사투리 교정에서 지원하는 지역 목록을 반환한다."""
     return {"regions": list(DIALECT_MARKERS.keys())}
+
+
+@app.get("/api/loanword-source")
+def get_loanword_by_source(source: str, token: str = ""):
+    """원어(로마자) 표기로 국립국어원 확정 한글 표기를 찾는다.
+
+    외래어 음차의 정답은 **원어가 무엇이냐**로 갈린다 — `러스`는 원어가 Ruth면
+    `루스`, Russ면 `러스`가 맞다(§57의 실제 사고). 화면의 플래그마다 원어 입력칸을
+    두고 이 엔드포인트를 부르면, 번역가가 외래어 표기법 세칙을 직접 읽지 않고도
+    국립국어원 용례라는 확정 근거로 판단할 수 있다.
+
+    `token`(자막에 쓰인 음차)을 함께 주면 후보마다 그 토막에 대응하는 조각을
+    `segment`로 돌려준다 — 인명 용례의 한글 표기는 `러더퍼드, 어니스트`처럼 전체
+    이름이라, 그대로 넣으면 문장에 엉뚱한 이름이 삽입된다.
+
+    응답: `{source, token, candidates: [...], confirmed: bool}`.
+    `confirmed`가 거짓이면 등재된 용례가 없다는 뜻이고, `candidates`는 비슷한 원어를
+    참고로 보여 주는 목록일 뿐 정답 근거가 아니다.
+    """
+    query = (source or "").strip()
+    if not query:
+        raise HTTPException(400, "원어(로마자) 표기를 입력해 주세요.")
+    if len(query) > 100:
+        raise HTTPException(400, "원어 표기가 너무 깁니다(100자 이내).")
+    candidates = lookup_by_source(query, token.strip())
+    return {
+        "source": query,
+        "token": token.strip(),
+        "candidates": candidates,
+        "confirmed": any(c["match"] in ("확정", "일치") for c in candidates),
+    }
 
 
 # 정적 프론트엔드 (업로드 화면). API 라우트보다 아래에 있어야

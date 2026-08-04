@@ -125,3 +125,41 @@ def test_overlapping_rules_reach_a_fixed_point():
     ):
         once = _three_rules(text)
         assert _three_rules(once) == once
+
+
+# --- 30번: kiwi가 '하'를 동사(VV)로 읽는 자리는 플래그로만 (2026-08-04 사용자 결정) ---
+
+def _flag(text):
+    from subtitle_corrector.engine import check_adnominal_noun_verb_split
+
+    return check_adnominal_noun_verb_split(1, text)
+
+
+def test_vv_reading_is_flagged_not_auto_split():
+    """관형어 + 붙여 쓴 '명사+하다'에서 '하'가 VV로 태깅된 자리는 제안만 남긴다.
+
+    자동 교정은 XSV 자리만 가른다(`docs/BACKLOG.md` 30번). VV까지 자동으로 가르면
+    붙임형이 표제어인 고정 표현이 깨진다 — 실측에서 `두말하다`·`한잔하다`·
+    `딴말하다`·`딴짓하다`가 전부 갈릴 후보로 잡혔다(§60).
+    """
+    from subtitle_corrector.engine import correct_adnominal_noun_verb_split
+
+    for text, suggested in (
+        ("이런 말했어", "이런 말 했어"),
+        ("첫 방송했어", "첫 방송 했어"),
+        ("여러 말했어", "여러 말 했어"),
+    ):
+        assert correct_adnominal_noun_verb_split(text)[0] == text  # 자동 교정 없음
+        flag = _flag(text)
+        assert flag is not None and flag.suggested_fix == suggested
+
+    # 고정 표현도 제안까지는 나오지만(사람이 붙임형이 맞다고 판단하면 반영하지 않는다)
+    # 텍스트는 절대 바뀌지 않는다 — 자동으로 깨지던 부류가 이것이다.
+    for text in ("두말하지 마", "한잔했어", "딴말하지 마", "딴짓하지 마"):
+        assert correct_adnominal_noun_verb_split(text)[0] == text
+
+
+def test_no_flag_when_already_spaced_or_no_adnominal():
+    assert _flag("이런 말 했어") is None  # 이미 띄어 써 있다
+    assert _flag("잘 말했어") is None  # 부사 수식은 붙임이 맞다
+    assert _flag("공부했어") is None  # 관형어가 없다

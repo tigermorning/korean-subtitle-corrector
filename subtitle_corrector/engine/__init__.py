@@ -85,6 +85,7 @@ from .spacing import (
     correct_particle_spacing,
 )
 from .affix import (
+    check_adnominal_noun_verb_split,
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
     correct_action_noun_affix,
@@ -141,6 +142,7 @@ __all__ = [
     "correct_compound_spacing",
     "correct_aux_verb_spacing",
     "_aux_verb_spacing",
+    "check_adnominal_noun_verb_split",
     "check_honorific_dependent_noun",
     "check_intensive_prefix_cheo",
     "correct_action_noun_affix",

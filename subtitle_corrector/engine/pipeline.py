@@ -2,7 +2,7 @@
 """
 
 from dataclasses import replace
-from ..dictionary import failed_lookups, reset_failed_lookups
+from ..dictionary import lookup_stats, reset_failed_lookups
 from ..parsers import SubtitleEntry
 from ..report import AppliedNote, FlagItem
 from .kiwi_adapter import detect_recurring_unknown_words, register_custom_words
@@ -22,6 +22,7 @@ from .spacing import (
     correct_particle_spacing,
 )
 from .affix import (
+    check_adnominal_noun_verb_split,
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
     correct_action_noun_affix,
@@ -110,10 +111,9 @@ def _correct_line_with_markers(
         if markers.line_break:
             fixed = fixed.replace("\n", markers.line_break)
             piece_flags = [
-                FlagItem(
-                    line_index=f.line_index,
+                replace(
+                    f,
                     original_text=f.original_text.replace("\n", markers.line_break),
-                    reason=f.reason,
                     suggested_fix=(f.suggested_fix or "").replace("\n", markers.line_break),
                 )
                 for f in piece_flags
@@ -137,14 +137,9 @@ def _correct_line_with_markers(
         suggested = f.suggested_fix
         if suggested:
             suggested = corrected.replace(f.original_text, suggested, 1) if f.original_text in corrected else None
-        whole_flags.append(
-            FlagItem(
-                line_index=f.line_index,
-                original_text=text,
-                reason=f.reason,
-                suggested_fix=suggested or "",
-            )
-        )
+        # replace()로 옮긴다 — 필드를 하나씩 옮겨 적으면 새로 생긴 필드
+        # (source_lookup_token 등)가 표지 모드에서만 조용히 사라진다.
+        whole_flags.append(replace(f, original_text=text, suggested_fix=suggested or ""))
     return corrected, whole_flags, applied
 
 
@@ -250,14 +245,17 @@ def _correct_line(
     flags.extend(former_term_flags)
 
     for fix, context in review_fixes:
+        applied_token = fix.partition(" -> ")[2] or fix
         flags.append(
             FlagItem(
                 line_index=index,
                 original_text=corrected_text,
                 reason=(
                     f"인명/지명 표기 자동 적용됨 ({fix}, 참고: {context}) — "
-                    "원지음 표기 원칙에 따른 추정치이므로 실제 발음 확인 필요"
+                    "원지음 표기 원칙에 따른 추정치이므로 실제 발음 확인 필요. "
+                    "원어를 알고 있으면 아래 칸에 넣어 국립국어원 용례로 확인하세요"
                 ),
+                source_lookup_token=applied_token,
             )
         )
 
@@ -269,11 +267,18 @@ def _correct_line(
                 original_text=corrected_text,
                 reason=(
                     f"고유명사 외래어 표기 확인 필요 ({fix}, 참고: {context or '국립국어원 확정 표기'}) — "
-                    "인명·지명은 표기 규칙을 따라야 하지만, 작품 제목처럼 고유하게 "
-                    "고정된 표기일 수 있어 자동 반영하지 않음. 실제 대상이 규칙을 "
-                    "따라야 하는 경우에만 반영할 것"
+                    # 판단 기준은 "원어가 무엇인가"다. `러스`는 kornorms에 'Ruth, Babe'의
+                    # 오표기로 등재돼 `루스`가 후보로 떴지만, 원고의 인물은 Russ였다
+                    # (§57, 7강 123번). 번역가가 무엇을 확인해야 하는지 문구가 직접
+                    # 말해 주지 않으면 이 플래그로는 판단할 수 없다(`docs/BACKLOG.md` 28번).
+                    f"**원어가 무엇인지 확인하세요** — 등재된 용례의 원어와 같은 대상이면 "
+                    f"'{replacement_token}'이 맞고, 원어가 다른 이름이면(Ruth ↔ Russ처럼) "
+                    f"'{original_token}'이 맞을 수 있습니다. 작품 제목처럼 고유하게 고정된 "
+                    "표기일 수도 있어 자동 반영하지 않습니다. 아래 칸에 원어를 넣으면 "
+                    "국립국어원 용례로 확정 표기를 찾아 줍니다"
                 ),
                 suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
+                source_lookup_token=original_token,
             )
         )
 
@@ -309,6 +314,7 @@ def _correct_line(
         check_joined_interjection_spacing(index, corrected_text),
         check_ambiguous_interjection_comma(index, corrected_text),
         check_honorific_dependent_noun(index, corrected_text),
+        check_adnominal_noun_verb_split(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
@@ -481,16 +487,26 @@ def correct_entries(
     # 평균 사투리 비율 0.080 vs 표준어 화자 0.073으로, 어떤 문턱을 잡아도 오탐이
     # 생긴다. 근거가 이 정도면 알리지 않는 편이 낫다.
 
-    outages = failed_lookups()
-    if outages:
-        applied_log.append(
-            AppliedNote(
-                message=(
-                    "[사전 조회 실패] " + ", ".join(outages) + " — 이 사전이 담당하는 교정은 "
-                    "이번 결과에 반영되지 않았습니다(네트워크·서버 상태를 확인하고 다시 돌려 주세요)."
-                )
+    # 실패를 **건수로** 알린다. 전에는 이름만 모아 "이 사전이 담당하는 교정은 이번
+    # 결과에 반영되지 않았습니다"라고 했는데, 수천 건 중 한 건이 순간적으로 실패해도
+    # 같은 문구가 떠서 사용자가 사전 연결이 끊긴 줄 알았다(2026-08-04 사용자 보고, §62).
+    for api, stats in sorted(lookup_stats().items()):
+        failures, attempts = stats["failures"], stats["attempts"]
+        samples = ", ".join(stats["queries"])
+        if failures >= attempts:
+            message = (
+                f"[사전 조회 실패] {api} — 이번 실행의 조회 {failures}건이 전부 실패했습니다. "
+                "이 사전이 담당하는 교정은 이번 결과에 반영되지 않았습니다"
+                "(네트워크·서버 상태를 확인하고 다시 돌려 주세요)."
             )
-        )
+        else:
+            message = (
+                f"[사전 조회 일부 실패] {api} — 조회 {attempts}건 중 {failures}건이 "
+                "재시도 3회까지 실패했습니다. 그 낱말에 대한 판정만 건너뛰었고 나머지 교정은 "
+                "정상입니다"
+            )
+            message += f" (실패한 낱말: {samples})." if samples else "."
+        applied_log.append(AppliedNote(message=message))
 
     return corrected_entries, flags, applied_log
 

@@ -13,6 +13,7 @@
 """
 
 import os
+import time
 import xml.etree.ElementTree as ET
 from functools import lru_cache
 import requests
@@ -63,61 +64,167 @@ def _empty_channel() -> dict:
     return {"channel": {"total": 0, "item": []}}
 
 
-# 조회에 실패한 API 이름. 조회 실패는 "등재된 표기 없음"과 같은 경로로 흡수하는데
+# 조회 **시도와 실패 건수**. 조회 실패는 "등재된 표기 없음"과 같은 경로로 흡수하는데
 # (크래시보다 안전하다), 그러면 **교정이 조용히 건너뛰어진다** — 2026-08-04에 kornorms가
 # DNS 단계에서 안 붙는 동안 '판넬 -> 패널'·'리모콘 -> 리모컨'이 그냥 통과했고, 사용자는
 # 교정이 안 된 것을 알 방법이 없었다. 그래서 어느 API가 죽었는지 기록해 리포트에 싣는다.
-_FAILED_LOOKUPS: set[str] = set()
+#
+# 이름만 모으지 않고 건수를 세는 이유(2026-08-04 사용자 보고): 우리말샘은 정상인데
+# "이 사전이 담당하는 교정은 이번 결과에 반영되지 않았습니다"가 계속 떠서 연결이 끊긴
+# 줄 알았다. 실제로는 수천 건 중 한두 건이 순간적으로 실패한 것이었다 — **한 건 실패와
+# 전부 불통을 구분하지 못하는 집계**가 문구를 과장하게 만들었다(§62).
+_LOOKUP_STATS: dict[str, dict] = {}
 
 
-def note_lookup_failure(api: str) -> None:
-    _FAILED_LOOKUPS.add(api)
+def _stats_for(api: str) -> dict:
+    return _LOOKUP_STATS.setdefault(
+        api, {"attempts": 0, "failures": 0, "queries": [], "streak": 0, "skipped": 0}
+    )
+
+
+def note_lookup_attempt(api: str) -> None:
+    """조회를 한 번 시도했다(성공·실패 확정 전)."""
+    _stats_for(api)["attempts"] += 1
+
+
+def note_lookup_failure(api: str, query: str = "") -> None:
+    """재시도까지 다 쓰고도 실패했다. `query`는 리포트에 실을 표본이다."""
+    stats = _stats_for(api)
+    stats["failures"] += 1
+    stats["streak"] += 1
+    if query and len(stats["queries"]) < 5 and query not in stats["queries"]:
+        stats["queries"].append(query)
 
 
 def failed_lookups() -> list[str]:
     """이번 실행에서 조회에 실패한 API 목록(정렬)."""
-    return sorted(_FAILED_LOOKUPS)
+    return sorted(api for api, s in _LOOKUP_STATS.items() if s["failures"])
+
+
+def lookup_stats() -> dict[str, dict]:
+    """API별 {attempts, failures, queries}. 리포트 문구가 "일부 실패"와 "전부
+    불통"을 가려 말하려면 건수가 필요하다."""
+    return {api: dict(s) for api, s in _LOOKUP_STATS.items() if s["failures"]}
 
 
 def reset_failed_lookups() -> None:
-    _FAILED_LOOKUPS.clear()
+    _LOOKUP_STATS.clear()
+
+
+class _LookupFailed(Exception):
+    """재시도 뒤에도 조회가 실패했다.
+
+    이 예외를 쓰는 이유는 **lru_cache가 예외는 캐시하지 않는다**는 점이다. 실패를
+    빈 응답으로 바꿔 돌려주면 그 값이 캐시에 남아, 순간적인 실패 하나가 그 낱말에
+    대한 판정을 문서 끝까지(서버 프로세스가 사는 동안 계속) 오염시킨다. 예외로
+    올려 보내면 다음 줄에서 같은 낱말을 다시 조회한다."""
+
+
+# 재시도 대기(초). 국립국어원 API는 수천 건을 연속 조회하는 동안 한두 건이 순간적으로
+# 실패한다 — 재시도 없이 실패로 확정하면 리포트가 "사전 불통"을 알린다(§62).
+_RETRY_WAITS = (0.4, 1.2)
+
+
+# **차단기**(circuit breaker). API가 정말로 죽으면 재시도가 독이 된다 — 자막 40줄에
+# 조회가 1,119건 나가므로(실측), 한 건에 10초 타임아웃 3번이면 실행이 사실상 멈춘다.
+# 연속 실패가 이 수를 넘기면 그 API 조회를 건너뛰고, 그 뒤로는 일정 간격으로만
+# 한 번씩 찔러 본다(복구를 놓치지 않기 위해).
+_BREAKER_STREAK = 5
+_BREAKER_PROBE_EVERY = 20
+
+
+def _get_json(url: str, params: dict, api: str, timeout: int = 10) -> dict:
+    """JSON 조회 + 재시도. 결과가 없으면 빈 dict, 실패 확정이면 `_LookupFailed`.
+
+    응답이 JSON이 아닌 경우(국립국어원 API는 잘못된 검색어에 XML `<error>`를 200으로
+    돌려준다 — `'/'`·`'^'` 실측)도 실패로 본다. 전에는 `response.json()`이 그대로
+    터져 파이프라인이 멈출 수 있었다.
+    """
+    note_lookup_attempt(api)
+    query = str(params.get("q") or params.get("searchKeyword") or params.get("searchWord") or "")
+    stats = _stats_for(api)
+    if stats["streak"] >= _BREAKER_STREAK:
+        # 차단 중. 일정 간격으로만 한 번 찔러 보고, 그 사이에는 네트워크를 쓰지 않는다.
+        if stats["skipped"] < _BREAKER_PROBE_EVERY:
+            stats["skipped"] += 1
+            note_lookup_failure(api, query)
+            raise _LookupFailed(api)
+        stats["skipped"] = 0
+        waits: tuple[float, ...] = ()  # 찔러 보는 요청은 재시도하지 않는다
+    else:
+        waits = _RETRY_WAITS
+    for attempt in range(len(waits) + 1):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            response.raise_for_status()
+            body = response.text.strip()
+            # 응답이 왔으면 차단기를 푼다(API가 복구된 것이다).
+            stats["streak"] = 0
+            if not body:
+                return {}  # 검색 결과 없음(정상 응답) — API가 빈 본문을 준다
+            if body.startswith("<"):
+                # 국립국어원 API는 오류를 200 + XML `<error>`로 돌려준다. 이걸
+                # json()에 넘기면 그대로 터진다(전에는 파이프라인이 멈출 수 있었다).
+                code = _api_error_code(body)
+                if code == "100":
+                    # "Incorrect query request" — 검색어가 API 문법에 맞지 않는다
+                    # ('/'·'^' 실측). 서버 장애가 아니므로 **불통으로 세지 않는다**.
+                    # 그 낱말만 조회하지 못한 것이라 결과 없음과 같게 다룬다.
+                    return {}
+                note_lookup_failure(api, f"{query} (error_code={code or '?'})")
+                raise _LookupFailed(api)
+            return response.json()
+        except (requests.RequestException, ValueError):
+            if attempt < len(waits):
+                time.sleep(waits[attempt])
+    note_lookup_failure(api, query)
+    raise _LookupFailed(api)
+
+
+def _api_error_code(body: str) -> str | None:
+    """200으로 온 XML `<error>` 응답에서 error_code를 뽑는다."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None
+    if root.tag != "error":
+        return None
+    code = root.findtext("error_code")
+    return code.strip() if code else None
 
 
 @lru_cache(maxsize=4096)
-def search_stdict(query: str) -> dict:
+def _fetch_stdict(query: str) -> dict:
     if not STDICT_API_KEY:
         raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
-    params = {"key": STDICT_API_KEY, "q": query, "req_type": "json"}
+    data = _get_json(STDICT_URL, {"key": STDICT_API_KEY, "q": query, "req_type": "json"}, "표준국어대사전")
+    return data or _empty_channel()
+
+
+def search_stdict(query: str) -> dict:
+    """표준국어대사전 검색. 실패는 "찾지 못함"과 똑같이 처리한다 — 이 함수의 판단
+    근거가 불확실하다는 뜻이므로, 호출부는 이미 "등재 안 됨/판단 근거 불충분"일 때와
+    같은 경로(확인 플래그)로 넘어간다. 실패 사실은 리포트에 실린다."""
     try:
-        response = requests.get(STDICT_URL, params=params, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException:
-        note_lookup_failure("표준국어대사전")
-        # 국립국어원 서버가 느리거나 응답을 안 주는 경우, "찾지 못함"과 똑같이
-        # 처리한다 — 이 함수의 판단 결과가 불확실하다는 뜻이므로, 호출부는
-        # 이미 "등재 안 됨/판단 근거 불충분"일 때와 같은 경로(확인 플래그)로
-        # 자연스럽게 넘어간다. usage_examples()의 기존 처리 방식과 동일한 원칙.
+        return _fetch_stdict(query)
+    except _LookupFailed:
         return _empty_channel()
-    # 검색 결과가 없으면 API가 200 상태코드에 빈 본문을 돌려준다.
-    if not response.text.strip():
-        return _empty_channel()
-    return response.json()
 
 
 @lru_cache(maxsize=4096)
-def search_opendict(query: str) -> dict:
+def _fetch_opendict(query: str) -> dict:
     if not OPENDICT_API_KEY:
         raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
-    params = {"key": OPENDICT_API_KEY, "q": query, "req_type": "json"}
+    data = _get_json(OPENDICT_URL, {"key": OPENDICT_API_KEY, "q": query, "req_type": "json"}, "우리말샘")
+    return data or _empty_channel()
+
+
+def search_opendict(query: str) -> dict:
+    """우리말샘 검색. 실패 처리 원칙은 `search_stdict()`와 같다."""
     try:
-        response = requests.get(OPENDICT_URL, params=params, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException:
-        note_lookup_failure("우리말샘")
+        return _fetch_opendict(query)
+    except _LookupFailed:
         return _empty_channel()
-    if not response.text.strip():
-        return _empty_channel()
-    return response.json()
 
 
 def _opendict_examples_for_target(target_code) -> list[str]:
@@ -139,8 +246,24 @@ def _opendict_examples_for_target(target_code) -> list[str]:
     ]
 
 
-@lru_cache(maxsize=4096)
 def search_kornorms(keyword: str) -> list[dict]:
+    """완전 일치 용례 조회. 실패는 빈 목록(= 등재된 표기 없음)으로 흡수한다."""
+    try:
+        return _fetch_kornorms(keyword)
+    except _LookupFailed:
+        return []
+
+
+def search_kornorms_partial(keyword: str, rows: int = 30) -> list[dict]:
+    """부분 일치 용례 조회. 실패는 빈 목록으로 흡수한다."""
+    try:
+        return _fetch_kornorms_partial(keyword, rows)
+    except _LookupFailed:
+        return []
+
+
+@lru_cache(maxsize=4096)
+def _fetch_kornorms(keyword: str) -> list[dict]:
     """외래어·로마자 표기 용례를 조회한다 (한국어 어문 규범 Open API).
 
     검색어가 이미 알려진 잘못된 표기(relate_mark_o)와 일치해도, 그 잘못된
@@ -157,16 +280,35 @@ def search_kornorms(keyword: str) -> list[dict]:
         "searchEquals": "equal",
         "resultType": "json",
     }
-    try:
-        response = requests.get(KORNORMS_URL, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException:
-        note_lookup_failure("어문 규범 용례(kornorms)")
-        # search_stdict/search_opendict와 같은 원칙: 조회 실패는 "등재된
-        # 표기 없음"과 동일하게 처리해 loanword_fix()가 자동 반영 없이
-        # 넘어가게 한다(원문 그대로 유지, 크래시 대신 안전하게 무처리).
-        return []
+    # 조회 실패는 "등재된 표기 없음"과 동일하게 처리해 loanword_fix()가 자동 반영
+    # 없이 넘어가게 한다(원문 그대로 유지, 크래시 대신 안전하게 무처리).
+    data = _get_json(KORNORMS_URL, params, "어문 규범 용례(kornorms)")
+    return data.get("response", {}).get("items", []) or []
+
+
+@lru_cache(maxsize=4096)
+def _fetch_kornorms_partial(keyword: str, rows: int = 30) -> list[dict]:
+    """kornorms 외래어 용례를 **부분 일치**로 조회한다.
+
+    `search_kornorms()`는 `searchEquals=equal`로 완전 일치만 찾는다. 원어(로마자)로
+    찾을 때는 그것만으로는 부족하다 — 인명 용례의 원어 표기가 `Ruth, Babe`,
+    `Rutherford, Ernest`처럼 성·이름을 함께 담고 있어 `Ruth` 완전 일치로는 0건이
+    나온다(2026-08-04 실측). 사용자가 원어를 입력해 확인하는 기능(§61)이 이걸 쓴다.
+
+    부분 일치는 무관한 항목까지 함께 걸리므로(`Russ` -> `truss교`) **순위 판정은
+    호출부가 한다** — `terms.lookup_by_source()` 참고.
+    """
+    if not KORNORMS_API_KEY:
+        raise RuntimeError("KORNORMS_API_KEY가 .env에 설정되어 있지 않습니다.")
+    params = {
+        "serviceKey": KORNORMS_API_KEY,
+        "pageNo": 1,
+        "numOfRows": rows,
+        "langType": "0003",  # 외래어
+        "searchKeyword": keyword,
+        "resultType": "json",
+    }
+    data = _get_json(KORNORMS_URL, params, "어문 규범 용례(kornorms)")
     return data.get("response", {}).get("items", []) or []
 
 
