@@ -7,7 +7,7 @@ NameError"다. 교정 엔진의 분기는 특정 형태소 조합에서만 열�
 실제로 이 검사가 그런 버그를 하나 잡았다: `_protect_unfounded_respacing()`이 다른
 함수의 지역 변수 이름(`to_restore`/`insert_at`)을 참조해, 조사+보조 용언을 붙여 쓴
 줄('알고는있다')에서만 NameError로 터졌다(2026-08-02 발견·수정,
-`docs/IMPLEMENTATION_LOG.md` §49).
+`docs/log-archive/2026-h2.md` §49).
 
     python tools/check_names.py
 

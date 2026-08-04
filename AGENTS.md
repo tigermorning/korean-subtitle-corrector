@@ -4,7 +4,7 @@
 
 핵심 한 줄: 이 프로젝트는 "확률적 추측이 아닌 권위 있는 규범 근거 기반, 애매하면 반드시 사람에게 확인"을 최우선 원칙으로 삼는다. 이 원칙과 충돌하는 자동화는 제안하지 마라.
 
-**코드 구조(2026-08-02 분할):** 교정 엔진은 `subtitle_corrector/engine/` 패키지다(구 `engine.py` 3,172줄을 나눈 것, `docs/IMPLEMENTATION_LOG.md` §46). 의존 방향은 단방향이다 — `text_utils` → `kiwi_adapter`/`options` → `lexicon`/`markers` → 규칙 모듈(`spacing`·`replacements`·`spelling`·`loanwords`·`affix`·`punctuation`·`subtitle_rules`·`dialect`·`consistency`) → `spacing_guards` → `pipeline`. **규칙은 규칙 모듈에 넣고 `pipeline.py`에는 호출 순서만 둔다.** `_kiwi` 인스턴스는 `kiwi_adapter.py`에만 있어야 한다(모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고 등록한 고유명사가 전달되지 않는다). 새 공개 함수는 `engine/__init__.py`의 `__all__`에도 추가해야 `from subtitle_corrector.engine import ...`로 보인다.
+**코드 구조(2026-08-02 분할):** 교정 엔진은 `subtitle_corrector/engine/` 패키지다(구 `engine.py` 3,172줄을 나눈 것, `docs/log-archive/2026-h2.md` §46). 의존 방향은 단방향이다 — `text_utils` → `kiwi_adapter`/`options` → `lexicon`/`markers` → 규칙 모듈(`spacing`·`replacements`·`spelling`·`loanwords`·`affix`·`punctuation`·`subtitle_rules`·`dialect`·`consistency`) → `spacing_guards` → `pipeline`. **규칙은 규칙 모듈에 넣고 `pipeline.py`에는 호출 순서만 둔다.** `_kiwi` 인스턴스는 `kiwi_adapter.py`에만 있어야 한다(모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고 등록한 고유명사가 전달되지 않는다). 새 공개 함수는 `engine/__init__.py`의 `__all__`에도 추가해야 `from subtitle_corrector.engine import ...`로 보인다.
 
 사전 조회도 같은 날 `subtitle_corrector/dictionary/` 패키지로 나눴다(§48): `clients.py`(요청만, 판정 안 함) / `headwords.py`("사전에 있는가") / `terms.py`("무엇으로 바꿔야 하는가") / `dialect.py`. **API 호출을 새로 추가하면 `clients.py`, 그 응답으로 무엇을 결론지을지는 `headwords.py`·`terms.py`에 쓴다** — 원리 4(조회 로직 버그)는 거의 전부 판정 쪽에서 나므로 둘을 섞지 않는다.
 
@@ -18,7 +18,7 @@
 
 **오탐·과교정 리포트를 받으면 `docs/DESIGN_PRINCIPLES.md`를 먼저 읽어라.** 대부분의 버그는 4가지 원리(조각 대조 / 모호할 때 자동 교정 / 우연한 사전 충돌 / 조회 로직 버그)의 반복이므로, 인스턴스별 패치가 아니라 공유 가드를 고쳐 부류 전체를 커버한다.
 
-**최근 완료 (2026-07-26):** 실사용 감수 8건(A·B·C, `docs/IMPLEMENTATION_LOG.md` §31) + 리포트 축약(D) + 사용목적 모드(E, 같은 파일 §32) 구현·검증·커밋 완료. 정답표 테스트 `tests/test_realusage_review.py`. — **§31·§32는 `PRD.md`가 아니라 `docs/IMPLEMENTATION_LOG.md`의 섹션 번호다**(2026-07-24 모듈화 때 옮겨간 번호. 2026-07-27 §22~§30 아카이브 후에도 §31 이후는 그 파일에 남아 있다).
+**최근 완료 (2026-07-26):** 실사용 감수 8건(A·B·C, `docs/log-archive/2026-h2.md` §31) + 리포트 축약(D) + 사용목적 모드(E, 같은 파일 §32) 구현·검증·커밋 완료. 정답표 테스트 `tests/test_realusage_review.py`. — **§31·§32는 `PRD.md`가 아니라 구현 이력의 섹션 번호다**(2026-07-24 모듈화 때 옮겨간 번호). **2026-08-04 3회차 아카이브로 §31~§57이 `docs/log-archive/2026-h2.md`로 옮겨졌다** — `docs/IMPLEMENTATION_LOG.md`에는 §58부터 있다.
 
 **`search_dialect` 지역어 API:** 서버측 500 장애가 2026-07-27에도 지속됨을 원 요청으로 재확인(4개 질의 전부 HTTP 500 + HTML). 우리 쪽에 할 작업 없음. 확인할 때는 `search_dialect()`의 반환값이 아니라 원 요청으로 볼 것 — 이 함수는 실패를 삼키고 `[]`를 돌려주므로 "장애"와 "매칭 없음"이 구분되지 않는다.
 
@@ -33,5 +33,5 @@
 - 화자에게 사투리가 지정되지 않으면 **표준어로 간주**한다.
 - 표준어로 간주된 화자의 어미가 표준이 아닐 경우에도 **자동교정하지 않고 그대로 둔다**. 어미의 표준 여부는 문맥·장르·작품 의도에 따라 달라질 수 있어 자동 판단이 불가능하기 때문이다.
 - 사투리가 지정된 화자 역시 자동교정하지 않고 플래그만 남긴다.
-- **`to_standard`(표준어로 바꾸기) 모드도 텍스트를 바꾸지 않는다**(2026-08-03, `docs/IMPLEMENTATION_LOG.md` §52). 표지 사전 27개 항목을 감사했더니 사전으로 검증되는 것이 3개뿐이었고, 단어 경계 없는 문자열 치환이라 `그래 노래를 불렀다`가 `그라고 노라고를 불렀다`로 깨졌다. 검증 안 된 항목은 전부 지웠고 남은 것은 `하르방 → 할아버지`, `기냥 → 그냥` 둘뿐이다.
+- **`to_standard`(표준어로 바꾸기) 모드도 텍스트를 바꾸지 않는다**(2026-08-03, `docs/log-archive/2026-h2.md` §52). 표지 사전 27개 항목을 감사했더니 사전으로 검증되는 것이 3개뿐이었고, 단어 경계 없는 문자열 치환이라 `그래 노래를 불렀다`가 `그라고 노라고를 불렀다`로 깨졌다. 검증 안 된 항목은 전부 지웠고 남은 것은 `하르방 → 할아버지`, `기냥 → 그냥` 둘뿐이다.
 - **사투리 표에 항목을 추가할 때는 반드시 우리말샘 방언 표제어(뜻풀이가 `'X'의 방언`)로 확인하고 근거 주석을 함께 적어라.** 표준어→사투리 역방향은 지금 자동으로 만들 수 없다(지역어 API 500 장애, 우리말샘 뜻풀이 검색 0건).
