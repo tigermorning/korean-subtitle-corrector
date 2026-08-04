@@ -49,6 +49,7 @@ from .replacements import (
     correct_always_wrong,
     correct_discriminatory_terms,
     correct_former_terms,
+    correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
 from .spelling import check_purified_terms, check_spelling
@@ -212,6 +213,9 @@ def _correct_line(
     corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
     corrected_text = _guard("확정 오류 표현", before, corrected_text, always_wrong_fixes)
     before = corrected_text
+    corrected_text, mot_hada_fixes = correct_mot_hada_compound(corrected_text)
+    corrected_text = _guard("부사+못하다 활용", before, corrected_text, mot_hada_fixes)
+    before = corrected_text
     corrected_text, nonstandard_fixes = correct_nonstandard_terms(corrected_text)
     corrected_text = _guard("규범 표기 재지정", before, corrected_text, nonstandard_fixes)
     before = corrected_text
@@ -237,6 +241,7 @@ def _correct_line(
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
+            + mot_hada_fixes
             + nonstandard_fixes
             + discriminatory_fixes
             + former_term_fixes

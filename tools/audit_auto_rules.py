@@ -42,6 +42,7 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
     correct_loanwords,
+    correct_mot_hada_compound,
     correct_nonstandard_terms,
     correct_particle_spacing,
 )
@@ -142,6 +143,12 @@ RULES = [
         _plain(correct_nonstandard_terms),
         "긍정",
         "우리말샘이 \"규범 표기는 'X'\"라고 명시하면 X로 바꾼다. 표준 동형이의어가 하나라도 있으면 제외(부정 근거 병용)",
+    ),
+    (
+        "부사못하다활용",
+        _plain(correct_mot_hada_compound),
+        "부정",
+        "'부사+하다'가 사전에 없고 '부사+못하다'가 표제어일 때만 '못'을 끼운다(표준어 규정 제25항 '안절부절못하다')",
     ),
     (
         "차별적표현",

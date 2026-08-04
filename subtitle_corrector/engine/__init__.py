@@ -112,6 +112,7 @@ from .replacements import (
     correct_always_wrong,
     correct_discriminatory_terms,
     correct_former_terms,
+    correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
 from .spelling import check_purified_terms, check_spelling
@@ -156,6 +157,7 @@ __all__ = [
     "correct_nonstandard_terms",
     "correct_discriminatory_terms",
     "correct_former_terms",
+    "correct_mot_hada_compound",
     "correct_subtitle_final_period",
     "correct_subtitle_internal_period",
     "correct_subtitle_bracket_spacing",

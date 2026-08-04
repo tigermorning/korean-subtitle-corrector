@@ -114,6 +114,58 @@ def correct_always_wrong(text: str) -> tuple[str, list[str]]:
     return _apply_replacements(text, ALWAYS_WRONG)
 
 
+def correct_mot_hada_compound(text: str) -> tuple[str, list[str]]:
+    """부사 뒤의 '하다'가 표준어에서 '못하다'로 굳은 자리에 '못'을 넣는다
+    ('안절부절했다' -> '안절부절못했다', `docs/BACKLOG.md` 24번).
+
+    **왜 별도 규칙인가**: 이 부류는 낱말 치환이 아니라 **용언 활용형**을 바꿔야 한다.
+    `ALWAYS_WRONG` 같은 표기 치환 목록으로는 '안절부절하다' 하나만 잡히고 '안절부절했다'
+    ·'안절부절하지'·'안절부절해'는 놓친다(평가셋 g05가 이 이유로 실패했다). 활용형은
+    형태소 경계에서 다뤄야 한다 — '하'(XSV/VV) 앞에 '못'을 끼우면 활용은 그대로 남는다.
+
+    **근거는 부정 근거다**(§58 분류): 원문 형태(`부사+하다`)가 사전에 **없고**
+    `부사+못하다`가 표제어일 때만 바꾼다. 표준어 규정 제25항이 '안절부절못하다'를
+    표준으로, '안절부절하다'를 버림으로 정한 자리가 이 조건에 그대로 걸린다
+    (실측: `word_exists('안절부절하다')`=False, `word_exists('안절부절못하다')`=True).
+    부사 자체도 표제어여야 한다 — kiwi가 모르는 낱말을 MAG로 태깅한 경우를 막는다.
+
+    코퍼스 622줄에서 이 조건에 걸리는 부사는 '안절부절' 하나뿐이었다. '잘'·'그만'·
+    '더'·'우당탕'은 `부사+하다`가 표제어라 대상이 아니다(2026-08-04 실측).
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')
+    """
+    tokens = _kiwi.tokenize(text)
+    cuts = []  # (부사 끝, '하' 시작) — 이 사이를 '못'으로 채운다
+    for i in range(1, len(tokens)):
+        adverb, hada = tokens[i - 1], tokens[i]
+        if hada.form != "하" or hada.tag not in ("XSV", "VV"):
+            continue
+        if adverb.tag != "MAG":
+            continue
+        gap_start, gap_end = adverb.start + adverb.len, hada.start
+        if text[gap_start:gap_end] not in ("", " "):
+            continue  # 붙여 쓰거나 한 칸 띄어 쓴 자리만
+        stem = adverb.form
+        if not word_exists(stem) or word_exists(stem + "하다") or not word_exists(stem + "못하다"):
+            continue
+        cuts.append((gap_start, gap_end))
+    if not cuts:
+        return text, []
+    corrected = text
+    applied = []
+    for gap_start, gap_end in sorted(cuts, reverse=True):
+        # 로그는 **어절 단위**로 남긴다 — edit_guard가 이 로그로 결과를 재구성해
+        # 검증하므로, 잘린 조각을 남기면 정당한 교정이 막힌다(fail-closed).
+        word_start = corrected.rfind(" ", 0, gap_start) + 1
+        word_end = corrected.find(" ", gap_end)
+        word_end = len(corrected) if word_end == -1 else word_end
+        before_word = corrected[word_start:word_end]
+        corrected = corrected[:gap_start] + "못" + corrected[gap_end:]
+        after_word = corrected[word_start : word_end + len("못") - (gap_end - gap_start)]
+        applied.append(f"{before_word} -> {after_word}")
+    return corrected, list(reversed(applied))
+
+
 def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
     """우리말샘이 "규범 표기는/표준 용어는 'X'이다"로 이미 명시해 둔 비표준
     표기(예: "요오드"->"아이오딘")를 자동 교정한다.
