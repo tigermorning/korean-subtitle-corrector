@@ -2,7 +2,12 @@
 """
 
 from dataclasses import replace
-from ..dictionary import lookup_stats, reset_failed_lookups
+from ..dictionary import (
+    appears_in_standard_headword,
+    lookup_stats,
+    reset_failed_lookups,
+    standard_headword_example,
+)
 from ..parsers import SubtitleEntry
 from ..report import AppliedNote, FlagItem
 from .kiwi_adapter import detect_recurring_unknown_words, register_custom_words
@@ -60,7 +65,24 @@ from .consistency import (
     check_term_spacing_consistency,
 )
 from .spacing_guards import check_spacing
+from .text_utils import _has_batchim
 from .edit_guard import verify_edit
+
+def _headword_evidence(token: str) -> str:
+    """사전이 그 표기를 쓰는 표제어를 근거 문구로 만든다(§66).
+
+    `쉴러` -> "'쉴러 검사'(원어 Schiller檢査)처럼 '쉴러'를 쓰는 표제어가 등재돼 있습니다".
+    같은 원어를 사전이 어떻게 적는지 눈으로 보여 주는 것이 목적이다 — 어문 규범 인명
+    용례와 충돌하는 자리에서 사용자가 판단할 근거가 된다.
+    """
+    headword, origin = standard_headword_example(token)
+    if not headword:
+        particle = "을" if _has_batchim(token[-1]) else "를"
+        return f"'{token}'{particle} 쓰는 표제어가 등재돼 있습니다(전문 용어·복합 명칭)"
+    origin_note = f"(원어 {origin})" if origin else ""
+    particle = "을" if _has_batchim(token[-1]) else "를"
+    return f"'{headword}'{origin_note}처럼 '{token}'{particle} 쓰는 표제어가 등재돼 있습니다"
+
 
 def _correct_line_with_markers(
     index: int,
@@ -270,6 +292,38 @@ def _correct_line(
 
     for fix, context in proper_noun_fixes:
         original_token, _, replacement_token = fix.partition(" -> ")
+        # **원문 표기가 다른 표제어의 구성 요소로 등재돼 있으면 대안을 제시하지 않는다.**
+        # `쉴러병`을 `실러병`으로 바꾸자고 제안했는데(kornorms 인명 용례 Schiller ->
+        # 실러, 쉴러(X)), 우리말샘에는 `쉴러^검사`·`쉴러^플랜`·`한트·쉴러·크리스찬-병`이
+        # 표준 표제어로 있다 — 전문 용어에서는 '쉴러'가 쓰인다(2026-08-05 사용자 보고).
+        # 인명 하나의 용례로 그 표기를 갈아 치울 수는 없다. 실측으로 이 신호는
+        # 갈라 준다: `쉴러`=True / `스노우`·`러스`·`초코렛`·`리모콘`=False.
+        term_usage = appears_in_standard_headword(original_token)
+        if term_usage:
+            # **두 표기가 다 근거를 갖는 자리다. 어느 쪽인지는 사용자가 정한다**
+            # (2026-08-05 사용자 지시). 도구가 한쪽을 정답이라고 말하지 않고 두 근거를
+            # 나란히 보여 주며 확인을 구한다. 제안은 남겨 두므로(기본 미채택) 인명으로
+            # 판단되면 체크 한 번으로 반영할 수 있다.
+            flags.append(
+                FlagItem(
+                    line_index=index,
+                    original_text=corrected_text,
+                    reason=(
+                        f"외래어 표기 확인 필요 — **'{original_token}'{'과' if _has_batchim(original_token[-1]) else '와'} "
+                        f"'{replacement_token}' 둘 다 근거가 있습니다.** 인명·지명 용례는 "
+                        f"'{replacement_token}'이고(참고: {context or '국립국어원 확정 표기'}), "
+                        f"우리말샘에는 {_headword_evidence(original_token)}. "
+                        "같은 원어라도 어느 계열로 쓰인 말인지에 따라 "
+                        "갈리므로 텍스트만으로는 정할 수 없습니다 — **확인해 주세요.** "
+                        f"인명·작품 표기가 맞다면 오른쪽 제안('{replacement_token}')을 "
+                        "채택하고, 전문 용어 계열이면 원문을 두세요. 아래 칸에 원어를 넣으면 "
+                        "국립국어원 용례를 함께 볼 수 있습니다"
+                    ),
+                    suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
+                    source_lookup_token=original_token,
+                )
+            )
+            continue
         flags.append(
             FlagItem(
                 line_index=index,

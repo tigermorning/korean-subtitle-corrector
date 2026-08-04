@@ -220,6 +220,45 @@ def sino_korean_origin(word: str) -> str:
     return ""
 
 
+def standard_headword_example(word: str) -> tuple[str, str]:
+    """word를 구성 요소로 쓰는 **표준** 우리말샘 표제어 하나와 그 원어를 돌려준다.
+
+    플래그 사유에 근거를 그대로 싣기 위한 도우미다(§66). `쉴러`에 대해
+    `('쉴러 검사', 'Schiller檢査')`를 돌려주므로, "같은 원어인데 사전은 이렇게 적는다"를
+    사용자가 눈으로 확인할 수 있다 — 2026-08-05 사용자 지적("schiller는 사전상 쉴러")을
+    도구가 스스로 보여 주게 만든 것이다.
+
+    조각 수가 적은 표제어를 고른다(짧은 것이 대표적이다). 없으면 빈 쌍.
+    """
+    try:
+        items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return "", ""
+    if isinstance(items, dict):
+        items = [items]
+    candidates = []
+    for item in items:
+        headword = item.get("word") or ""
+        parts = [part for part in re.split(r"[\s^\-]", headword) if part]
+        if len(parts) < 2 or word not in parts:
+            continue
+        if not _opendict_item_is_standard(item):
+            continue
+        senses = item.get("sense", [])
+        if isinstance(senses, dict):
+            senses = [senses]
+        origin = ""
+        for sense in senses:
+            origin = (sense.get("origin") or "").strip()
+            if origin:
+                break
+        candidates.append((len(parts), " ".join(parts), origin))
+    if not candidates:
+        return "", ""
+    _size, headword, origin = sorted(candidates)[0]
+    return headword, origin
+
+
 def word_exists(query: str) -> bool:
     """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
 

@@ -748,3 +748,32 @@ def test_cheo_hada_has_no_valid_joined_form():
     # '치다'의 활용 자리는 건드리지 않는다.
     assert _run("박수를 쳐 줘")[0] == "박수를 쳐 줘"
     assert _run("공을 쳐 봐")[0] == "공을 쳐 봐"
+
+
+def test_term_usage_headword_blocks_person_name_suggestion():
+    """`쉴러병`을 `실러병`으로 바꾸자고 제안하던 오류(2026-08-05 사용자 보고, §66).
+
+    kornorms에 인명 Schiller의 오표기로 `쉴러(X)`가 등재돼 있어 `실러`를 제안했다.
+    그런데 우리말샘에는 `쉴러^검사`·`쉴러^플랜`·`한트·쉴러·크리스찬-병`이 표준
+    표제어로 있다 — 전문 용어·복합 명칭에서는 '쉴러'가 쓰인다. 인명 용례 하나로 그
+    표기를 갈아 치울 수 없으므로 한쪽을 정답이라고 말하지 않고 **두 근거를 나란히 보여 주며 확인을 구한다**(제안은 기본 미채택으로 남긴다).
+    """
+    for line in ("쉴러병 진단을 받았다", "쉴러 검사 결과가 나왔다", "쉴러 플랜을 도입했다"):
+        text, flags = _run(line)
+        assert text == line  # 자동 교정은 하지 않는다
+        related = [f for f in flags if "쉴러" in f.reason]
+        assert related, line
+        # 한쪽을 정답이라고 말하지 않는다 — 두 근거를 나란히 보여 주고 확인을 구한다
+        # (2026-08-05 사용자 지시: Schiller가 실러인지 쉴러인지 알 수 없으므로 확인할 것).
+        assert all("둘 다 근거가 있습니다" in f.reason for f in related)
+        assert all("확인해 주세요" in f.reason for f in related)
+        assert all("우리말샘에는" in f.reason for f in related)
+        # 제안은 남긴다(기본 미채택) — 인명으로 판단되면 체크 한 번으로 반영한다.
+        assert all(f.suggested_fix == line.replace("쉴러", "실러", 1) for f in related)
+        assert all(f.source_lookup_token == "쉴러" for f in related)  # 원어 확인 칸도 유지
+
+    # 표제어 구성 요소가 아닌 표기는 지금까지처럼 제안한다.
+    _text, flags = _run("스노우 기자가 왔다")
+    assert any(f.suggested_fix == "스노 기자가 왔다" for f in flags)
+    # 일반 용어 자동 교정도 그대로다.
+    assert _run("저는 초코렛을 좋아해요")[0] == "저는 초콜릿을 좋아해요"

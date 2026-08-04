@@ -40,6 +40,7 @@ from .headwords import (
     usage_examples,
     only_sino_korean_headword,
     sino_korean_origin,
+    standard_headword_example,
     word_exists,
 )
 from .terms import (
@@ -73,6 +74,7 @@ __all__ = [
     "search_dialect",
     "only_sino_korean_headword",
     "sino_korean_origin",
+    "standard_headword_example",
     "word_exists",
     "compound_status",
     "appears_in_standard_headword",
