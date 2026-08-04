@@ -56,3 +56,17 @@ def test_onomatopoeia_stays_spaced():
 
 def test_already_joined_untouched():
     assert _attach("선물받았어") == "선물받았어"
+
+
+def test_quantity_lead_keeps_noun_phrase_spaced():
+    """수량 표현 뒤 명사는 그 수량을 받는 자립 명사라 뒤의 되다/하다를 붙이지 않는다.
+
+    `250cc 정도 됩니다`가 `정도됩니다`로 붙던 과교정(`docs/BACKLOG.md` 27번).
+    붙임 근거였던 `정도되다`는 定都되다(도읍이 정해지다)로 원문의 程度와 무관한
+    동형이의어다 — 사전 표제어라는 사실만으로는 원문이 틀렸다는 근거가 못 된다.
+    """
+    assert _attach("250cc 정도 됩니다") == "250cc 정도 됩니다"
+    assert _attach("3년 정도 됐어요") == "3년 정도 됐어요"
+    assert _attach("세 개 정도 됩니다") == "세 개 정도 됩니다"
+    # 수량이 앞에 없으면 지금까지처럼 붙인다
+    assert _attach("해체 되다") == "해체되다"

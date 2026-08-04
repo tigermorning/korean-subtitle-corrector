@@ -86,6 +86,18 @@ class TestAuxVerbSpacingPattern2:
         """'볼만-하다'도 별도로 등재된 표제어(동사)라 그대로 둔다."""
         assert correct_aux_verb_spacing("볼만하다") == ("볼만하다", [])
 
+    def test_hyphenated_citation_form_untouched(self):
+        """사전 표제어의 하이픈 표기를 쪼개지 않는다.
+
+        패턴 2가 앞 토큰이 관형사형 어미(ETM)인지 확인하지 않아, 하이픈(SO)이
+        관형사형 자리에 들어와도 통과했다 — `'그럴-듯하다'`가 `'그럴- 듯하다'`로
+        벌어졌다(2026-08-04 자동 교정 규칙 전수 점검).
+        """
+        assert correct_aux_verb_spacing("'그럴-듯하다'가 표제어다") == (
+            "'그럴-듯하다'가 표제어다",
+            [],
+        )
+
 
 class TestAuxVerbSpacingAllowanceMode:
     """제47항 허용 기준(spacing_mode='allowance') — 보조 용언을 붙여 쓴다.

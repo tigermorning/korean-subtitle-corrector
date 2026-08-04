@@ -455,7 +455,12 @@ def _aux_verb_pattern_spans(s: str) -> list[str]:
 
         # 패턴 2: 관형사형(ETM, prev에 결합) + 의존명사(만/듯/척/체/법/양/성/직
         # 등, NNB) + 하다/싶다(XSA, XSV 또는 VX)
-        if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
+        if (
+            prev.tag == "ETM"
+            and cur.tag == "NNB"
+            and cur.form in _AUX_NNB_FORMS
+            and nxt.tag in ("XSA", "XSV", "VX")
+        ):
             spans.append(s[prev.start : nxt.start + nxt.len])
 
     return spans
@@ -590,7 +595,17 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
         #     단독)로 실시간 조회해 확인하고, 아니라면(예: "만싶다"처럼
         #     실제로 없는 조합) 억지로 붙이지 않고 그대로 둔다(사람 확인
         #     영역으로 남김 — 애매하면 자동 수정하지 않는다는 원칙).
-        if cur.tag == "NNB" and cur.form in _AUX_NNB_FORMS and nxt.tag in ("XSA", "XSV", "VX"):
+        # **앞 토큰이 관형사형 어미(ETM)여야 한다.** 이 조건이 없어 사전 표제어의
+        # 하이픈 표기가 깨졌다 — `'그럴-듯하다'`에서 prev가 하이픈(SO)이라 그 뒤에
+        # 공백이 들어가 `'그럴- 듯하다'`가 됐다(2026-08-04 규칙 전수 점검에서 발견).
+        # 패턴 2는 애초에 "관형사형+의존명사+하다"를 다루는 규칙이므로, 관형사형이
+        # 아닌 것이 앞에 오면 이 규칙의 대상이 아니다.
+        if (
+            prev.tag == "ETM"
+            and cur.tag == "NNB"
+            and cur.form in _AUX_NNB_FORMS
+            and nxt.tag in ("XSA", "XSV", "VX")
+        ):
             lead_word_start = prev.start
             if i >= 2 and tokens[i - 2].start + tokens[i - 2].len > prev.start:
                 lead_word_start = tokens[i - 2].start  # 그렇+ㄹ 같은 받침 공유 보정

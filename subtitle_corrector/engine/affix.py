@@ -13,6 +13,11 @@ from .lexicon import _is_action_noun
 _AFFIX_ACTION_EXCLUDE = {"상", "돈", "벌"}
 
 
+# 수량 표현을 이루는 태그. 숫자(SN)·단위 약물(SL, 'cc')·한자 수(SH)·수사(NR)·
+# 의존명사(NNB, '개'·'년'·'번')가 앞에 오면 그 뒤 명사는 명사구의 머리다.
+_QUANTITY_LEAD_TAGS = {"SN", "SL", "SH", "NR", "NNB"}
+
+
 # 동작성 명사 뒤에 붙는 접사(하다/시키다/당하다/받다). '되다'는 성격이 달라
 # 별도 처리한다(붙임형이 사전 표제어일 때만 — 피동성 조건).
 _AFFIX_LEMMAS = {"하다", "시키다", "당하다", "받다"}
@@ -60,6 +65,20 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
             # 부사어)의 정당한 붙임을 놓친다. 표면만으로는 관형어인지 부사어인지 가릴
             # 수 없으므로, **맞는 표기를 깨뜨리지 않는 쪽**을 택했다.
             if prev.tag in ("NNG", "NNP") and text[prev.start + prev.len : noun.start] == " ":
+                continue
+            # 수량·단위·의존명사 뒤도 같은 부류다. `250cc 정도 됩니다`가 `정도됩니다`로
+            # 붙었는데, 붙임 근거는 `정도되다`가 표제어라는 것뿐이었다 — 그 표제어는
+            # 定都되다(도읍이 정해지다)로 원문의 程度와 무관한 동형이의어다
+            # (`docs/BACKLOG.md` 27번, 2026-08-04 규칙 전수 점검에서 원인 규명).
+            #
+            # 동형이의어 수로는 가를 수 없다는 것을 먼저 확인했다: 자동 붙임을 막아야
+            # 하는 '정도'(원어 10종)와 막으면 안 되는 '청소'(6종)·'공부'(9종)·'전화'(10종)가
+            # 같은 신호로 묶인다. 대신 **앞말이 수량 표현이면 그 명사는 수량을 받는
+            # 자립 명사**('250cc 정도', '3년 정도', '세 개 정도')이고 뒤의 되다/하다는
+            # 별개 서술어다 — 위 명사구 가드와 같은 근거를 태그만 넓혀 적용한다.
+            #
+            # 대가도 같다: '두 번 참고 하세요'처럼 수량이 부사어인 정당한 붙임을 놓친다.
+            if prev.tag in _QUANTITY_LEAD_TAGS and text[prev.start + prev.len : noun.start] == " ":
                 continue
         n = noun.form
         if n in _AFFIX_ACTION_EXCLUDE:
