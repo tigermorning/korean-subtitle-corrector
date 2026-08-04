@@ -70,3 +70,58 @@ def test_quantity_lead_keeps_noun_phrase_spaced():
     assert _attach("세 개 정도 됩니다") == "세 개 정도 됩니다"
     # 수량이 앞에 없으면 지금까지처럼 붙인다
     assert _attach("해체 되다") == "해체되다"
+
+
+# --- 관할 겹침: 붙임 규칙과 분리 규칙이 같은 경계를 서로 반대로 만진다 ---
+#
+# '명사 + 하'(XSV) 경계 하나를 세 규칙이 건드린다(`docs/BACKLOG.md` 29번,
+# `docs/IMPLEMENTATION_LOG.md` §60).
+#
+#   correct_particle_spacing          '생각 해' -> '생각해'  (제41항, XSV는 앞말에 붙임)
+#   correct_adnominal_noun_verb_split '생각해' -> '생각 해'  (관형어가 명사를 꾸미면 가름)
+#   correct_action_noun_affix         '생각 해' -> '생각해'  (동작성 명사 + 접사)
+#
+# **파이프라인 순서가 정답을 정한다**(`subtitle_corrector/engine/pipeline.py`의
+# 188~195줄: 붙임 -> 분리 -> 접사 붙임). 이 순서에서는 붙임 규칙이 경계를 먼저
+# 붙여 놓으므로 분리 규칙이 유일한 판정자가 되고, 결과가 **원문 띄어쓰기와
+# 무관해진다**. 순서를 뒤집으면 그 성질이 깨진다(코퍼스 616줄 실측: 뒤집었을 때만
+# 갈리는 줄 2건). 아래 테스트가 그 성질을 고정한다 — 파이프라인 순서를 바꾸면 깨진다.
+
+def _three_rules(text):
+    """pipeline.py:188~195와 같은 순서로 세 규칙만 돌린다."""
+    from subtitle_corrector.engine import (
+        correct_adnominal_noun_verb_split,
+        correct_particle_spacing,
+    )
+
+    text = correct_particle_spacing(text)[0]
+    text = correct_adnominal_noun_verb_split(text)[0]
+    return correct_action_noun_affix(text)[0]
+
+
+def test_overlapping_rules_converge_regardless_of_source_spacing():
+    """같은 문장을 띄어 써 왔든 붙여 써 왔든 결과가 같아야 한다."""
+    # 관형형('만나+ㄹ')이 '생각'을 꾸미므로 정답은 띄움 — 양쪽 다 띄움으로 모인다.
+    assert _three_rules("수더분한 여자 만날 생각 해") == "수더분한 여자 만날 생각 해"
+    assert _three_rules("수더분한 여자 만날 생각해") == "수더분한 여자 만날 생각 해"
+    # 관형사(MM) '무슨'도 같다.
+    assert _three_rules("무슨 공부 하냐") == "무슨 공부 하냐"
+    assert _three_rules("무슨 공부하냐") == "무슨 공부 하냐"
+    # 관형어가 없으면(부사 수식) 정답은 붙임 — 양쪽 다 붙임으로 모인다.
+    assert _three_rules("잘 생각 해") == "잘 생각해"
+    assert _three_rules("잘 생각해") == "잘 생각해"
+
+
+def test_overlapping_rules_reach_a_fixed_point():
+    """출력을 다시 넣어도 더 바뀌지 않아야 한다(규칙끼리 진동하지 않는다).
+
+    코퍼스 616줄에서 위반 0건임을 `tools/audit_rule_overlap.py`로 확인했다.
+    """
+    for text in (
+        "수더분한 여자 만날 생각 해",
+        "무슨 공부하냐",
+        "잘 생각 해",
+        "어제 청소 했다",
+    ):
+        once = _three_rules(text)
+        assert _three_rules(once) == once
