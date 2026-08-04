@@ -54,7 +54,11 @@ from .replacements import (
 )
 from .spelling import check_purified_terms, check_spelling
 from .dialect import check_dialect
-from .consistency import check_aux_verb_consistency, check_term_spacing_consistency
+from .consistency import (
+    check_aux_verb_consistency,
+    check_street_name_spacing,
+    check_term_spacing_consistency,
+)
 from .spacing_guards import check_spacing
 from .edit_guard import verify_edit
 
@@ -312,6 +316,10 @@ def _correct_line(
         check_spelling(index, corrected_text),
         check_purified_terms(index, corrected_text),
         check_colloquial_loanword(index, corrected_text),
+        # 도로명 검사는 합성어 병합 후보보다 **먼저** 온다. 같은 제안(`충무 로` ->
+        # `충무로`)을 둘 다 내는데, 중복은 먼저 온 것만 남기므로(seen_fixes) 규칙
+        # 이름과 근거를 정확히 말해 주는 쪽이 남아야 한다.
+        check_street_name_spacing(index, corrected_text),
         check_ambiguous_compound(index, corrected_text),
         check_compound_merge_candidate(index, corrected_text),
         check_ambiguous_particle(index, corrected_text),

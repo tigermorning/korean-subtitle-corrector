@@ -4,6 +4,7 @@
 
 import re
 from collections import Counter
+from ..dictionary import word_exists
 from ..parsers import SubtitleEntry
 from ..report import FlagItem
 from .kiwi_adapter import _TERM_RUN_TAGS, _kiwi
@@ -70,6 +71,70 @@ def _violates_street_name_rule(variant: str) -> bool:
     구간에 들어오지 않으므로 여기까지 오지 않는다.
     """
     return bool(_STREET_ATTACHED_RE.search(variant))
+
+
+# 도로명에서 이름에 붙여 쓰는 구분 기준. '대로'·'로'·'가'만 다룬다 — '길'·'거리'는
+# 띄어 씀도 맞아(개나리 길 / 개나리길) 플래그할 근거가 없다.
+_STREET_SUFFIXES = ("대로", "로", "가")
+
+
+def check_street_name_spacing(index: int, text: str) -> FlagItem | None:
+    """도로명의 '대로/로/가'를 띄어 쓴 표기를 확인 플래그한다('세종 대로' -> '세종대로').
+
+    `docs/BACKLOG.md` 16번. 전에는 **혼용이 있을 때 통일 후보를 고르는 데만** 이
+    규칙을 썼다(`_violates_street_name_rule`). `세종 대로`가 문서에 한 번만 나오면
+    아무 말도 하지 않았다.
+
+    **무엇으로 도로명과 일반명사를 가르는가**(2026-08-04 실측 정답표):
+
+        세종 대로에서 만나     세종(NNP) + 대로(NNG)    -> 도로명 후보, 플래그
+        테헤란 로에서         테헤란(NNP) + 로(NNG)     -> 도로명 후보, 플래그
+        충무 로에 갔다        충무(NNP) + 로(NNG)       -> 도로명 후보, 플래그
+        왕복 8차선 대로       차선(NNG) + 대로(NNG)     -> 일반명사 '대로'(大路), 대상 아님
+        말한 대로 하면 된다    …(ETM) + 대로(NNB)        -> 의존명사, 대상 아님
+        서울로 갔다           서울(NNP) + 로(JKB)       -> 조사, 대상 아님
+        종로 2가에서          2(SN) + 가(NNG)          -> 앞말이 수라 대상 아님(아래 참고)
+
+    **앞말이 고유명사(NNP)일 때만** 플래그한다 — 일반명사·수량·의존명사·조사 자리는
+    태그가 갈라 준다. 사전으로는 가를 수 없다: `종로`·`충무로`·`을지로`는 표제어인데
+    `세종대로`·`테헤란로`·`강남대로`는 미등재다(같은 부류인데 등재만 갈린다).
+
+    **자동 교정하지 않는다.** `세종 대로`가 세종시의 큰길(大路)을 뜻할 수도 있어
+    표기만으로는 확정되지 않는다. 붙임형이 사전 표제어면 그 사실을 사유에 실어
+    근거를 강화한다.
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(1, len(tokens)):
+        suffix, prev = tokens[i], tokens[i - 1]
+        if suffix.tag != "NNG" or suffix.form not in _STREET_SUFFIXES:
+            continue
+        if prev.tag != "NNP":
+            continue
+        if text[prev.start + prev.len : suffix.start] != " ":
+            continue  # 이미 붙여 써 있으면 확인할 것이 없다
+        spaced = text[prev.start : suffix.start + suffix.len]
+        joined = prev.form + suffix.form
+        # 한 글자 '가'는 뜻이 너무 많다(街·價·家…). 붙임형이 사전 표제어일 때만
+        # 묻는다 — 그렇지 않으면 '명동 가'처럼 도로명이 아닌 자리까지 묻게 된다.
+        if suffix.form == "가" and not word_exists(joined):
+            continue
+        evidence = (
+            f"'{joined}'는 사전 표제어입니다."
+            if word_exists(joined)
+            else f"'{joined}'는 사전에 없지만 도로명은 대부분 사전에 오르지 않습니다"
+            "(세종대로·테헤란로·강남대로 모두 미등재)."
+        )
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=text[: prev.start] + joined + text[suffix.start + suffix.len :],
+            reason=(
+                f"'{spaced}'가 도로명이면 '{joined}'처럼 붙여 씁니다(도로명은 이름과 "
+                f"구분 기준을 붙여 적습니다). {evidence} 다만 일반명사 '대로'(大路, "
+                "크고 넓은 길)로 쓴 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+            ),
+        )
+    return None
 
 
 def check_term_spacing_consistency(

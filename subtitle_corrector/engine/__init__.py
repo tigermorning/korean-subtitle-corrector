@@ -117,7 +117,11 @@ from .replacements import (
 )
 from .spelling import check_purified_terms, check_spelling
 from .dialect import check_dialect
-from .consistency import check_aux_verb_consistency, check_term_spacing_consistency
+from .consistency import (
+    check_aux_verb_consistency,
+    check_street_name_spacing,
+    check_term_spacing_consistency,
+)
 from .spacing_guards import check_spacing
 from .pipeline import apply_report_fixes, correct_entries
 
@@ -173,5 +177,6 @@ __all__ = [
     "check_colloquial_loanword",
     "check_dialect",
     "check_aux_verb_consistency",
+    "check_street_name_spacing",
     "check_term_spacing_consistency",
 ]
