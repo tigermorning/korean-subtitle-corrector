@@ -42,6 +42,8 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
     correct_loanwords,
+    correct_bun_spacing,
+    correct_duration_cha_spacing,
     correct_mot_hada_compound,
     correct_nonstandard_terms,
     correct_particle_spacing,
@@ -149,6 +151,18 @@ RULES = [
         _plain(correct_mot_hada_compound),
         "부정",
         "'부사+하다'가 사전에 없고 '부사+못하다'가 표제어일 때만 '못'을 끼운다(표준어 규정 제25항 '안절부절못하다')",
+    ),
+    (
+        "의존명사뿐",
+        _plain(correct_bun_spacing),
+        "규범",
+        "제42항. 체언 뒤면 조사라 붙이고 관형사형 어미(ETM) 뒤면 의존명사라 띄운다. 앞말 품사가 정답을 정하므로 문맥이 개입하지 않는다(qna_seq=310591)",
+    ),
+    (
+        "기간차띄어쓰기",
+        _plain(correct_duration_cha_spacing),
+        "규범",
+        "제42항. 숫자(SN)+기간 단위(년/개월/주/일/달)+'차'가 붙어 있으면 띄운다. 이 자리에는 동형이의어가 없다(qna_seq=309642 '입사 3년 차')",
     ),
     (
         "차별적표현",

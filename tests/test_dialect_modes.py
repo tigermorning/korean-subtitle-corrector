@@ -222,3 +222,57 @@ class TestToStandardMode:
         )
         assert "노래" in corrected[0].text
         assert "노라고" not in corrected[0].text
+
+
+class TestDialectTableEvidence:
+    """사투리 표 재구성(2026-08-05, `docs/BACKLOG.md` 25번, §71).
+
+    §52 감사에서 표가 통째로 지워진 이유는 근거 없는 항목이 텍스트를 바꿨기
+    때문이다. 다시 채운 표의 불변 조건 둘을 고정한다.
+      ① 감지 표는 우리말샘 방언 표제어만 담는다.
+      ② **변환 표는 뜻이 하나로 확정되는 낱말만 담는다** — 뜻이 갈리는 낱말
+         (마카=말끔/모두/참외)이나 방언 아닌 뜻이 있는 낱말(이녁=표준 대명사,
+         마커=필기구)이 들어오면 조용한 오교정이 된다.
+    """
+
+    def test_ambiguous_words_are_detected_but_never_converted(self):
+        from subtitle_corrector.dictionary.dialect import (
+            DIALECT_MARKERS,
+            DIALECT_TO_STANDARD,
+        )
+
+        ambiguous = ["마카", "디비다", "문디", "오메", "할망", "아방", "어멍",
+                     "기여", "이녁", "워디", "단디", "겁나", "보말", "야그", "가시나"]
+        converted = {w for table in DIALECT_TO_STANDARD.values() for w in table}
+        detected = {
+            w
+            for markers in DIALECT_MARKERS.values()
+            for w in markers.get("어휘", [])
+        }
+        for word in ambiguous:
+            assert word not in converted, f"뜻이 갈리는 '{word}'가 변환 표에 있다"
+        assert {"마카", "이녁", "워디"} <= detected  # 감지에는 쓴다
+
+    def test_conversion_adjusts_the_following_particle(self):
+        """낱말을 바꾸면 뒤 조사 이형태도 함께 바뀐다 — 그냥 치환하면
+        '하르방이 왔다'가 '할아버지이 왔다'가 된다."""
+        from subtitle_corrector.dictionary.dialect import convert_dialect
+
+        assert convert_dialect("하르방이 왔다", "제주도", "to_standard") == "할아버지가 왔다"
+        assert convert_dialect("폭낭을 봤다", "제주도", "to_standard") == "팽나무를 봤다"
+        # 서술격 조사('이다')는 주격과 다르게 움직이므로 손대지 않는다.
+        assert convert_dialect("하르방이다", "제주도", "to_standard") == "할아버지이다"
+
+    def test_regional_detection_uses_the_refilled_table(self):
+        from subtitle_corrector.dictionary.dialect import detect_speaker_dialect
+
+        assert detect_speaker_dialect(["정구지 좀 사 온나", "억수로 춥네"]) == "경상도"
+        assert detect_speaker_dialect(["하르방이 폭낭 아래 앉았수다"]) == "제주도"
+        assert detect_speaker_dialect(["포도시 올라왔당께", "싸목싸목 가더라고"]) == "전라도"
+
+    def test_standard_sentence_is_not_mangled(self):
+        """§52 사고 재현 방지 — 표준어 문장이 변환으로 깨지지 않는다."""
+        from subtitle_corrector.dictionary.dialect import convert_dialect
+
+        for region in ("경상도", "전라도", "충청도", "제주도"):
+            assert convert_dialect("그래 노래를 불렀다", region, "to_standard") == "그래 노래를 불렀다"

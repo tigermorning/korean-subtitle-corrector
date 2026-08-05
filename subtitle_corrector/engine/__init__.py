@@ -122,6 +122,12 @@ from .consistency import (
     check_street_name_spacing,
     check_term_spacing_consistency,
 )
+from .dependent_nouns import (
+    check_hanpan_spacing,
+    check_purpose_cha_spacing,
+    correct_bun_spacing,
+    correct_duration_cha_spacing,
+)
 from .spacing_guards import check_spacing
 from .pipeline import apply_report_fixes, correct_entries
 
@@ -179,4 +185,8 @@ __all__ = [
     "check_aux_verb_consistency",
     "check_street_name_spacing",
     "check_term_spacing_consistency",
+    "correct_bun_spacing",
+    "correct_duration_cha_spacing",
+    "check_purpose_cha_spacing",
+    "check_hanpan_spacing",
 ]

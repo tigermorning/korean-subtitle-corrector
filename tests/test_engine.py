@@ -867,3 +867,30 @@ class TestMajSpacingAutoFix:
     def test_maj_plus_jx_no_split_geuraeseodo(self):
         """'그래서도'는 보조사 "도"가 앞말에 붙어야 하므로 변경 없음."""
         assert correct_particle_spacing("그래서도") == ("그래서도", [])
+
+
+class TestParticlePlusAuxVerbSplit:
+    """제47항 단서 — 앞말에 조사가 붙으면 그 뒤의 보조 용언은 띄어 쓴다.
+
+    이 자리는 규정이 정답을 정하므로 조각 사전 확인(`_protect_unresolvable_splits`)이
+    개입하지 않는다. 개입하던 동안에는 결과가 우연에 좌우됐다 — `보고`(報告)·`알고`가
+    표제어라 `보고는싶다`·`알고는있다`만 제안이 나가고 `먹고는싶다`는 아무 말이
+    없었다(`docs/BACKLOG.md` 23번, §70)."""
+
+    def test_split_is_suggested_regardless_of_fragment_lookup(self):
+        for joined, spaced in (
+            ("먹고는싶다", "먹고는 싶다"),
+            ("듣고는싶다", "듣고는 싶다"),
+            ("웃고는싶다", "웃고는 싶다"),
+            ("쓰고는있다", "쓰고는 있다"),
+            ("보고는싶다", "보고는 싶다"),
+        ):
+            assert check_spacing(0, joined).suggested_fix == spaced
+
+    def test_already_spaced_is_untouched(self):
+        assert check_spacing(0, "먹고는 싶다") is None
+
+    def test_unfounded_split_is_still_blocked(self):
+        """예외는 조사+보조용언 경계에만 준다 — '한짓골'을 막던 보호는 그대로다."""
+        flag = check_spacing(0, "한짓골에서 만나자")
+        assert flag is None or "한 짓골" not in (flag.suggested_fix or "")

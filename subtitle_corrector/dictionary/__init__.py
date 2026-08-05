@@ -30,6 +30,7 @@ from .clients import (
     search_onyongeo,
     search_opendict,
     search_stdict,
+    search_stdict_view,
 )
 from .headwords import (
     appears_in_standard_headword,
@@ -37,6 +38,7 @@ from .headwords import (
     definition_markers,
     is_contemporary_general_word,
     registered_ending,
+    spelling_norm_note,
     usage_examples,
     only_sino_korean_headword,
     sino_korean_origin,
@@ -62,6 +64,7 @@ from .dialect import (
 
 __all__ = [
     "search_stdict",
+    "search_stdict_view",
     "search_opendict",
     "search_kornorms",
     "search_kornorms_partial",
@@ -81,6 +84,7 @@ __all__ = [
     "definition_markers",
     "is_contemporary_general_word",
     "registered_ending",
+    "spelling_norm_note",
     "usage_examples",
     "standard_term_replacement",
     "former_term_field",

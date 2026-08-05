@@ -394,24 +394,44 @@ def _protect_unresolvable_splits(text: str, suggested: str) -> str:
     원문이 붙어 있었다는 사실이 유일한 근거라면, 근거 없이 갈라놓는 것보다
     그대로 두는 편이 이 프로젝트의 원칙에 맞는다("확실한 것만 자동 처리, 애매하면
     사람에게"). 분리 후 조각이 전부 사전으로 설명될 때만 제안을 남긴다.
+
+    **규정이 이미 정답을 정한 자리는 예외다**(`docs/BACKLOG.md` 23번). 제47항 단서 —
+    앞말에 조사가 붙으면 그 뒤의 보조 용언은 띄어 쓴다 — 가 적용되는 `조사(J*) +
+    보조용언(VX)` 경계에서는 사전이 판정에 개입할 이유가 없는데, 조각 확인이 그
+    분리까지 취소하고 있었다. 그래서 결과가 우연에 좌우됐다: `보고는싶다`·`알고는있다`·
+    `자고는싶다`는 제안이 나가고(`보고`=報告, `알고`, `자고`가 표제어라 **우연히**
+    통과), `먹고는싶다`·`듣고는싶다`·`울고는싶다`·`웃고는싶다`·`쓰고는있다`·`놀고는있다`는
+    아무 말이 없었다(2026-08-05 실측 10줄). `_protect_unfounded_respacing()`에는 같은
+    예외가 이미 있다 — 여기에만 빠져 있었다.
     """
     # 한 어절이 여러 번 쪼개질 수 있으므로(먹을수있다 -> 먹을 / 수 / 있다) 삽입
     # 지점을 어절별로 모아 **최종 조각 전체**를 본다. 삽입 하나만 놓고 좌우를
     # 판정하면 '수있다' 같은 중간 상태를 사전에 조회하게 되어 정당한 제안까지
     # 취소된다(2026-08-02 첫 시도에서 실제로 그렇게 깨졌다).
-    by_run: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
+    tokens = _kiwi.tokenize(text)
+    by_run: dict[tuple[int, int], list[tuple[int, int, int, bool]]] = {}
     for i1, j1, j2 in _inserted_space_ranges(text, suggested):
         start, end = _hangul_run_bounds(text, max(0, i1 - 1))
         if not (start < i1 < end):
             continue  # 어절 경계에 넣는 공백은 이 규칙의 대상이 아니다
-        by_run.setdefault((start, end), []).append((i1, j1, j2))
+        before, after = _straddling_tokens(tokens, i1)
+        settled = (
+            before is not None
+            and after is not None
+            and before.tag.startswith("J")
+            and after.tag == "VX"
+        )  # 제47항 단서로 규정이 이미 정한 자리
+        by_run.setdefault((start, end), []).append((i1, j1, j2, settled))
 
     to_remove = []
     for (start, end), points in by_run.items():
+        # 조각은 **모든** 삽입 지점으로 자른 결과로 본다(규정으로 확정된 지점 포함) —
+        # 그래야 '먹고는 / 싶다'처럼 실제로 남을 조각을 조회한다.
         cuts = sorted(p[0] for p in points)
         pieces = [text[a:b] for a, b in zip([start] + cuts, cuts + [end])]
         if not all(_dictionary_backed(piece) for piece in pieces):
-            to_remove.extend((j1, j2) for _i1, j1, j2 in points)
+            # 규정으로 확정된 지점은 되돌리지 않는다.
+            to_remove.extend((j1, j2) for _i1, j1, j2, settled in points if not settled)
     for j1, j2 in sorted(to_remove, key=lambda r: r[0], reverse=True):
         suggested = suggested[:j1] + suggested[j2:]
     return suggested

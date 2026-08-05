@@ -9,7 +9,14 @@ import re
 from functools import lru_cache
 import requests
 from ..gananda_precedents import check_precedent
-from .clients import _opendict_examples_for_target, search_opendict, search_stdict
+import xml.etree.ElementTree as ET
+
+from .clients import (
+    _opendict_examples_for_target,
+    search_opendict,
+    search_stdict,
+    search_stdict_view,
+)
 
 _NONSTANDARD_REDIRECT_MARKERS = ("규범 표기는", "표준 용어는")
 
@@ -392,3 +399,47 @@ def registered_ending(candidate: str) -> str | None:
             if (item.get("word") or "") == f"-{candidate}":
                 return item["word"]
     return None
+
+
+# `norm_info`의 설명문에는 잘못된 표기를 감싸는 `<IN>…</IN>` 태그가 섞여 온다
+# (`'<IN>부디치다</IN>'로 적지 않고`). 사람이 읽을 문장이므로 태그만 벗긴다.
+_NORM_INLINE_TAG = re.compile(r"</?[A-Za-z_]+>")
+
+
+@lru_cache(maxsize=1024)
+def spelling_norm_note(word: str) -> str:
+    """표준국어대사전이 그 표기의 **한글 맞춤법 근거**로 적어 둔 설명문을 돌려준다.
+
+    검색 API에는 없고 사전 내용 API(`view.do`)의 `norm_info`에만 있다
+    (`docs/BACKLOG.md` 6번). 예를 들어 `곰곰이`에는 "부사에 '-이'가 붙어서 뜻을
+    더하는 경우에는 그 부사의 원형을 밝혀 적는다는 규정(한글 맞춤법 제25항)과
+    부사의 끝음절이 분명히 '이'로만 나는 것은 '-이'로 적는다는 규정(제51항)에
+    따라…"가 실려 있다.
+
+    이 도구가 "사전 근거 있음"이라고만 말하던 자리에 **규정 조항을 그대로 인용**하기
+    위한 도우미다 — 번역가가 근거를 스스로 확인할 수 있어야 제안을 판단할 수 있다.
+
+    `type`이 '한글 맞춤법'인 것만 쓴다(다른 type은 표준어 규정·외래어 표기법 등이라
+    이 자리에서 인용하면 어긋난다). 없으면 빈 문자열.
+    """
+    items = search_stdict(word).get("channel", {}).get("item", [])
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        # 표제어의 하이픈 표기(`곰곰-이`)를 벗겨 정확히 그 낱말인 것만 본다.
+        if (item.get("word") or "").replace("-", "").replace("^", " ") != word:
+            continue
+        body = search_stdict_view(item.get("target_code") or "")
+        if not body:
+            continue
+        try:
+            root = ET.fromstring(body)
+        except ET.ParseError:
+            continue
+        for info in root.iter("norm_info"):
+            if (info.findtext("type") or "").strip() != "한글 맞춤법":
+                continue
+            desc = (info.findtext("desc") or "").strip()
+            if desc:
+                return _NORM_INLINE_TAG.sub("", desc)
+    return ""

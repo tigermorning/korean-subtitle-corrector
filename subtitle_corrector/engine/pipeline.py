@@ -6,6 +6,7 @@ from ..dictionary import (
     appears_in_standard_headword,
     lookup_stats,
     reset_failed_lookups,
+    spelling_norm_note,
     standard_headword_example,
 )
 from ..parsers import SubtitleEntry
@@ -63,6 +64,12 @@ from .consistency import (
     check_aux_verb_consistency,
     check_street_name_spacing,
     check_term_spacing_consistency,
+)
+from .dependent_nouns import (
+    check_hanpan_spacing,
+    check_purpose_cha_spacing,
+    correct_bun_spacing,
+    correct_duration_cha_spacing,
 )
 from .spacing_guards import check_spacing
 from .text_utils import _josa
@@ -234,6 +241,12 @@ def _correct_line(
         AppliedNote(message=f"[붙임 불가] {note}", is_edit=False) for note in aux_verb_blocked
     )
     before = corrected_text
+    corrected_text, bun_fixes = correct_bun_spacing(corrected_text)
+    corrected_text = _guard("의존명사 뿐", before, corrected_text, bun_fixes)
+    before = corrected_text
+    corrected_text, cha_fixes = correct_duration_cha_spacing(corrected_text)
+    corrected_text = _guard("기간+차 띄어쓰기", before, corrected_text, cha_fixes)
+    before = corrected_text
     corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
     corrected_text = _guard("확정 오류 표현", before, corrected_text, always_wrong_fixes)
     before = corrected_text
@@ -271,6 +284,23 @@ def _correct_line(
             + former_term_fixes
         )
     )
+    # 표기를 바꾼 교정에는 **왜 그렇게 적는지**를 사전이 밝힌 규정 근거를 함께 싣는다
+    # (`docs/BACKLOG.md` 6번). 이 설명문은 검색 API에 없고 사전 내용 API(`view.do`)의
+    # `norm_info`에만 있다 — `곰곰이`에는 한글 맞춤법 제25항·제51항이 조항까지 적혀
+    # 있다. `ALWAYS_WRONG`(§51)처럼 손으로 근거를 적어 두던 자리를 국립국어원 문장으로
+    # 바꾼 셈이다.
+    #
+    # **교정 로그 자체는 건드리지 않는다.** `edit_guard`가 `'원문 -> 정답'` 형식을
+    # 그대로 파싱해 변경을 검증하므로, 설명을 그 줄에 붙이면 재구성이 어긋나 정당한
+    # 교정이 막힌다. 그래서 별도의 안내 항목(is_edit=False)으로 덧붙인다.
+    for note_source in always_wrong_fixes + nonstandard_fixes:
+        fixed_form = note_source.partition(" -> ")[2].strip()
+        norm_note = spelling_norm_note(fixed_form) if fixed_form else ""
+        if norm_note:
+            applied.append(
+                AppliedNote(message=f"[근거] {fixed_form}: {norm_note}", is_edit=False)
+            )
+
     flags.extend(former_term_flags)
 
     for fix, context in review_fixes:
@@ -392,6 +422,10 @@ def _correct_line(
         check_honorific_dependent_noun(index, corrected_text),
         check_adnominal_noun_verb_split(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
+        # 제42항 의존명사 검사도 일반 띄어쓰기 검사보다 **먼저** 온다(도로명과 같은
+        # 이유) — 같은 제안이면 규칙 이름과 근거를 말해 주는 쪽이 남아야 한다.
+        check_purpose_cha_spacing(index, corrected_text),
+        check_hanpan_spacing(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
     for f in checks:

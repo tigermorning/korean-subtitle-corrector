@@ -42,6 +42,16 @@ DIALECT_API_KEY = os.getenv("DIALECT_API_KEY")
 STDICT_URL = "https://stdict.korean.go.kr/api/search.do"
 
 
+# 표준국어대사전 "사전 내용" API. 검색 API가 주지 않는 것을 준다 — 그중 이 도구에
+# 쓸모 있는 것은 `norm_info`(그 표기가 왜 그렇게 적히는지, 한글 맞춤법 조항을 든
+# 설명문)와 뜻풀이별 용례다.
+#
+# **`req_type=json`을 주면 본문이 빈 채로 200이 온다**(2026-08-05 실측). 검색 API는
+# JSON을 주는데 이쪽만 XML 전용이다. 실패가 아니라 빈 응답으로 오기 때문에, 모르고
+# JSON을 요청하면 "등재된 근거가 없다"로 조용히 오해하게 된다.
+STDICT_VIEW_URL = "https://stdict.korean.go.kr/api/view.do"
+
+
 OPENDICT_URL = "https://opendict.korean.go.kr/api/search"
 
 
@@ -244,6 +254,37 @@ def _opendict_examples_for_target(target_code) -> list[str]:
         for example in sense_info.get("example_info", [])
         if example.get("example")
     ]
+
+
+@lru_cache(maxsize=2048)
+def _fetch_stdict_view(target_code: str) -> str:
+    if not STDICT_API_KEY:
+        raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
+    # req_type을 주지 않는다 — 이 API는 XML만 돌려준다(위 상수 주석 참고).
+    params = {"key": STDICT_API_KEY, "method": "target_code", "q": target_code}
+    api = "표준국어대사전(사전 내용)"
+    note_lookup_attempt(api)
+    for attempt in range(3):
+        try:
+            response = requests.get(STDICT_VIEW_URL, params=params, timeout=10)
+            response.raise_for_status()
+            return response.text
+        except requests.RequestException:
+            if attempt == 2:
+                break
+    note_lookup_failure(api, target_code)
+    raise _LookupFailed(api)
+
+
+def search_stdict_view(target_code: str) -> str:
+    """표준국어대사전 사전 내용 조회(XML 본문 그대로). 실패는 빈 문자열이다 —
+    호출부는 "그 표제어에 실린 추가 정보가 없다"와 같은 경로로 넘어간다."""
+    if not target_code:
+        return ""
+    try:
+        return _fetch_stdict_view(str(target_code))
+    except _LookupFailed:
+        return ""
 
 
 def search_kornorms(keyword: str) -> list[dict]:

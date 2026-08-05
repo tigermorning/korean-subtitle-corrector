@@ -6,6 +6,7 @@ from ..dictionary import (
     appears_in_standard_headword,
     get_purified_terms,
     search_kornorms,
+    spelling_norm_note,
     usage_examples,
     word_exists,
 )
@@ -105,9 +106,15 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
         variants = _dictionary_backed_variants(word)
         if not variants:
             continue
+        # 후보가 하나면 그 표기가 왜 그렇게 적히는지 사전이 밝힌 규정 근거를 그대로
+        # 인용한다(`docs/BACKLOG.md` 6번). "사전 근거 있음"이라고만 하면 번역가가
+        # 무엇을 근거로 판단하라는 것인지 알 수 없다 — 조항이 실려 있으면 스스로
+        # 확인할 수 있다. 검색 API에는 없고 사전 내용 API(view.do)에만 있는 정보다.
+        note = spelling_norm_note(variants[0]) if len(variants) == 1 else ""
+        evidence = f"({note})" if note else "(사전 근거 있음)"
         hints.append(
             f"'{word}'{_josa(word, '는')} '{', '.join(variants)}'일 가능성이 있습니다"
-            "(사전 근거 있음)"
+            f"{evidence}"
         )
         if suggested_fix is None and len(variants) == 1:
             suggested_fix = text.replace(word, variants[0], 1)
