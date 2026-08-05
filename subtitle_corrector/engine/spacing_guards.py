@@ -31,7 +31,11 @@ from .kiwi_adapter import (
     _token_index,
     _tokenization_unstable_near,
 )
-from .affix import _cheo_prefix_candidate, _undocumented_cheo_derivative
+from .affix import (
+    _cheo_prefix_candidate,
+    _undocumented_cheo_derivative,
+    is_honorific_drida_affix,
+)
 from .lexicon import _PASSIVE_ONLY_BATDA_NOUNS, _is_action_noun
 from .spacing import _compound_candidate_spans, _normalize_aux_verb_spacing
 
@@ -249,6 +253,9 @@ def _protect_unfounded_respacing(text: str, suggested: str) -> str:
         ):
             to_remove.append((j1, j2))
             continue  # 동작성 명사+받다(접사) -> "호출받다"처럼 사전 미등재라도 항상 붙여씀
+        if before.tag == "NNG" and after.lemma == "드리다" and is_honorific_drida_affix(before.form):
+            to_remove.append((j1, j2))
+            continue  # 동작성 명사+드리다(접미사) -> '부탁드리다'는 미등재라도 붙여 쓴다
         if after.form == "요" and after.len == 1:
             to_remove.append((j1, j2))
             continue  # 존대 보조사 "요" — _mechanical_respace()와 같은 이유로 항상 보호한다

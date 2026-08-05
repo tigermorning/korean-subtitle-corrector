@@ -630,6 +630,26 @@ class TestActionNounPlusBatdaSuffix:
         assert check_spacing(0, "만점을 받았다") is None
 
 
+class TestActionNounPlusDridaSuffix:
+    """접미사 '-드리다'("((몇몇 명사 뒤에 붙어)) '공손한 행위'의 뜻을 더하고
+    동사를 만드는 접미사")는 표준국어대사전·우리말샘 둘 다에 표제어로 있다.
+    파생어까지 전부 등재되지는 않아('말씀드리다'·'사과드리다'는 등재,
+    '부탁드리다'·'감사드리다'·'인사드리다'는 미등재) 등재 여부로는 가를 수
+    없고, '-받다'와 같은 신호(동작성 명사인가)로 가른다.
+
+    실사용에서 '부탁드릴 생각도 못 했는데'가 '부탁 드릴 …'로 갈라 쓰자는
+    제안을 받았다(`docs/BACKLOG.md` 2번, 2026-07-21 보고)."""
+
+    def test_action_noun_plus_drida_stays_joined(self):
+        assert check_spacing(0, "부탁드릴 생각도 못 했는데") is None
+        assert check_spacing(0, "감사드립니다") is None
+        assert check_spacing(0, "인사드리겠습니다") is None
+
+    def test_registered_derivative_stays_joined(self):
+        """사전에 파생어가 오른 것('말씀-드리다')은 원래도 안전했다 — 회귀 고정."""
+        assert check_spacing(0, "말씀드릴게요") is None
+
+
 class TestCompoundSpacingDurationMarkerException:
     """숫자+시간단위(년/월/일 등) 뒤에 오는 "전"은 "~하기 전"이 아니라
     "며칠 전"의 뜻이라, 뒤에 오는 명사와 절대 하나의 단어가 될 수 없다.
