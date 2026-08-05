@@ -64,6 +64,7 @@ from .consistency import (
     check_aux_verb_consistency,
     check_street_name_spacing,
     check_term_spacing_consistency,
+    unify_term_spacing_by_principle,
 )
 from .dependent_nouns import (
     check_hanpan_spacing,
@@ -96,6 +97,7 @@ def _correct_line_with_markers(
     spacing_mode: str,
     markers: SubtitleMarkers | None = None,
     style: PunctuationStyle | None = None,
+    document_context: str | None = None,
 ) -> tuple[str, list[FlagItem], list[AppliedNote]]:
     """자막 편집 표지를 지킨 채로 교정한다.
 
@@ -110,7 +112,9 @@ def _correct_line_with_markers(
     """
     markers = markers or SubtitleMarkers()
     if doc_type != "subtitle" or not markers.any_set:
-        return _correct_line(index, text, doc_type, spacing_mode, markers, style)
+        return _correct_line(
+            index, text, doc_type, spacing_mode, markers, style, document_context
+        )
 
     # 1. 보호 조각(위치 표지 / 화면자막 구간)과 교정 대상 조각으로 나눈다.
     pieces: list[tuple[str, bool]] = []  # (조각, 보호 여부)
@@ -138,7 +142,7 @@ def _correct_line_with_markers(
             continue
         target = piece.replace(markers.line_break, "\n") if markers.line_break else piece
         fixed, piece_flags, piece_applied = _correct_line(
-            index, target, doc_type, spacing_mode, markers, style
+            index, target, doc_type, spacing_mode, markers, style, document_context
         )
         if markers.line_break:
             fixed = fixed.replace("\n", markers.line_break)
@@ -182,6 +186,7 @@ def _correct_line(
     spacing_mode: str,
     markers: "SubtitleMarkers | None" = None,
     style: "PunctuationStyle | None" = None,
+    document_context: str | None = None,
 ) -> tuple[str, list[FlagItem], list[AppliedNote]]:
     """텍스트 한 덩어리에 교정 파이프라인 전체를 적용한다.
 
@@ -260,7 +265,7 @@ def _correct_line(
     corrected_text = _guard("차별적 표현", before, corrected_text, discriminatory_fixes)
     before = corrected_text
     corrected_text, former_term_fixes, former_term_flags = correct_former_terms(
-        index, corrected_text
+        index, corrected_text, document_context
     )
     corrected_text = _guard("전 용어", before, corrected_text, former_term_fixes)
     # edit_guard가 거부한 건은 "무엇을 하지 않았는지" 알리는 안내이지 교정이 아니다.
@@ -347,14 +352,18 @@ def _correct_line(
                     original_text=corrected_text,
                     reason=(
                         f"외래어 표기 확인 필요 — **'{original_token}'{_josa(original_token, '과')} "
-                        f"'{replacement_token}' 둘 다 근거가 있습니다.** 인명·지명 용례는 "
-                        f"'{replacement_token}'이고(참고: {context or '국립국어원 확정 표기'}), "
-                        f"우리말샘에는 {_headword_evidence(original_token)}. "
-                        "같은 원어라도 어느 계열로 쓰인 말인지에 따라 "
+                        f"'{replacement_token}' 둘 다 근거가 있습니다. 다만 근거의 지위가 "
+                        f"다릅니다.** 인명·지명은 '{replacement_token}'이고 이쪽은 외래어 표기 "
+                        f"**심의를 거쳐 확정된** 표기입니다(참고: "
+                        f"{context or '국립국어원 확정 표기'}). "
+                        f"한편 우리말샘에는 {_headword_evidence(original_token)} — 다만 이 쪽은 "
+                        "사전이 현재 쓰는 표기일 뿐 **규범으로 확정된 것이 아니어서 나중에 "
+                        "바뀔 수 있습니다.** 같은 원어라도 어느 계열로 쓰인 말인지에 따라 "
                         "갈리므로 텍스트만으로는 정할 수 없습니다 — **확인해 주세요.** "
                         f"인명·작품 표기가 맞다면 오른쪽 제안('{replacement_token}')을 "
-                        "채택하고, 전문 용어 계열이면 원문을 두세요. 아래 칸에 원어를 넣으면 "
-                        "국립국어원 용례를 함께 볼 수 있습니다"
+                        "채택하고, 전문 용어 계열이면 원문을 두세요. 확정되지 않은 쪽이라 "
+                        "이 판단은 저장해 두지 않고 **교정할 때마다 사전을 다시 조회합니다.** "
+                        "아래 칸에 원어를 넣으면 국립국어원 용례를 함께 볼 수 있습니다"
                     ),
                     suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
                     source_lookup_token=original_token,
@@ -375,9 +384,11 @@ def _correct_line(
                     f"'{replacement_token}'{_josa(replacement_token, '이')} "
                     f"맞고, 원어가 다른 이름이면(Ruth ↔ Russ처럼) "
                     f"'{original_token}'{_josa(original_token, '이')} "
-                    "맞을 수 있습니다. 작품 제목처럼 고유하게 고정된 "
-                    "표기일 수도 있어 자동 반영하지 않습니다. 아래 칸에 원어를 넣으면 "
-                    "국립국어원 용례로 확정 표기를 찾아 줍니다"
+                    "맞을 수 있습니다. 작품 제목이나 **상표·브랜드**처럼 고유하게 "
+                    "고정된 표기일 수도 있어 자동 반영하지 않습니다 — 브랜드라면 "
+                    "표기법보다 **한국 지사 공식 표기가 우선**이므로 공식 홈페이지에서 "
+                    "확인하세요('파이롯트'처럼 표기법과 다른 상표명이 있습니다). "
+                    "아래 칸에 원어를 넣으면 국립국어원 용례로 확정 표기를 찾아 줍니다"
                 ),
                 suggested_fix=corrected_text.replace(original_token, replacement_token, 1),
                 source_lookup_token=original_token,
@@ -537,6 +548,12 @@ def correct_entries(
             )
         )
 
+    # 동형이의 판정에 쓸 문맥은 **문서 전체**다. 자막 한 줄은 짧아서 "이 낱말이 어느
+    # 뜻으로 쓰였나"를 가릴 근거가 그 줄 안에 없는 경우가 대부분이다 — '건초 더미에
+    # 누웠다' 한 줄만 보면 판단할 것이 없지만, 같은 문서에 '사료'·'목장'이 있으면
+    # 답이 정해진다(2026-08-05 사용자 지적).
+    document_context = "\n".join(e.text for e in entries)
+
     for e in entries:
         # 사투리 모드를 가장 먼저 결정한다 — 표준화 파이프라인을 돌리기 전에
         # 이 화자의 대사를 건드려도 되는지 판단해야 하기 때문이다. 대본 속
@@ -574,7 +591,7 @@ def correct_entries(
             flags.extend(dialect_flags)
 
         corrected_text, line_flags, line_applied = _correct_line_with_markers(
-            e.index, corrected_text, doc_type, spacing_mode, markers, style
+            e.index, corrected_text, doc_type, spacing_mode, markers, style, document_context
         )
         flags.extend(line_flags)
         for note in line_applied:
@@ -589,6 +606,31 @@ def correct_entries(
     # 제49항·제50항 혼용 검사는 한 줄만 봐서는 알 수 없다(같은 용어를 다른 줄에서
     # 어떻게 썼는지 비교해야 한다). 그래서 줄 단위 파이프라인이 모두 끝나고
     # 교정이 확정된 뒤에 문서 전체를 한 번 훑는다.
+    # 2단계에서 '원칙'을 고른 문서는 이 혼용을 **묻지 않고 맞춘다**(2026-08-05 사용자
+    # 지적: "2단계 선택에 따라 자동 교정했어야 함"). 목표 표기가 문서에 이미 있는
+    # 띄어 쓴 변이형이라 붙임 경계를 추측할 일이 없다 — 자동 통일을 미뤄 두었던
+    # 이유는 붙이는 방향에만 해당한다(`unify_term_spacing_by_principle` 참고).
+    if spacing_mode == "principle":
+        by_index = {e.index: i for i, e in enumerate(corrected_entries)}
+        for entry_index, run, principle, summary in unify_term_spacing_by_principle(
+            corrected_entries, protected_indices
+        ):
+            position = by_index.get(entry_index)
+            if position is None:
+                continue
+            target = corrected_entries[position]
+            if run not in target.text:
+                continue
+            corrected_entries[position] = replace(
+                target, text=target.text.replace(run, principle, 1)
+            )
+            applied_log.append(
+                AppliedNote(
+                    message=f"[제49·50항 통일] {run} -> {principle} (문서에서 {summary})",
+                    is_edit=True,
+                    line_index=entry_index,
+                )
+            )
     flags.extend(check_term_spacing_consistency(corrected_entries, protected_indices))
     flags.extend(check_aux_verb_consistency(corrected_entries, protected_indices))
 

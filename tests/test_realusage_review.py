@@ -386,11 +386,20 @@ def test_component_of_standard_headword_not_unknown():
 
 def test_field_limited_former_term_not_flagged():
     """'원통'의 옛 용어 안내는 우리말샘에서 수학 분야 뜻에만 달려 있고 일상적인
-    뜻('분하고 억울함')과는 무관하다. 분야 표시가 없는 옛 용어(간질)는 계속 플래그한다."""
+    뜻('분하고 억울함')과는 무관하다.
+
+    2026-08-05(§73)부터는 분야 표시가 없는 옛 용어도 같은 원칙을 따른다 — 문서에
+    그 전문 분야 뜻으로 읽을 근거가 없으면 묻지 않는다. **`간질 환자가 늘었다`처럼
+    사람이 보기에 분명한 병명 문맥도 놓친다**(`환자`는 우리말샘 분야가 경제·역사이고
+    `뇌전증` 뜻풀이에도 나오지 않는다). 근거가 없을 때 묻지 않는 쪽을 택한 대가이며,
+    `docs/KNOWN_LIMITATIONS.md`에 적어 두었다."""
     _out, flags = _run("원통 모양이야")
     assert not any("전 용어" in f.reason for f in flags)
     _out2, flags2 = _run("간질 환자가 늘었다")
-    assert any("전 용어" in f.reason for f in flags2)
+    assert not any("전 용어" in f.reason for f in flags2)
+    # 사전이 근거를 주는 문맥에서는 그대로 묻는다.
+    _out3, flags3 = _run("간질 발작을 일으켰다")
+    assert any("전 용어" in f.reason for f in flags3)
 
 
 def test_determiner_not_treated_as_interjection():
@@ -801,3 +810,101 @@ def test_flag_wording_picks_the_right_particle_allomorph():
     assert "'루스'가 맞고" in reason
     assert "'러스'가 맞을 수 있습니다" in reason
     assert "'루스'이" not in reason and "'러스'이" not in reason
+
+
+# --- 2026-08-05 사용자 보고 3건(§73) ---
+
+def test_adnominal_modified_noun_is_not_joined_to_hada():
+    """관형어가 꾸미는 명사 뒤의 '하'는 접미사가 아니라 동사라 띄어 쓴다.
+
+    `마음의 준비 해`가 `마음의 준비해`로 붙었다 — 붙인 것은 제41항 접사 규칙
+    (`_mechanical_respace`)이었고 거기에만 관형어 가드가 없었다. 관형격 조사(JKG)
+    자리는 가르는 규칙에도 빠져 있었다."""
+    for text in ("마음의 준비 해", "떨어지면 받을 준비 해", "내 탓 하지 마"):
+        assert _run(text)[0] == text
+    # 이미 붙여 쓴 것은 갈라 준다.
+    assert _run("마음의 준비해")[0] == "마음의 준비 해"
+
+
+def test_term_spacing_is_unified_when_principle_is_chosen():
+    """2단계에서 '원칙'을 골랐으면 제49·50항 혼용은 묻지 않고 맞춘다."""
+    from subtitle_corrector.engine import correct_entries
+    from subtitle_corrector.parsers import SubtitleEntry
+
+    lines = ["무게 중심이 앞으로 쏠린다", "무게중심을 낮춰라",
+             "무게 중심을 잡아", "무게중심이 중요하다"]
+    entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
+    corrected, flags, log = correct_entries(entries, spacing_mode="principle")
+    assert [e.text for e in corrected] == ["무게 중심이 앞으로 쏠린다", "무게 중심을 낮춰라",
+                                           "무게 중심을 잡아", "무게 중심이 중요하다"]
+    assert not [f for f in flags if "혼용" in f.reason]
+    assert any("제49·50항 통일" in note.message for note in log)
+
+
+def test_term_spacing_stays_a_flag_when_allowance_is_chosen():
+    """'허용'은 붙임 경계를 새로 정해야 하므로 지금도 사람에게 묻는다."""
+    from subtitle_corrector.engine import correct_entries
+    from subtitle_corrector.parsers import SubtitleEntry
+
+    lines = ["무게 중심이 앞으로 쏠린다", "무게중심을 낮춰라"]
+    entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
+    corrected, flags, _log = correct_entries(entries, spacing_mode="allowance")
+    assert [e.text for e in corrected] == lines
+    assert [f for f in flags if "혼용" in f.reason]
+
+
+def test_loanword_evidence_states_which_side_is_settled():
+    """인명 표기는 심의를 거친 확정 표기이고 사전 표제어 쪽은 미확정이다 —
+    두 근거를 같은 무게로 제시하면 안 된다(2026-08-05 사용자 지적)."""
+    _out, flags = _run("쉴러병 환자 기록을 다시 뒤지려고")
+    reason = next(f.reason for f in flags if "외래어 표기 확인" in f.reason)
+    assert "심의를 거쳐 확정된" in reason
+    assert "규범으로 확정된 것이 아니어서" in reason
+    assert "교정할 때마다 사전을 다시 조회합니다" in reason
+
+
+def test_honorific_aux_verb_follows_the_plain_form_headword():
+    """'봐드리다'는 미등재지만 '봐주다'가 표제어다 — 높임형이라고 갈라 쓰지 않는다.
+
+    제47항 해설의 "'도와드리다'는 '도와주다'가 사전 표제어인 것에 맞춰 항상 붙임"을
+    특정 낱말이 아니라 관계로 일반화한 것이다(2026-08-05 사용자 보고)."""
+    assert _run("오늘은 좀 봐드릴게요")[0] == "오늘은 좀 봐드릴게요"
+    assert _run("들어드릴게요")[0] == "들어드릴게요"
+    assert _run("도와드릴게요")[0] == "도와드릴게요"
+    # 낮춤형도 미등재면 제47항 원칙대로 띄어 쓴다 — 사전이 정한다.
+    assert _run("읽어드릴게요")[0] == "읽어 드릴게요"
+
+
+def test_negation_aux_is_not_treated_as_optional_spacing():
+    """'-지 않다'는 제47항 붙임 허용 대상이 아니라 언제나 띄어 쓴다.
+
+    보조 용언 태그만 보고 세다가 "'않' 띄어쓰기가 섞였다"는 플래그를 냈다 —
+    규정이 인정하지 않는 표기를 선택지로 내놓은 것이라 판정 자체가 틀렸다
+    (2026-08-05 사용자 지적)."""
+    from subtitle_corrector.engine import correct_entries
+    from subtitle_corrector.parsers import SubtitleEntry
+
+    lines = ["그렇지 않아요", "가지 않았다", "먹지 않는다", "그렇잖아요"]
+    entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
+    _corrected, flags, _log = correct_entries(entries)
+    assert not [f for f in flags if "보조 용언 '않'" in f.reason]
+
+
+def test_real_aux_verb_mixture_is_still_flagged():
+    """진짜 붙임 허용 구성('-아/-어 + 보조 용언')의 혼용은 그대로 잡는다."""
+    from subtitle_corrector.engine import correct_entries
+    from subtitle_corrector.parsers import SubtitleEntry
+
+    lines = ["한번 해 보자", "다시 해보자"]
+    entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
+    _corrected, flags, _log = correct_entries(entries)
+    assert [f for f in flags if "보조 용언 '보'" in f.reason]
+
+
+def test_brand_name_flag_points_to_the_official_korean_spelling():
+    """상표·브랜드는 표기법보다 한국 지사 공식 표기가 우선이다(2026-08-05 사용자 지적).
+    자동 반영하지 않는 것은 전부터 그랬고, 무엇을 근거로 확인할지 문구가 말해 준다."""
+    _out, flags = _run("파이롯트 만년필을 샀다")
+    reason = next(f.reason for f in flags if "고유명사 외래어 표기" in f.reason)
+    assert "상표·브랜드" in reason
+    assert "한국 지사 공식 표기가 우선" in reason

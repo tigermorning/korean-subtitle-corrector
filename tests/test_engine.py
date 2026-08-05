@@ -257,8 +257,26 @@ class TestTermSpacingConsistency:
         assert self._reasons(flags) == []
 
     def test_wired_into_correct_entries(self):
-        _, flags, _ = correct_entries(
+        """기본값('원칙')에서는 **묻지 않고 통일한다**(2026-08-05 사용자 지적, §73).
+
+        띄어쓰기 기준을 이미 골라 둔 문서에 "어느 쪽으로 통일할까요"를 다시 묻는 것은
+        선택을 두 번 받는 것이다. 목표 표기가 문서에 이미 있는 띄어 쓴 변이형이라
+        붙임 경계를 추측할 일도 없다."""
+        corrected, flags, log = correct_entries(
             self._entries("만성 골수성 백혈병 진단", "만성골수성백혈병 치료")
+        )
+        assert [e.text for e in corrected] == [
+            "만성 골수성 백혈병 진단",
+            "만성 골수성 백혈병 치료",
+        ]
+        assert self._reasons(flags) == []
+        assert any("제49·50항 통일" in note.message for note in log)
+
+    def test_allowance_mode_still_asks(self):
+        """'허용'은 붙임 경계를 새로 정해야 하므로 사람에게 묻는다."""
+        _, flags, _ = correct_entries(
+            self._entries("만성 골수성 백혈병 진단", "만성골수성백혈병 치료"),
+            spacing_mode="allowance",
         )
         assert len(self._reasons(flags)) == 1
 

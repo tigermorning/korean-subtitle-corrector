@@ -443,3 +443,39 @@ def spelling_norm_note(word: str) -> str:
             if desc:
                 return _NORM_INLINE_TAG.sub("", desc)
     return ""
+
+
+def _exact_senses(word: str) -> list[dict]:
+    """우리말샘에서 **정확히 그 표제어**인 항목의 뜻 목록."""
+    try:
+        items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return []
+    if isinstance(items, dict):
+        items = [items]
+    senses: list[dict] = []
+    for item in items:
+        if (item.get("word") or "").replace("-", "").replace("^", "") != word:
+            continue
+        found = item.get("sense", [])
+        found = found if isinstance(found, list) else [found]
+        senses.extend(s for s in found if isinstance(s, dict))
+    return senses
+
+
+@lru_cache(maxsize=2048)
+def sense_fields(word: str) -> frozenset:
+    """word의 뜻에 달린 전문 분야 표시(우리말샘 `cat`) 집합.
+
+    `힘줄집` -> {'의학'}, `원기둥` -> {'수학'}. 일반어 뜻에는 표시가 없으므로
+    **비어 있다고 해서 전문어가 아니라는 뜻은 아니다** — `환자`·`치료`처럼 흔한
+    의학 관련 낱말도 표시가 없거나 엉뚱한 분야만 달려 있다(`환자` -> 경제·역사).
+    그래서 이 신호는 "있으면 근거", "없으면 모름"으로만 쓴다.
+    """
+    return frozenset(f for s in _exact_senses(word) if (f := (s.get("cat") or "").strip()))
+
+
+@lru_cache(maxsize=2048)
+def headword_definitions(word: str) -> tuple:
+    """word의 뜻풀이 전체(우리말샘). 문맥 판정에서 낱말 겹침을 볼 때 쓴다."""
+    return tuple(d for s in _exact_senses(word) if (d := (s.get("definition") or "").strip()))

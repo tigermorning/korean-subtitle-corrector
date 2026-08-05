@@ -4,6 +4,8 @@
 import re
 from ..common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from ..dictionary import (
+    headword_definitions,
+    sense_fields,
     former_term_field,
     former_term_lookup,
     standard_term_replacement,
@@ -215,7 +217,89 @@ def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
     return _apply_replacements(text, DISCRIMINATORY_TERMS)
 
 
-def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[FlagItem]]:
+# 전문 분야 표시(우리말샘 `cat`)를 계열로 묶은 것. 같은 계열의 낱말이 문서에 있으면
+# 그 분야 뜻으로 읽을 근거가 된다. 라벨이 세분돼 있어 정확히 같은 이름만 찾으면
+# 놓친다 — `힘줄집`은 '의학'인데 `근육`은 '생명'이다(실측).
+_FIELD_GROUPS = (
+    frozenset({"의학", "생명", "약학", "한의", "수의", "보건 일반", "심리"}),
+    frozenset({"식물", "동물", "농업", "임업", "수산업"}),
+    frozenset({"수학", "물리", "화학", "천문", "지구"}),
+    frozenset({"법률", "경제", "정치", "행정"}),
+)
+
+
+def _field_group(field: str) -> frozenset:
+    for group in _FIELD_GROUPS:
+        if field in group:
+            return group
+    return frozenset({field})
+
+
+# 뜻풀이에서 문맥 대조에 쓸 내용어 태그. 조사·어미는 어느 문장에나 있어 근거가 안 된다.
+_DEFINITION_CONTENT_TAGS = ("NNG", "NNP", "VV", "VA")
+
+
+# 어느 뜻풀이에나, 어느 문장에나 나오는 낱말. 겹쳐도 아무 근거가 되지 않는다 —
+# `있다` 하나 때문에 '건초 더미에 누웠다'가 `힘줄집`("…싸고 있는 것") 뜻으로
+# 읽혔다(2026-08-05 실측). 뜻을 가르는 신호가 아니라 문장을 잇는 말들이다.
+_CONTEXT_STOP_LEMMAS = frozenset({
+    "있다", "없다", "하다", "되다", "같다", "보다", "주다", "쓰다", "가지다",
+    "만들다", "넣다", "이르다", "나타내다", "위하다", "대하다", "따르다",
+    "많다", "적다", "크다", "작다", "높다", "낮다", "좋다", "길다",
+    "사람", "모양", "상태", "경우", "정도", "방법", "부분", "따위", "이것", "그것",
+})
+
+
+def _content_lemmas(text: str) -> set[str]:
+    return {
+        t.lemma
+        for t in _kiwi.tokenize(text)
+        if t.tag.startswith(_DEFINITION_CONTENT_TAGS)
+        and len(t.lemma) >= 2
+        and t.lemma not in _CONTEXT_STOP_LEMMAS
+    }
+
+
+def _specialist_reading_supported(target: str, context: str, surface: str) -> bool:
+    """문서가 **전문 분야 뜻으로 읽을 근거**를 주는지 — 없으면 플래그하지 않는다.
+
+    `건초`는 우리말샘에 다섯 뜻이 있다: 일반어 '베어서 말린 풀', 역사 연호 셋,
+    그리고 의학 '힘줄집'(옛 용어). 그런데 **'건초는 베어서 말린 풀이다'라는 문장에도
+    옛 용어 플래그가 붙었다**(2026-08-05 사용자 보고) — 문맥이 정의를 말하고 있는데도.
+
+    판정에 쓰는 신호는 둘이고, 둘 다 사전이 준 것이다.
+
+    ① **분야 계열**: 문서의 다른 낱말이 그 표준 용어와 같은 분야 계열로 표시돼 있는가
+       (`힘줄집`=의학, `근육`=생명 -> 같은 계열).
+    ② **뜻풀이 낱말 겹침**: 문서의 낱말이 그 표준 용어의 뜻풀이에 나오는가
+       (`뇌전증`의 뜻풀이에 '발작'이 있고, '환자가 간질 발작을 일으켰다'에도 있다).
+
+    ②가 필요한 이유: `cat` 표시는 **전문어 뜻에만** 달려 있어 흔한 의학 낱말이
+    빠진다 — `환자`는 경제·역사, `치료`·`곤충`은 아예 표시가 없다(실측). ①만 쓰면
+    정작 병명 문맥을 놓친다.
+
+    **이 판정은 플래그를 줄이는 방향으로만 쓴다.** 근거가 없으면 조용히 넘어갈 뿐
+    텍스트를 바꾸지 않으므로, 판정이 틀려도 잃는 것은 제안 하나다(자동 교정에는
+    이 신호를 쓰지 않는다 — 뜻이 하나뿐인 옛 용어는 지금처럼 문맥과 무관하게 바꾼다).
+    """
+    context_lemmas = _content_lemmas(context) - {surface}
+    if not context_lemmas:
+        return False
+    fields = sense_fields(target)
+    if fields:
+        allowed = set().union(*(_field_group(f) for f in fields))
+        for lemma in context_lemmas:
+            if sense_fields(lemma) & allowed:
+                return True
+    definition_lemmas: set[str] = set()
+    for definition in headword_definitions(target):
+        definition_lemmas |= _content_lemmas(definition)
+    return bool(context_lemmas & definition_lemmas)
+
+
+def correct_former_terms(
+    index: int, text: str, context: str | None = None
+) -> tuple[str, list[str], list[FlagItem]]:
     """표준국어대사전이 "'X'의 전 용어"로 표시한 옛 용어(지양 대상)를 처리한다.
 
     correct_nonstandard_terms()가 우리말샘의 "규범 표기는/표준 용어는" 안내를
@@ -227,10 +311,14 @@ def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[Fl
     - 모든 뜻이 "전 용어" 뜻인 단어(예: "정신분열증" → 전부 "조현병"의 전 용어)는
       문맥과 무관하게 하나의 정답만 있으므로 조용히 자동 교정한다.
     - "전 용어" 뜻 외에 다른 뜻도 있는 동형이의어(예: "간질" — 옛 용어(뇌전증)
-      외에 곤충·조직·'간질거리다' 어근 뜻도 있음)는 자동 교정하지 않고 플래그만
-      남긴다. 텍스트만으로 어느 뜻인지 자동 판별하는 것은 확률적 추정이라 이
-      프로젝트가 금지하는 방식이므로(문맥 기반 의미 판별 시도 안 함), 사람이
-      문맥으로 판단하도록 다른 뜻들을 사유에 실어 안전하게 넘긴다.
+      외에 곤충·조직·'간질거리다' 어근 뜻도 있음)는 **절대 자동 교정하지 않는다.**
+      다만 2026-08-05부터, 문서에 그 전문 분야 뜻으로 읽을 근거가 하나도 없으면
+      플래그도 남기지 않는다(`_specialist_reading_supported` 참고). '건초는 베어서
+      말린 풀이다'라는 문장에까지 '힘줄집' 제안이 붙던 것을 막는다. 근거가 있으면
+      지금처럼 다른 뜻들을 사유에 실어 사람에게 넘긴다.
+
+    `context`는 문맥 판정에 쓸 텍스트다(기본값은 그 줄 자체). 자막은 한 줄이 짧아
+    문서 전체를 넘기면 판정이 훨씬 정확해진다 — `correct_entries()`가 그렇게 부른다.
 
     반환값: (수정된 텍스트, 자동 교정 로그: '원문 -> 정답', 확인 플래그 목록)
 
@@ -287,6 +375,10 @@ def correct_former_terms(index: int, text: str) -> tuple[str, list[str], list[Fl
                 target = result["target"]
                 if not result["ambiguous"]:
                     auto_replacements[surface] = target
+                elif not _specialist_reading_supported(target, context or text, surface):
+                    # 문서 어디에도 그 전문 분야 뜻으로 읽을 근거가 없다 — 묻지 않는다
+                    # (`건초는 베어서 말린 풀이다`, 2026-08-05 사용자 보고).
+                    pass
                 elif former_term_field(surface):
                     # 옛 용어 안내가 **특정 전문 분야 뜻**에만 달려 있고 그 밖의 일반
                     # 뜻도 있는 경우다(2026-08-02 실사용: '원통'의 안내는 우리말샘에서

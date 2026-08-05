@@ -22,6 +22,26 @@ from .kiwi_adapter import (
 from .options import SubtitleMarkers, normalize_spacing_mode
 from .markers import _after_subtitle_marker
 
+# 명사를 꾸며 그 명사를 명사구의 머리로 만드는 앞말. 관형사(MM)·관형형 어미(ETM)·
+# 관형격 조사(JKG, '마음의'·'내')가 여기 든다. 셋 다 **반드시 명사를 꾸미므로**
+# 뒤에 오는 '하다'는 접미사가 아니라 동사다(제42항 해설과 같은 근거).
+_ADNOMINAL_TAGS = ("MM", "ETM", "JKG")
+
+
+def _modified_by_adnominal(text: str, tokens, noun_index: int) -> bool:
+    """tokens[noun_index](명사)가 바로 앞의 관형어에게 꾸밈을 받는지.
+
+    관형어는 꾸미는 명사 바로 앞에 온다 — 사이에 다른 낱말이 끼면 그 명사를 꾸미는
+    것이 아니다('그 사람 사랑한다'의 '그'는 '사람'을 꾸민다).
+    """
+    if noun_index < 1:
+        return False
+    prev = tokens[noun_index - 1]
+    if prev.tag not in _ADNOMINAL_TAGS:
+        return False
+    return text[prev.start + prev.len : tokens[noun_index].start] in (" ", "")
+
+
 def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> str:
     """조사·어미·접미사 결합 지점의 띄어쓰기만 정리한다 (한글 맞춤법
     제41항: 조사는 앞말에 붙여 씀 + 어미/접미사는 애초에 앞 형태소와 분리해
@@ -93,6 +113,22 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
             # 그 선택을 보존한다 — 2026-08-03 실사용 감수에서 '증축을 더 해도 되겠네요'가
             # '더해도'로 붙었다(사용자 제공 자막 4강 103번). 전에는 '안'만 막고 있었다.
             if t1.tag == "MAG" and gap_start != gap_end:
+                continue
+            # **관형어가 꾸미는 명사 뒤에 띄어 쓴 '하'도 붙이지 않는다.** 관형사(MM)·
+            # 관형형 어미(ETM)·관형격 조사(JKG)는 반드시 명사를 꾸미므로, 그 명사는
+            # 자립 명사구의 머리이고 뒤의 '하다'는 접미사가 아니라 동사다 — 띄어 쓴
+            # 표기가 맞다('받을 준비 해', '마음의 준비 해', '내 탓 하지 마').
+            #
+            # 이 가드가 없어 '마음의 준비 해'가 '마음의 준비해'로 붙었다(2026-08-05
+            # 사용자 보고). `correct_action_noun_affix`에는 같은 가드가 있었지만
+            # 실제로 붙이는 것은 제41항 접사 규칙인 이 함수였다. MM·ETM 자리는
+            # `correct_adnominal_noun_verb_split`이 붙은 것을 다시 갈라 결과만
+            # 맞았을 뿐, 두 규칙이 같은 경계를 반대로 만지고 있었다(§60 부류).
+            if (
+                t1.tag in ("NNG", "NNP")
+                and gap_start != gap_end
+                and _modified_by_adnominal(text, tokens, i)
+            ):
                 continue
             # 행 끝에 띄어 쓴 '나'는 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
             # '나아'의 오기인지 문맥 없이 가릴 수 없다. 붙여 버리면 '나아'였을
@@ -488,6 +524,33 @@ def _normalize_aux_verb_spacing(text: str, suggested: str) -> str:
     return suggested
 
 
+def _honorific_of_registered_aux(candidate: str) -> str | None:
+    """'봐드리다'처럼 **높임형만 미등재인** 보조 용언 결합인지 — 맞으면 대응하는
+    낮춤형 표제어를 돌려준다.
+
+    보조 용언 '드리다'는 '주다'의 높임말이다. 사전은 그 높임형 파생을 전부 싣지
+    않는다 — 실측(2026-08-05)에서 이렇게 갈렸다.
+
+        봐주다   등재    봐드리다    미등재   <- 사용자 보고: '봐드릴게요'가 갈렸다
+        들어주다 등재    들어드리다  미등재
+        도와주다 등재    도와드리다  **등재**
+        읽어주다 미등재  읽어드리다  미등재
+
+    `봐주다`가 한 낱말이면 그 높임 표현도 한 낱말이다. 높임형이 사전에 없다는
+    사실만으로 갈라 쓰면, 등재가 우연히 들쭉날쭉한 대로 `도와드릴게요`는 살고
+    `봐드릴게요`는 깨진다(§67 '-드리다' 접미사에서 확인한 것과 같은 사정).
+
+    근거는 이미 규정 해설에 있다 — 제47항 해설의 "'도와드리다'는 '도와주다'가
+    사전 표제어인 것에 맞춰 항상 붙임"(`docs/KNOWN_LIMITATIONS.md`)을 특정 낱말이
+    아니라 **관계**로 일반화한 것이다. 낮춤형이 미등재면(`읽어주다`) 이 규칙은
+    발동하지 않고 제47항 원칙대로 띄어 쓴다.
+    """
+    if not candidate.endswith("드리다"):
+        return None
+    plain = candidate[: -len("드리다")] + "주다"
+    return plain if word_exists(plain) else None
+
+
 def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
     """제47항 원칙(띄어쓰기) 기준으로만 교정하는 얇은 래퍼.
 
@@ -572,6 +635,8 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
             nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
             candidate = text[prev.start : cur.start + cur.len] + nxt_citation
             if word_exists(candidate):
+                continue
+            if _honorific_of_registered_aux(candidate):
                 continue
             if gap == "":
                 edits.add((gap_start, gap_end, " "))

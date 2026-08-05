@@ -8,6 +8,7 @@ from ..dictionary import word_exists
 from ..parsers import SubtitleEntry
 from ..report import FlagItem
 from .kiwi_adapter import _TERM_RUN_TAGS, _kiwi
+from .spacing import _ALWAYS_ATTACHED_AUX_LEMMAS, _AUX_EC_FORMS
 from .text_utils import _josa
 
 # 한 덩어리 용어로 볼 수 있는 길이(공백 제외). 짧은 조합은 우연히 같은 글자열이
@@ -139,6 +140,74 @@ def check_street_name_spacing(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def unify_term_spacing_by_principle(
+    entries: list[SubtitleEntry], skip_indices: set[int] | None = None
+) -> list[tuple[int, str, str, str]]:
+    """제49·50항 혼용을 **원칙(띄어 쓰기)** 쪽으로 자동 통일할 목록을 만든다.
+
+    2단계에서 사용자가 띄어쓰기 기준을 '원칙'으로 골랐으면 이 자리는 물을 것이 아니라
+    적용할 것이다(2026-08-05 사용자 지적). `무게 중심`(2회)과 `무게중심`(2회)이 섞여
+    있는데 기준이 이미 정해져 있으면 `무게 중심`으로 맞추면 된다.
+
+    **띄우는 방향만 자동으로 한다.** 원래 자동 통일을 미뤄 둔 이유는 "붙이려면 어디까지가
+    한 용어인지 알아야 하는데 그 경계가 사전에 없다"는 것이었다. 그 사정은 붙이는
+    방향에만 해당한다 — 띄우는 쪽의 목표 표기는 **문서가 이미 쓰고 있는 변이형**이라
+    경계를 추측할 일이 없다. 반대로 '허용' 기준은 붙임 경계를 새로 정해야 하므로
+    지금도 플래그로 남긴다(`check_term_spacing_consistency`).
+
+    반환값: `(entry.index, 원문 조각, 통일 표기, 요약)` 목록. 실제 치환은 호출부가 한다.
+    """
+    plans = []
+    for key, found, variants, preferred in _mixed_term_variants(entries, skip_indices):
+        principle = max(variants, key=lambda v: (v.count(" "), -len(v)))
+        if principle.count(" ") == 0:
+            continue  # 띄어 쓴 변이형이 없으면 원칙 형태를 만들 수 없다(붙임 경계 추측 금지)
+        if _violates_street_name_rule(principle):
+            continue  # 도로명은 붙임이 원칙이라 이 규칙이 정할 자리가 아니다
+        summary = _variant_summary(variants)
+        for entry, run in found:
+            if run != principle:
+                plans.append((entry.index, run, principle, summary))
+    return plans
+
+
+def _variant_summary(variants) -> str:
+    return ", ".join(f"'{v}'({variants[v]}회)" for v in sorted(variants, key=lambda v: -variants[v]))
+
+
+def _mixed_term_variants(entries: list[SubtitleEntry], skip_indices: set[int] | None):
+    """문서에서 같은 용어를 두 가지 이상으로 적은 구간을 찾는다.
+
+    `check_term_spacing_consistency`와 `unify_term_spacing_by_principle`이 같은 판정을
+    쓰도록 떼어 놓은 것이다 — 한쪽만 고치면 플래그와 자동 통일이 서로 다른 구간을
+    보게 된다.
+    """
+    skip_indices = skip_indices or set()
+    occurrences: dict[str, list[tuple[SubtitleEntry, str]]] = {}
+    for entry in entries:
+        if entry.index in skip_indices:
+            continue  # 사투리 protect 화자: 어떤 플래그도 남기지 않는다
+        for run in _term_runs(entry.text):
+            occurrences.setdefault(re.sub(r"\s", "", run), []).append((entry, run))
+
+    # 부분 구간까지 후보로 냈으므로 같은 혼용이 '만성 골수성'·'만성 골수성 백혈병'
+    # 처럼 여러 길이로 걸린다. 가장 긴 것만 남긴다 — 짧은 쪽은 같은 지점을 가리키는
+    # 중복이고, 사람이 봐야 할 단위는 용어 전체다.
+    conflicting = {key for key, found in occurrences.items() if len({run for _, run in found}) >= 2}
+    maximal = {key for key in conflicting if not any(key != other and key in other for other in conflicting)}
+
+    for key in sorted(maximal):
+        found = occurrences[key]
+        variants = Counter(run for _, run in found)
+        # 통일 후보 우선순위: 거리 이름 규칙을 어기지 않는 표기 -> 더 자주 쓴
+        # 표기 -> (동률이면) 공백이 많은 원칙 형태 -> 사전순.
+        preferred = sorted(
+            variants,
+            key=lambda v: (_violates_street_name_rule(v), -variants[v], -v.count(" "), v),
+        )[0]
+        yield key, found, variants, preferred
+
+
 def check_term_spacing_consistency(
     entries: list[SubtitleEntry], skip_indices: set[int] | None = None
 ) -> list[FlagItem]:
@@ -162,31 +231,9 @@ def check_term_spacing_consistency(
     같으면 원칙(더 많이 띄어 쓴 형태)을 제안한다 — 제49·50항의 기본이 띄어
     쓰기이므로, 근거 없이 허용 쪽으로 몰지 않기 위함이다.
     """
-    skip_indices = skip_indices or set()
-    occurrences: dict[str, list[tuple[SubtitleEntry, str]]] = {}
-    for entry in entries:
-        if entry.index in skip_indices:
-            continue  # 사투리 protect 화자: 어떤 플래그도 남기지 않는다
-        for run in _term_runs(entry.text):
-            occurrences.setdefault(re.sub(r"\s", "", run), []).append((entry, run))
-
-    # 부분 구간까지 후보로 냈으므로 같은 혼용이 '만성 골수성'·'만성 골수성 백혈병'
-    # 처럼 여러 길이로 걸린다. 가장 긴 것만 남긴다 — 짧은 쪽은 같은 지점을 가리키는
-    # 중복 플래그이고, 사람이 봐야 할 단위는 용어 전체다.
-    conflicting = {key for key, found in occurrences.items() if len({run for _, run in found}) >= 2}
-    maximal = {key for key in conflicting if not any(key != other and key in other for other in conflicting)}
-
     flags = []
-    for key in sorted(maximal):
-        found = occurrences[key]
-        variants = Counter(run for _, run in found)
-        # 통일 후보 우선순위: 거리 이름 규칙을 어기지 않는 표기 -> 더 자주 쓴
-        # 표기 -> (동률이면) 공백이 많은 원칙 형태 -> 사전순.
-        preferred = sorted(
-            variants,
-            key=lambda v: (_violates_street_name_rule(v), -variants[v], -v.count(" "), v),
-        )[0]
-        summary = ", ".join(f"'{v}'({variants[v]}회)" for v in sorted(variants, key=lambda v: -variants[v]))
+    for _key, found, variants, preferred in _mixed_term_variants(entries, skip_indices):
+        summary = _variant_summary(variants)
         for entry, run in found:
             if run == preferred:
                 continue
@@ -218,6 +265,17 @@ def check_aux_verb_consistency(
     판정: 같은 (본용언 어간 + 보조 용언) 짝이 어떤 줄에서는 붙어 있고 다른 줄에서는 띄어
     있는지 본다. 통일 후보는 문서에서 더 자주 쓴 쪽으로 제안하고, 횟수가 같으면 원칙(띄어
     씀)을 제안한다 — 제47항의 기본이 원칙이기 때문이다.
+
+    **대상은 제47항이 붙임을 허용한 구성뿐이다**(2026-08-05 사용자 지적으로 바로잡음).
+    전에는 보조 용언(VX) 태그만 보고 셌더니 `-지 않다`가 걸려 "'않' 띄어쓰기가 섞였다"는
+    플래그가 나갔다 — **`-지 않다`는 붙임 허용 대상이 아니라 언제나 띄어 쓴다.** 제47항의
+    붙임 허용은 `본용언 + -아/-어 + 보조 용언`과 `관형사형 + 의존명사 + 하다/싶다`
+    두 구성에만 적용된다. 규정이 인정하지 않는 표기를 "다른 선택지"로 내놓은 것이라
+    문구가 아니라 판정 자체가 틀렸다.
+
+    붙어 있는 것으로 세지 않는 것이 하나 더 있다 — `그렇잖아`·`괜찮다`처럼 어미와
+    보조 용언이 **한 음절로 줄어든** 형태다. 표면에 공백이 없을 뿐 띄어 쓸 자리가
+    애초에 없다(kiwi가 이 자리를 겹치는 위치로 돌려준다).
     """
     skip_indices = skip_indices or set()
     joined: Counter = Counter()
@@ -228,11 +286,19 @@ def check_aux_verb_consistency(
         if entry.index in skip_indices:
             continue
         tokens = _kiwi.tokenize(entry.text)
-        for i in range(1, len(tokens)):
-            aux, stem = tokens[i], tokens[i - 1]
-            if aux.tag != "VX":
+        for i in range(2, len(tokens)):
+            aux, ending, stem = tokens[i], tokens[i - 1], tokens[i - 2]
+            if aux.tag != "VX" or aux.lemma in _ALWAYS_ATTACHED_AUX_LEMMAS:
                 continue
-            gap = entry.text[stem.start + stem.len : aux.start]
+            # 제47항 붙임 허용 구성인지 — 본용언(VV/VA) + '-아/-어/-여'(EC).
+            if not (stem.tag.startswith("VV") or stem.tag.startswith("VA")):
+                continue
+            if ending.tag != "EC" or ending.form not in _AUX_EC_FORMS:
+                continue
+            ending_end = ending.start + ending.len
+            if aux.start < ending_end:
+                continue  # 축약형('그렇잖아') — 띄어 쓸 자리가 없다
+            gap = entry.text[ending_end : aux.start]
             if gap not in ("", " "):
                 continue
             key = f"{stem.form}+{aux.form}"
