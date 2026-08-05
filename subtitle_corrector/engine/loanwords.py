@@ -6,6 +6,7 @@ from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
 from .kiwi_adapter import _has_reading
 from .lexicon import is_hada_stem, _tensified_headword_variant
+from .text_utils import _josa
 
 def correct_loanwords(
     text: str,
@@ -100,7 +101,7 @@ def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
             line_index=index,
             original_text=text,
             reason=(
-                f"'{t.form}'은 구어형 '{variant}'(사전 표제어)일 수도, 외래어 표기 "
+                f"'{t.form}'{_josa(t.form, '은')} 구어형 '{variant}'(사전 표제어)일 수도, 외래어 표기 "
                 f"'{fix}'일 수도 있습니다 — 말투를 살릴지 여부를 사람이 판단하세요."
             ),
             suggested_fix=text[: t.start] + variant + text[t.start + t.len :],

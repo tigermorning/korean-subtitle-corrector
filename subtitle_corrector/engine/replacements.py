@@ -10,7 +10,7 @@ from ..dictionary import (
     word_exists,
 )
 from ..report import FlagItem
-from .text_utils import _has_batchim
+from .text_utils import _has_batchim, _josa
 from .kiwi_adapter import _kiwi
 from .lexicon import _tensified_headword_variant, is_hada_stem
 
@@ -352,7 +352,8 @@ def check_contracted_form(index: int, text: str) -> FlagItem | None:
                 original_text=text,
                 suggested_fix=suggested,
                 reason=(
-                    f"'{short}'는 표준국어대사전에 \"'{full}'의 준말\"로 등재된 표준 표기입니다. "
+                    f"'{short}'{_josa(short, '는')} 표준국어대사전에 \"'{full}'의 준말\"로 등재된 "
+                    "표준 표기입니다. "
                     f"둘 다 맞으므로 자동으로 바꾸지 않았습니다 — 본말로 펴려면 '{full}'입니다."
                 ),
             )

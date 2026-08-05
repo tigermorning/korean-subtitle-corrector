@@ -8,6 +8,7 @@ from ..dictionary import word_exists
 from ..parsers import SubtitleEntry
 from ..report import FlagItem
 from .kiwi_adapter import _TERM_RUN_TAGS, _kiwi
+from .text_utils import _josa
 
 # 한 덩어리 용어로 볼 수 있는 길이(공백 제외). 짧은 조합은 우연히 같은 글자열이
 # 되는 경우가 많고('한 번'/'한번'처럼 다른 규칙이 다루는 것 포함), 지나치게 긴
@@ -119,9 +120,10 @@ def check_street_name_spacing(index: int, text: str) -> FlagItem | None:
         if suffix.form == "가" and not word_exists(joined):
             continue
         evidence = (
-            f"'{joined}'는 사전 표제어입니다."
+            f"'{joined}'{_josa(joined, '는')} 사전 표제어입니다."
             if word_exists(joined)
-            else f"'{joined}'는 사전에 없지만 도로명은 대부분 사전에 오르지 않습니다"
+            else f"'{joined}'{_josa(joined, '는')} 사전에 없지만 도로명은 대부분 사전에 "
+            "오르지 않습니다"
             "(세종대로·테헤란로·강남대로 모두 미등재)."
         )
         return FlagItem(
@@ -129,7 +131,7 @@ def check_street_name_spacing(index: int, text: str) -> FlagItem | None:
             original_text=text,
             suggested_fix=text[: prev.start] + joined + text[suffix.start + suffix.len :],
             reason=(
-                f"'{spaced}'가 도로명이면 '{joined}'처럼 붙여 씁니다(도로명은 이름과 "
+                f"'{spaced}'{_josa(spaced, '가')} 도로명이면 '{joined}'처럼 붙여 씁니다(도로명은 이름과 "
                 f"구분 기준을 붙여 적습니다). {evidence} 다만 일반명사 '대로'(大路, "
                 "크고 넓은 길)로 쓴 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
             ),

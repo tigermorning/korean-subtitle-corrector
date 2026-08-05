@@ -7,6 +7,7 @@ from .text_utils import (
     _bracket_spans,
     _force_span,
     _inside_any_span,
+    _josa,
     _localized_change,
     _surface_span,
 )
@@ -342,7 +343,8 @@ def check_compound_merge_candidate(index: int, text: str) -> FlagItem | None:
             original_text=text,
             suggested_fix=suggested,
             reason=(
-                f"'{combined}'이 사전 표제어이므로 '{original}'을 붙여 쓸 수 있습니다. "
+                f"'{combined}'{_josa(combined, '이')} 사전 표제어이므로 "
+                f"'{original}'{_josa(original, '을')} 붙여 쓸 수 있습니다. "
                 "다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 "
                 "바꾸지 않았습니다 — 문맥 확인이 필요합니다."
             ),
@@ -621,7 +623,8 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
                 if joining and lead_gap.strip() == "" and lead_gap != "":
                     span = _surface_span(text, lead_word_start, nxt.start + nxt.len)
                     blocked.append(
-                        f"'{span}': '{cur.form}{nxt_citation}'가 사전에 없어 붙임 근거가 "
+                        f"'{span}': '{cur.form}{nxt_citation}'"
+                        f"{_josa(nxt_citation or cur.form, '가')} 사전에 없어 붙임 근거가 "
                         "없음 -> 허용 기준에서도 띄어 씀"
                     )
                 continue

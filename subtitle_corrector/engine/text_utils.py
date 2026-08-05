@@ -69,6 +69,33 @@ def _has_batchim(syllable: str) -> bool:
     return (code - 0xAC00) % 28 != 0
 
 
+# 받침 유무로 갈리는 조사 이형태. 어느 쪽을 적어 넣든 같은 짝을 가리킨다.
+_JOSA_ALLOMORPHS = {
+    "이": ("이", "가"),
+    "가": ("이", "가"),
+    "은": ("은", "는"),
+    "는": ("은", "는"),
+    "을": ("을", "를"),
+    "를": ("을", "를"),
+    "과": ("과", "와"),
+    "와": ("과", "와"),
+}
+
+
+def _josa(word: str, particle: str) -> str:
+    """word 뒤에 붙일 조사 이형태를 받침으로 고른다 — `_josa('러스', '이')` -> `'가'`.
+
+    사람이 읽는 플래그 문구에 낱말을 끼워 넣을 때 쓴다. 낱말은 원문에서 오므로
+    받침이 있을지 없을지 미리 알 수 없는데, 조사를 한쪽으로 박아 두면 "'루스'이
+    맞고"처럼 틀린 문장이 그대로 번역가에게 간다(2026-08-05 실사용 감수에서
+    발견 — 맞춤법 교정기가 내는 문구라 특히 눈에 띈다).
+
+    한글이 아닌 글자로 끝나면(로마자·숫자·괄호) 받침 없음으로 본다.
+    """
+    with_batchim, without_batchim = _JOSA_ALLOMORPHS[particle]
+    return with_batchim if _has_batchim(word[-1:]) else without_batchim
+
+
 def _force_span(suggested: str, original_span: str, other_span: str) -> str:
     """suggested 안에서 other_span(kiwi가 밀어붙이려는 형태)을 original_span
     (실제로 채택된, 정답으로 확정된 형태)으로 되돌린다."""

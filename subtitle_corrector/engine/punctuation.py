@@ -3,7 +3,7 @@
 
 from ..dictionary import word_exists
 from ..report import FlagItem
-from .text_utils import _hangul_run_bounds, _localized_change
+from .text_utils import _hangul_run_bounds, _josa, _localized_change
 from .kiwi_adapter import (
     _has_adnominal_phrase_reading,
     _has_content_word_reading,
@@ -220,7 +220,8 @@ def check_joined_interjection_spacing(index: int, text: str) -> FlagItem | None:
             original_text=text,
             reason=(
                 f"'{joined}'(기가 막히고 어이없다는 감탄사)로 쓴 것이면 붙여 써 "
-                f"'{joined_form}'이고, '{tokens[i].form}'이 '그런데/생각났는데'의 뜻이면 "
+                f"'{joined_form}'이고, '{tokens[i].form}'{_josa(tokens[i].form, '이')} "
+                f"'그런데/생각났는데'의 뜻이면 "
                 f"쉼표를 넣어 '{comma_form}'입니다. 표기만으로 갈리지 않아 문맥 확인이 "
                 "필요합니다(사전에 실려 있지 않으나 띄어 쓸 근거도 없다는 국립국어원 답변)."
             ),
@@ -257,7 +258,8 @@ def check_ambiguous_interjection_comma(index: int, text: str) -> FlagItem | None
         original_text=text,
         suggested_fix=suggested,
         reason=(
-            f"'{first.form}'이 감탄사라면 뒤에 쉼표를 넣습니다. 같은 표기가 명사·용언으로도"
+            f"'{first.form}'{_josa(first.form, '이')} 감탄사라면 뒤에 쉼표를 넣습니다. "
+            "같은 표기가 명사·용언으로도"
             " 읽혀(예: '아이 심장이'의 '아이') 자동으로 넣지 않았습니다 — 문맥 확인이"
             " 필요합니다."
         ),

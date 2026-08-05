@@ -777,3 +777,27 @@ def test_term_usage_headword_blocks_person_name_suggestion():
     assert any(f.suggested_fix == "스노 기자가 왔다" for f in flags)
     # 일반 용어 자동 교정도 그대로다.
     assert _run("저는 초코렛을 좋아해요")[0] == "저는 초콜릿을 좋아해요"
+
+
+# --- 2026-08-05 원어 입력칸 실사용 감수(§68) ---
+
+def test_no_flag_when_another_rule_already_fixed_the_spelling():
+    """제안이 원문과 똑같은 플래그를 내보내지 않는다.
+
+    `correct_loanwords()`는 고유명사 읽기가 있으면 자동 반영하지 않고 제안만 남기는데
+    (`러스` 사고), 뒤에 오는 `correct_nonstandard_terms()`가 같은 자리를 자동으로
+    고친다. 그러면 이 플래그의 제안이 원문과 글자 하나 다르지 않아 번역가는 무엇을
+    확인하라는 것인지 알 수 없다."""
+    out, flags = _run("앰블런스 소리 들려? 정문 쪽이야")
+    assert out == "앰뷸런스 소리 들려? 정문 쪽이야"
+    assert not [f for f in flags if f.suggested_fix == f.original_text]
+
+
+def test_flag_wording_picks_the_right_particle_allomorph():
+    """받침 없는 낱말 뒤에 '이'를 박아 두어 "'루스'이 맞고"가 나갔다 — 맞춤법
+    교정기가 내는 문구라 특히 눈에 띈다."""
+    _out, flags = _run("러스, 자료실 열쇠 어디 있어?")
+    reason = next(f.reason for f in flags if f.source_lookup_token == "러스")
+    assert "'루스'가 맞고" in reason
+    assert "'러스'가 맞을 수 있습니다" in reason
+    assert "'루스'이" not in reason and "'러스'이" not in reason

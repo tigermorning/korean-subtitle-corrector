@@ -181,7 +181,44 @@ def _source_pieces(srclang_mark: str) -> list[str]:
     return [p for p in _SOURCE_SPLIT.split(srclang_mark or "") if p]
 
 
-def _segment_for_source_piece(source: str, pieces: list[str], korean: str, token: str) -> str:
+def _source_groups(srclang: str) -> list[str]:
+    """원어를 한글 표기와 **같은 순서로** 놓은 덩어리 목록으로 만든다.
+
+    kornorms의 한글 인명은 언제나 `성, 이름` 순이다(`켈리, 루스 마리아`). 원어 쪽은
+    두 가지로 들어온다.
+
+        Ruth, Babe          쉼표가 있다 -> 이미 `성, 이름` 순이라 그대로 짝지으면 된다
+        Ruth Maria Kelly    쉼표가 없다 -> `이름 … 성` 순이라 **뒤집혀 있다**
+
+    뒤집힌 쪽을 그대로 자리로 맞추면 조각이 통째로 어긋난다 — `Ruth Kelly` /
+    `켈리, 루스`에서 `Ruth`가 첫째라는 이유로 `켈리`가 답으로 나왔다. 자막의 `러스`를
+    그 제안으로 반영하면 **다른 사람 이름**이 대사에 박힌다(2026-08-05 원어 입력칸
+    실사용 감수에서 발견).
+    """
+    if "," in srclang:
+        return [g.strip() for g in srclang.split(",") if g.strip()]
+    words = [w for w in _SOURCE_SPLIT.split(srclang.strip()) if w]
+    if len(words) < 2:
+        return [srclang.strip()] if srclang.strip() else []
+    return [words[-1], " ".join(words[:-1])]  # 성, 이름
+
+
+def _align_within_group(source: str, group: str, korean_part: str) -> str:
+    """덩어리 안에서 한 번 더 자리를 맞춘다(`Ruth Maria` / `루스 마리아` -> `루스`).
+
+    이름이 여러 낱말이면 덩어리 전체를 돌려줄 수 없다 — 자막에 쓰인 것은 그중 한
+    낱말뿐인데 `루스 마리아`로 갈아 끼우면 없던 낱말이 붙는다.
+    """
+    group_pieces = [p for p in _SOURCE_SPLIT.split(group) if p]
+    korean_words = korean_part.split()
+    if len(group_pieces) == len(korean_words) > 1:
+        lowered = [p.lower() for p in group_pieces]
+        if source.lower() in lowered:
+            return korean_words[lowered.index(source.lower())]
+    return korean_part
+
+
+def _segment_for_source_piece(source: str, srclang: str, korean: str, token: str) -> str:
     """입력한 원어 조각에 대응하는 한글 조각을 고른다.
 
     **자리로 고른다** — 원어와 한글이 같은 순서로 나열되기 때문이다
@@ -189,12 +226,18 @@ def _segment_for_source_piece(source: str, pieces: list[str], korean: str, token
     표기 유사도로 고르면 엉뚱한 조각이 뽑힌다: `러스`와 가장 비슷한 것은 `드라이푸스`라
     성(姓)이 답으로 나온다(2026-08-04 로컬 서버 확인).
 
-    자리로 맞출 수 없으면(조각 수가 다르거나 원어에 그 조각이 없으면) 기존
+    자리를 맞추기 전에 `_source_groups()`로 **원어를 한글과 같은 순서로 돌려놓는다** —
+    쉼표 없는 원어(`Ruth Kelly`)는 한글(`켈리, 루스`)과 순서가 반대다.
+
+    자리로 맞출 수 없으면(덩어리 수가 다르거나 원어에 그 조각이 없으면) 기존
     `_closest_segment()`로 물러난다."""
     parts = [p.strip() for p in korean.split(",") if p.strip()]
-    lowered = [p.lower() for p in pieces]
-    if len(parts) == len(pieces) and source.lower() in lowered:
-        return parts[lowered.index(source.lower())]
+    groups = _source_groups(srclang)
+    if len(parts) == len(groups):
+        for i, group in enumerate(groups):
+            group_pieces = [p.lower() for p in _SOURCE_SPLIT.split(group) if p]
+            if source.lower() in group_pieces:
+                return _align_within_group(source, group, parts[i])
     return _closest_segment(token, korean) if token else korean
 
 
@@ -249,13 +292,27 @@ def lookup_by_source(source: str, token: str = "") -> list[dict]:
             {
                 "source": srclang,
                 "korean": korean,
-                "segment": _segment_for_source_piece(source, pieces, korean, token),
+                "segment": _segment_for_source_piece(source, srclang, korean, token),
                 "category": item.get("foreign_gubun") or "",
                 "wrong_marks": wrong,
                 "match": match,
             }
         )
-    return ranked["확정"] + ranked["일치"] + ranked["참고"]
+    # 같은 등급 안에서는 **자막에 쓰인 그 표기를 오표기로 명시한 용례**를 앞에 놓는다.
+    # 그 한 줄이 "당신이 적은 표기는 틀렸고 이것이 맞다"를 직접 말해 주는 근거이기
+    # 때문이다. `Ruth`로 조회하면 23건이 오는데, `러스(X)`를 명시한 `Ruth, Babe ->
+    # 루스`가 셋째에 묻혀 있었다(2026-08-05 실사용 감수). 나머지 순서는 API 순서
+    # 그대로다(`sorted`는 안정 정렬).
+    def _marks_token_wrong(row: dict) -> bool:
+        if not token:
+            return False
+        return any(w.strip().removesuffix("(X)").strip() == token for w in row["wrong_marks"])
+
+    return [
+        row
+        for grade in ("확정", "일치", "참고")
+        for row in sorted(ranked[grade], key=lambda r: not _marks_token_wrong(r))
+    ]
 
 
 def loanword_fix(token: str) -> tuple[str | None, bool, str | None]:

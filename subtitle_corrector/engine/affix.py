@@ -3,7 +3,7 @@
 
 from ..dictionary import only_sino_korean_headword, sino_korean_origin, word_exists
 from ..report import FlagItem
-from .text_utils import _localized_change
+from .text_utils import _josa, _localized_change
 from .kiwi_adapter import _kiwi
 from .lexicon import _is_action_noun
 
@@ -223,7 +223,8 @@ def check_honorific_dependent_noun(index: int, text: str) -> FlagItem | None:
             original_text=text,
             suggested_fix=suggested,
             reason=(
-                f"'{prev.form}{honorific.form}'이 그 사람을 높여 부르는 말이면 의존명사라 "
+                f"'{prev.form}{honorific.form}'{_josa(honorific.form, '이')} 그 사람을 높여 부르는 "
+                f"말이면 의존명사라 "
                 f"'{prev.form} {honorific.form}'처럼 띄어 씁니다. 성씨 자체나 가문을 뜻하면"
                 f"(김해 김씨) 접미사라 붙여 쓰므로 문맥 확인이 필요합니다."
             ),
@@ -269,7 +270,8 @@ def check_adnominal_noun_verb_split(index: int, text: str) -> FlagItem | None:
             original_text=text,
             suggested_fix=suggested,
             reason=(
-                f"관형어 '{adnom_form}'이 '{noun.form}'을 꾸미면 그 뒤의 '하다'는 동사라 "
+                f"관형어 '{adnom_form}'{_josa(adnom_form, '이')} '{noun.form}'{_josa(noun.form, '을')} "
+                f"꾸미면 그 뒤의 '하다'는 동사라 "
                 f"'{noun.form} 하…'처럼 띄어 씁니다. 다만 '{adnom_form}{noun.form}하다'가 "
                 f"사전에 한 낱말로 오른 고정 표현이면(두말하다·한잔하다·딴짓하다) 붙여 쓴 "
                 f"표기가 맞으므로, 어느 쪽인지 확인한 뒤 반영하세요."
@@ -407,7 +409,8 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
                 line_index=index,
                 original_text=text,
                 reason=(
-                    f"'{quoted}'는 표준 표기가 아닙니다 — 접두사는 '처-'이므로 '쳐'로 적은 "
+                    f"'{quoted}'{_josa(quoted, '는')} 표준 표기가 아닙니다 — 접두사는 '처-'이므로 "
+                    "'쳐'로 적은 "
                     "이 표기는 띄어 쓰든 붙여 쓰든 맞지 않습니다. 그렇다고 붙여 쓴 "
                     f"'{joined}'로 바꿀 수도 없습니다: 그 표제어는 한자어 "
                     f"{origin or '다른 낱말'}(어떤 형편이나 처지에 놓이다)로 뜻이 전혀 "

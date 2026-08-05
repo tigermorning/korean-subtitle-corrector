@@ -10,7 +10,7 @@ from ..dictionary import (
     word_exists,
 )
 from ..report import FlagItem
-from .text_utils import _bracket_spans, _inside_any_span
+from .text_utils import _bracket_spans, _inside_any_span, _josa
 from .kiwi_adapter import _SPELLING_CHECK_TAGS, _kiwi
 from .lexicon import (
     _covered_by_larger_dictionary_unit,
@@ -105,7 +105,10 @@ def check_spelling(index: int, text: str) -> FlagItem | None:
         variants = _dictionary_backed_variants(word)
         if not variants:
             continue
-        hints.append(f"'{word}'는 '{', '.join(variants)}'일 가능성이 있습니다(사전 근거 있음)")
+        hints.append(
+            f"'{word}'{_josa(word, '는')} '{', '.join(variants)}'일 가능성이 있습니다"
+            "(사전 근거 있음)"
+        )
         if suggested_fix is None and len(variants) == 1:
             suggested_fix = text.replace(word, variants[0], 1)
 

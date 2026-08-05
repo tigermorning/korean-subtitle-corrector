@@ -65,7 +65,7 @@ from .consistency import (
     check_term_spacing_consistency,
 )
 from .spacing_guards import check_spacing
-from .text_utils import _has_batchim
+from .text_utils import _josa
 from .edit_guard import verify_edit
 
 def _headword_evidence(token: str) -> str:
@@ -77,11 +77,9 @@ def _headword_evidence(token: str) -> str:
     """
     headword, origin = standard_headword_example(token)
     if not headword:
-        particle = "을" if _has_batchim(token[-1]) else "를"
-        return f"'{token}'{particle} 쓰는 표제어가 등재돼 있습니다(전문 용어·복합 명칭)"
+        return f"'{token}'{_josa(token, '을')} 쓰는 표제어가 등재돼 있습니다(전문 용어·복합 명칭)"
     origin_note = f"(원어 {origin})" if origin else ""
-    particle = "을" if _has_batchim(token[-1]) else "를"
-    return f"'{headword}'{origin_note}처럼 '{token}'{particle} 쓰는 표제어가 등재돼 있습니다"
+    return f"'{headword}'{origin_note}처럼 '{token}'{_josa(token, '을')} 쓰는 표제어가 등재돼 있습니다"
 
 
 def _correct_line_with_markers(
@@ -292,6 +290,15 @@ def _correct_line(
 
     for fix, context in proper_noun_fixes:
         original_token, _, replacement_token = fix.partition(" -> ")
+        # 다른 규칙이 이미 그 표기를 고쳤으면 물을 것이 없다. `correct_loanwords()`는
+        # 고유명사 읽기가 있으면 자동 반영하지 않고 제안만 남기는데(§57 `러스` 사고),
+        # 뒤에 오는 `correct_nonstandard_terms()`는 그 보호가 없어 같은 자리를 자동으로
+        # 고친다 — `앰블런스`가 그랬다. 그러면 이 플래그의 제안이 **원문과 글자 하나
+        # 다르지 않게** 되어, 번역가는 무엇을 확인하라는 것인지 알 수 없는 플래그를
+        # 받는다(2026-08-05 원어 입력칸 감수에서 발견). 자동 교정 로그에는 이미
+        # '앰블런스 -> 앰뷸런스'가 남아 있으므로 알림이 사라지는 것도 아니다.
+        if original_token not in corrected_text:
+            continue
         # **원문 표기가 다른 표제어의 구성 요소로 등재돼 있으면 대안을 제시하지 않는다.**
         # `쉴러병`을 `실러병`으로 바꾸자고 제안했는데(kornorms 인명 용례 Schiller ->
         # 실러, 쉴러(X)), 우리말샘에는 `쉴러^검사`·`쉴러^플랜`·`한트·쉴러·크리스찬-병`이
@@ -309,7 +316,7 @@ def _correct_line(
                     line_index=index,
                     original_text=corrected_text,
                     reason=(
-                        f"외래어 표기 확인 필요 — **'{original_token}'{'과' if _has_batchim(original_token[-1]) else '와'} "
+                        f"외래어 표기 확인 필요 — **'{original_token}'{_josa(original_token, '과')} "
                         f"'{replacement_token}' 둘 다 근거가 있습니다.** 인명·지명 용례는 "
                         f"'{replacement_token}'이고(참고: {context or '국립국어원 확정 표기'}), "
                         f"우리말샘에는 {_headword_evidence(original_token)}. "
@@ -335,8 +342,10 @@ def _correct_line(
                     # (§57, 7강 123번). 번역가가 무엇을 확인해야 하는지 문구가 직접
                     # 말해 주지 않으면 이 플래그로는 판단할 수 없다(`docs/BACKLOG.md` 28번).
                     f"**원어가 무엇인지 확인하세요** — 등재된 용례의 원어와 같은 대상이면 "
-                    f"'{replacement_token}'이 맞고, 원어가 다른 이름이면(Ruth ↔ Russ처럼) "
-                    f"'{original_token}'이 맞을 수 있습니다. 작품 제목처럼 고유하게 고정된 "
+                    f"'{replacement_token}'{_josa(replacement_token, '이')} "
+                    f"맞고, 원어가 다른 이름이면(Ruth ↔ Russ처럼) "
+                    f"'{original_token}'{_josa(original_token, '이')} "
+                    "맞을 수 있습니다. 작품 제목처럼 고유하게 고정된 "
                     "표기일 수도 있어 자동 반영하지 않습니다. 아래 칸에 원어를 넣으면 "
                     "국립국어원 용례로 확정 표기를 찾아 줍니다"
                 ),

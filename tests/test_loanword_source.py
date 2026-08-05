@@ -72,3 +72,28 @@ def test_segment_follows_the_position_of_the_source_piece():
     # 조각이 하나뿐인 항목은 그대로다.
     babe = next(r for r in rows if r["source"] == "Ruth, Babe")
     assert babe["segment"] == "루스"
+
+def test_segment_handles_reversed_western_name_order():
+    """쉼표 없는 원어(`Ruth Kelly`)는 한글(`켈리, 루스`)과 순서가 반대다 — 자리로
+    맞추기 전에 `성, 이름` 순으로 돌려놓아야 한다.
+
+    돌려놓지 않으면 `Ruth`가 첫째라는 이유로 `켈리`가 답이 되고, 자막의 `러스`를
+    그 제안으로 반영하면 **다른 사람 이름**이 대사에 박힌다(2026-08-05 실사용 감수).
+    """
+    rows = lookup_by_source("Ruth", token="러스")
+    by_source = {r["source"].strip(): r for r in rows}
+    assert by_source["Ruth Kelly"]["segment"] == "루스"
+    assert by_source["Babe Ruth"]["segment"] == "루스"
+    # 이름이 여러 낱말이면 덩어리 안에서 한 번 더 자리를 맞춘다('루스 마리아' -> '루스').
+    assert by_source["Ruth Maria Kelly"]["segment"] == "루스"
+    # 괄호 별칭이 붙은 항목도 낱말 하나로 좁혀진다.
+    assert by_source["Benedict, Ruth (Fulton)"]["segment"] == "루스"
+
+
+def test_entry_marking_the_token_as_wrong_comes_first():
+    """자막에 쓰인 표기를 오표기로 명시한 용례가 가장 강한 근거다 — 같은 등급
+    안에서 맨 앞에 놓는다. `Ruth`로 조회하면 23건이 오는데 `러스(X)`를 명시한
+    `Ruth, Babe`가 셋째에 묻혀 있었다(2026-08-05 실사용 감수)."""
+    rows = lookup_by_source("Ruth", token="러스")
+    assert rows[0]["source"] == "Ruth, Babe"
+    assert "러스(X)" in rows[0]["wrong_marks"]
