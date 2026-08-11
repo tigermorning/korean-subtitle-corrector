@@ -44,7 +44,7 @@
 >
 > 반영한 4건: ① `시키다`·`받다`·`당하다` 자동 붙임을 제안으로 강등(`술 시켜요` -> `술시켜요` 사고, 근거가 간접적이라 동형이의어에 뚫린다) ② 사전에 없는 복합어의 조각은 외래어 자동 교정 금지(`매직블럭` -> `매직블록` 상표 훼손, `_inside_unknown_compound`) ③ 제49·50항 혼용 통일을 **양방향**으로(`unify_term_spacing(mode)`, 허용 기준에서는 `join_term_phrases`가 사전이 캐럿으로 확인해 준 전문 용어 명사구도 붙인다) ④ 띄어쓰기 기준에서 `원문 유지`(`keep`) 제거 — 기준을 고르지 않는다는 것은 혼용을 남기겠다는 뜻이라 선택지가 될 수 없다.
 >
-> **다음 작업은 자막 편집기(별도 프로젝트)다.** 교정기는 일반 사용자용 범용 도구로 유지하고 자막 도메인 지식은 편집기가 갖는다. 경계 판정법은 "이 규칙을 이메일 원고에 적용해도 말이 되는가". 조사 자료는 `docs/SUBTITLE_GUIDE_SDH.md`, `docs/SUBTITLE_GUIDE_TRANSLATION.md`, `docs/SUBTITLEEDIT_ARCHITECTURE_ANALYSIS.md`, `docs/SUBTITLE_EDITOR_PROJECT_BRIEF.md`. **교정기에 자막 기능을 더 넣지 않는다** — 이미 들어와 있는 `engine/subtitle_rules.py`·`formats.py`·`api.py`의 `get_speakers()`는 이전 대상으로 표시해 두었다.
+> **다음 작업은 자막 편집기(별도 프로젝트)다.** 교정기는 일반 사용자용 범용 도구로 유지하고 자막 도메인 지식은 편집기가 갖는다. 경계 판정법은 "이 규칙을 이메일 원고에 적용해도 말이 되는가". 조사 자료는 **별도 저장소 `subtitle-editor/`로 이관했다** — 규정 근거 문서는 `rules/sources/`(SDH·번역 자막 가이드), 설계 문서는 `docs/`(SubtitleEdit 코드 분석·프로젝트 브리프). 넷플릭스 한국어 규정은 `rules/netflix/`에 YAML 프로파일로 들어갔고, SDH와 번역이 섞이지 않도록 `kind` 필수 + 전용 키 검사로 로더가 막는다. **교정기에 자막 기능을 더 넣지 않는다** — 이미 들어와 있는 `engine/subtitle_rules.py`·`formats.py`·`api.py`의 `get_speakers()`는 이전 대상으로 표시해 두었다.
 >
 > ---
 >
