@@ -148,11 +148,14 @@ class TestAuxVerbSpacingAllowanceMode:
 
         화면 2단계의 '띄어쓰기 기준'이 원칙으로 미리 선택돼 있으므로, 값이 오지 않았을
         때도 같은 결과가 나와야 한다(2026-08-04 사용자 지정: "사용자가 2단계에서 지정한
-        대로 해야 한다"). 'keep'(원문 유지)은 명시적으로 고를 때만 적용한다."""
+        대로 해야 한다").
+
+        **선택지는 원칙·허용 둘뿐이다**(2026-08-05 사용자 결정) — 없어진 'keep'은
+        원칙으로 흡수해, 옛 요청이나 저장된 설정이 오류가 되지 않게 한다."""
         assert normalize_spacing_mode("allowance") == "allowance"
         assert normalize_spacing_mode("ALLOWANCE") == "allowance"
         assert normalize_spacing_mode("principle") == "principle"
-        assert normalize_spacing_mode("keep") == "keep"
+        assert normalize_spacing_mode("keep") == "principle"
         for bad in ("", None, "허용", "joined", "principal"):
             assert normalize_spacing_mode(bad) == "principle"
 
@@ -272,13 +275,20 @@ class TestTermSpacingConsistency:
         assert self._reasons(flags) == []
         assert any("제49·50항 통일" in note.message for note in log)
 
-    def test_allowance_mode_still_asks(self):
-        """'허용'은 붙임 경계를 새로 정해야 하므로 사람에게 묻는다."""
-        _, flags, _ = correct_entries(
+    def test_allowance_unifies_toward_the_joined_variant(self):
+        """'허용'도 2단계 선택대로 통일한다(2026-08-05 사용자 지적).
+
+        혼용이라는 말 자체가 붙여 쓴 표기도 문서에 있다는 뜻이라, 붙이는 쪽도
+        경계를 추측할 일이 없다."""
+        corrected, flags, _ = correct_entries(
             self._entries("만성 골수성 백혈병 진단", "만성골수성백혈병 치료"),
             spacing_mode="allowance",
         )
-        assert len(self._reasons(flags)) == 1
+        assert [e.text for e in corrected] == [
+            "만성골수성백혈병 진단",
+            "만성골수성백혈병 치료",
+        ]
+        assert self._reasons(flags) == []
 
 
 class TestApplyReplacementsTokenBoundary:

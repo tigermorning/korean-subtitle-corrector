@@ -140,34 +140,50 @@ def check_street_name_spacing(index: int, text: str) -> FlagItem | None:
     return None
 
 
-def unify_term_spacing_by_principle(
-    entries: list[SubtitleEntry], skip_indices: set[int] | None = None
+def unify_term_spacing(
+    entries: list[SubtitleEntry], mode: str, skip_indices: set[int] | None = None
 ) -> list[tuple[int, str, str, str]]:
-    """제49·50항 혼용을 **원칙(띄어 쓰기)** 쪽으로 자동 통일할 목록을 만든다.
+    """제49·50항 혼용을 2단계에서 고른 기준(`원칙`/`허용`)으로 통일할 목록을 만든다.
 
-    2단계에서 사용자가 띄어쓰기 기준을 '원칙'으로 골랐으면 이 자리는 물을 것이 아니라
-    적용할 것이다(2026-08-05 사용자 지적). `무게 중심`(2회)과 `무게중심`(2회)이 섞여
-    있는데 기준이 이미 정해져 있으면 `무게 중심`으로 맞추면 된다.
+    사용자가 띄어쓰기 기준을 이미 골랐으면 이 자리는 물을 것이 아니라 적용할 것이다
+    (2026-08-05 사용자 지적). `무게 중심`(2회)과 `무게중심`(2회)이 섞여 있을 때
+    원칙이면 `무게 중심`으로, 허용이면 `무게중심`으로 맞춘다.
 
-    **띄우는 방향만 자동으로 한다.** 원래 자동 통일을 미뤄 둔 이유는 "붙이려면 어디까지가
-    한 용어인지 알아야 하는데 그 경계가 사전에 없다"는 것이었다. 그 사정은 붙이는
-    방향에만 해당한다 — 띄우는 쪽의 목표 표기는 **문서가 이미 쓰고 있는 변이형**이라
-    경계를 추측할 일이 없다. 반대로 '허용' 기준은 붙임 경계를 새로 정해야 하므로
-    지금도 플래그로 남긴다(`check_term_spacing_consistency`).
+    **두 방향 다 목표 표기가 문서에 이미 있는 변이형이다.** 자동 통일을 미뤄 두었던
+    이유는 "붙이려면 어디까지가 한 용어인지 알아야 하는데 그 경계가 사전에 없다"는
+    것이었는데, 혼용이라는 말 자체가 **붙여 쓴 표기도 문서에 있다**는 뜻이므로 이
+    자리에서는 경계를 추측할 일이 없다(처음에는 띄우는 방향만 자동으로 했다가
+    2026-08-05 사용자 지적으로 바로잡았다 — "붙임도 허용이므로 2단계 지정에 따라
+    달라질 수 있다").
+
+    자동으로 하지 않는 두 자리:
+    - **원칙인데 띄어 쓴 변이형이 없을 때**, **허용인데 완전히 붙인 변이형이 없을 때** —
+      목표 표기를 새로 만들어야 하므로 손대지 않는다. 특히 허용 쪽에서 `만성골수성
+      백혈병`처럼 **부분만 붙인** 변이형밖에 없으면 그대로 두는 것이 맞다: 제50항의
+      전문 용어 붙임은 전부 붙이거나 전부 띄어야 하고, 부분 붙임을 정답으로 밀면
+      규정에 어긋나는 표기를 문서 전체에 퍼뜨리게 된다.
+    - **도로명**(`세종 대로`) — 붙임이 원칙이라 이 규칙이 정할 자리가 아니다.
 
     반환값: `(entry.index, 원문 조각, 통일 표기, 요약)` 목록. 실제 치환은 호출부가 한다.
     """
+    if mode not in ("principle", "allowance"):
+        return []  # 알 수 없는 기준 — 원문을 건드리지 않는다
     plans = []
-    for key, found, variants, preferred in _mixed_term_variants(entries, skip_indices):
-        principle = max(variants, key=lambda v: (v.count(" "), -len(v)))
-        if principle.count(" ") == 0:
-            continue  # 띄어 쓴 변이형이 없으면 원칙 형태를 만들 수 없다(붙임 경계 추측 금지)
-        if _violates_street_name_rule(principle):
-            continue  # 도로명은 붙임이 원칙이라 이 규칙이 정할 자리가 아니다
+    for _key, found, variants, _preferred in _mixed_term_variants(entries, skip_indices):
+        if mode == "principle":
+            target = max(variants, key=lambda v: (v.count(" "), -len(v)))
+            if target.count(" ") == 0:
+                continue  # 띄어 쓴 변이형이 없다
+            if _violates_street_name_rule(target):
+                continue
+        else:
+            target = min(variants, key=lambda v: (v.count(" "), len(v)))
+            if target.count(" ") != 0:
+                continue  # 완전히 붙인 변이형이 없다(부분 붙임은 제50항 위반)
         summary = _variant_summary(variants)
         for entry, run in found:
-            if run != principle:
-                plans.append((entry.index, run, principle, summary))
+            if run != target:
+                plans.append((entry.index, run, target, summary))
     return plans
 
 

@@ -14,7 +14,7 @@ from ..dictionary import (
 from ..report import FlagItem
 from .text_utils import _has_batchim, _josa
 from .kiwi_adapter import _kiwi
-from .lexicon import _tensified_headword_variant, is_hada_stem
+from .lexicon import _inside_unknown_compound, _tensified_headword_variant, is_hada_stem
 
 def check_ambiguous_particle(index: int, text: str) -> FlagItem | None:
     """행 끝에 띄어 쓴 '나'가 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
@@ -194,6 +194,12 @@ def correct_nonstandard_terms(text: str) -> tuple[str, list[str]]:
         # 부사만 새던 것이다(2026-08-03 평가셋 확대에서 g17로 드러남). 코퍼스의
         # 부사 90종을 전수 조회해 새로 바뀌는 것이 '일찌기'->'일찍이', '웬지'->'왠지'
         # 둘뿐이고 둘 다 정답임을 확인한 뒤 넓혔다.
+        # 사전에 없는 복합어의 **조각**은 고치지 않는다. `매직블럭`이 `매직`+`블럭`으로
+        # 쪼개져 `매직블록`이 됐다 — 상표 이름이 조용히 바뀐 것이다(2026-08-05 사용자
+        # 지적). 모르는 말의 일부만 규칙으로 고치는 것은 원리 1(조각 대조)이 금지한다.
+        # `correct_loanwords()`에 넣은 것과 같은 가드다.
+        if _inside_unknown_compound(text, tokens, t):
+            continue
         if t.tag not in ("NNG", "NNP", "MAG"):
             continue
         # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 규범 표기로 자동 바꾸지 않고

@@ -5,7 +5,7 @@ from ..dictionary import loanword_fix, word_exists
 from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
 from .kiwi_adapter import _has_reading
-from .lexicon import is_hada_stem, _tensified_headword_variant
+from .lexicon import _inside_unknown_compound, is_hada_stem, _tensified_headword_variant
 from .text_utils import _josa
 
 def correct_loanwords(
@@ -56,7 +56,11 @@ def correct_loanwords(
             # NNG로 태깅된다('세상에, 러스'는 NNP, 두 줄 자막 안에서는 NNG). 대안 분석에
             # 고유명사 읽기가 하나라도 있으면 고유명사로 보고 자동 반영하지 않는다
             # (2026-08-04 사용자 제공 자막 7강 123번).
-            is_proper = t.tag == "NNP" or _has_proper_noun_reading(text, t)
+            is_proper = (
+                t.tag == "NNP"
+                or _has_proper_noun_reading(text, t)
+                or _inside_unknown_compound(text, tokens, t)
+            )
             replacements.append((t.start, t.len, t.form, fix, needs_review, context, is_proper))
 
     corrected = text

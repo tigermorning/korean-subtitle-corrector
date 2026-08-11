@@ -551,6 +551,38 @@ def _honorific_of_registered_aux(candidate: str) -> str | None:
     return plain if word_exists(plain) else None
 
 
+def join_term_phrases(text: str) -> tuple[str, list[str]]:
+    """제50항 **허용** 기준: 사전이 전문 용어(명사구)로 확인해 준 구간을 붙여 쓴다.
+
+    표준국어대사전은 표제어를 두 가지로 적는다 — 합성어는 하이픈(`노천-카페`), 전문
+    용어 명사구는 캐럿(`무게^중심`). 캐럿 표기가 곧 "제50항이 말하는 전문 용어"라는
+    사전의 확인이고, 제50항은 그런 용어를 "단어별로 띄어 씀을 원칙으로 하되 붙여 쓸
+    수 있다"고 정한다. 그러니 2단계에서 **허용**을 고른 문서에서는 붙이는 것이
+    사용자가 고른 기준이다(2026-08-05 사용자 지적: "허용으로 지정하면 허용 가능한
+    것은 모두 붙이는 것으로 자동 교정되어야 맞는 것 아닌가").
+
+    **원칙 기준에서는 부르지 않는다** — 띄어 쓴 원문이 이미 원칙 형태다. 합성어
+    (하이픈)는 이 규칙의 대상이 아니다: 그건 붙임 허용이 아니라 한 낱말이라
+    `check_compound_merge_candidate`가 따로 다룬다(2026-08-04 사용자 결정으로 자동
+    병합이 아니라 확인 후보다).
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    joins = []  # (공백 시작, 공백 끝)
+    for start, boundary, end in _compound_candidate_spans(text):
+        tail = text[boundary:end].lstrip(" ")
+        if text[start:end] == text[start:boundary] + tail:
+            continue  # 이미 붙어 있다
+        if compound_status(text[start:boundary] + tail) != "명사구":
+            continue
+        joins.append((boundary, end - len(tail)))
+    if not joins:
+        return text, []
+    corrected = text
+    for gap_start, gap_end in sorted(set(joins), reverse=True):
+        corrected = corrected[:gap_start] + corrected[gap_end:]
+    return corrected, [_localized_change(text, corrected)]
+
+
 def correct_aux_verb_spacing(text: str) -> tuple[str, list[str]]:
     """제47항 원칙(띄어쓰기) 기준으로만 교정하는 얇은 래퍼.
 
@@ -567,8 +599,7 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
     """한글 맞춤법 제47항: 보조 용언은 "띄어 씀을 원칙으로 하되, 붙여 씀도
     허용"한다 — 둘 다 맞는 표기다. mode가 어느 쪽으로 통일할지 정한다.
 
-      keep(기본값)      — 아무것도 바꾸지 않는다. 원문의 선택을 그대로 둔다.
-      principle         — 붙여 쓴 형태를 띄어 쓴 형태로 바꾼다.
+      principle(기본값) — 붙여 쓴 형태를 띄어 쓴 형태로 바꾼다.
       allowance         — 띄어 쓴 형태를 붙여 쓴 형태로 바꾼다.
 
     어느 쪽이든 대상 구간(패턴 1·2)은 같고 간격을 넣느냐 빼느냐만 갈린다.
@@ -586,10 +617,7 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
 
     반환값: (수정된 텍스트, 적용된 수정 설명 목록, 붙임 불가 구간 안내 목록)
     """
-    normalized = normalize_spacing_mode(mode)
-    if normalized == "keep":
-        return text, [], []  # 원문 유지가 기본 — 원칙·허용 둘 다 규범상 맞다
-    joining = normalized == "allowance"
+    joining = normalize_spacing_mode(mode) == "allowance"
     tokens = _kiwi.tokenize(text)
     edits = set()  # {(gap_start, gap_end, replacement)}
     blocked: list[str] = []

@@ -14,14 +14,46 @@ def _attach(text):
 # --- 붙여야(동작성 명사 + 접사) ---
 
 def test_attach_action_noun_affixes():
-    assert _attach("선물 받았어") == "선물받았어"
-    assert _attach("배달 시켜서 먹자") == "배달시켜서 먹자"
-    assert _attach("전화 받다") == "전화받다"
-    assert _attach("사랑 받다") == "사랑받다"
-    assert _attach("심부름 시키다") == "심부름시키다"
-    assert _attach("무시 당하다") == "무시당하다"
+    """**'하다'와 '되다'만 자동으로 붙인다**(2026-08-05, §75).
+
+    `시키다`·`받다`·`당하다`는 붙임 근거가 간접적이라 자동 교정에서 내리고 제안으로
+    남겼다 — `술하다`(述하다)가 표제어인 탓에 `술 시켜요`가 `술시켜요`로 붙은 것이
+    계기다. 아래 `test_indirect_affixes_are_only_suggested` 참고."""
     assert _attach("음악 하는 사람") == "음악하는 사람"
     assert _attach("해체 되다") == "해체되다"  # 되다는 붙임형이 표제어일 때만
+
+
+def test_indirect_affixes_are_only_suggested():
+    """`시키다`·`받다`·`당하다`는 텍스트를 바꾸지 않고 제안만 남긴다.
+
+    근거가 **다른 낱말**(`N하다`)이라 동형이의어 하나에 뚫린다: `술하다`=述하다,
+    `밥하다`=밥을 짓다. 근거를 강화하는 쪽은 막혀 있다 — 붙임형 등재를 요구하면
+    `사랑받다`·`청소시키다`·`교육시키다`가 전부 미등재라 규칙이 죽는다(실측 18건 중
+    등재는 `무시당하다` 하나)."""
+    from subtitle_corrector.engine import check_action_noun_affix
+
+    for text, joined in (
+        ("선물 받았어", "선물받았어"),
+        ("배달 시켜서 먹자", "배달시켜서 먹자"),
+        ("사랑 받다", "사랑받다"),
+        ("무시 당하다", "무시당하다"),
+    ):
+        assert _attach(text) == text
+        assert check_action_noun_affix(0, text).suggested_fix == joined
+
+
+def test_object_noun_is_never_joined_to_sikida():
+    """사물 명사는 자동으로도, 제안으로도 붙이지 않는다 — `술하다`·`밥하다`가
+    표제어라 동작성 신호는 통과하지만 `술시키다`·`밥시키다`는 낱말이 아니다."""
+    from subtitle_corrector.engine import check_action_noun_affix
+
+    assert _attach("일단 술 시켜요") == "일단 술 시켜요"
+    assert _attach("밥 시켜 먹자") == "밥 시켜 먹자"
+    # 제안은 남지만 사유가 "사물이면 원문이 맞다"를 분명히 말한다.
+    flag = check_action_noun_affix(0, "일단 술 시켜요")
+    assert flag is not None
+    assert "사물을 뜻하면" in flag.reason
+    assert "사전에 없습니다" in flag.reason
     # 앞말이 명사인 명사구('국어 공부')는 붙이지 않는다 — 접사 '-하다/-시키다'는
     # 단일 명사 뒤에 붙으므로 구 구성이면 띄어 쓴다(온라인가나다 qna_seq=320467).
     # 2026-08-03 이전에는 '국어 공부시키다'로 붙였다(`docs/log-archive/2026-h2.md` §53).

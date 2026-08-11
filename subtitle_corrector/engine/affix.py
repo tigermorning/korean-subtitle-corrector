@@ -39,9 +39,23 @@ def is_honorific_drida_affix(noun_form: str) -> bool:
 _QUANTITY_LEAD_TAGS = {"SN", "SL", "SH", "NR", "NNB"}
 
 
-# 동작성 명사 뒤에 붙는 접사(하다/시키다/당하다/받다). '되다'는 성격이 달라
-# 별도 처리한다(붙임형이 사전 표제어일 때만 — 피동성 조건).
-_AFFIX_LEMMAS = {"하다", "시키다", "당하다", "받다"}
+# 동작성 명사 뒤에 붙는 접사 중 **자동으로 붙이지 않고 확인 플래그로 남기는** 것들.
+#
+# 왜 내렸나(2026-08-05 사용자 보고 `일단 술 시켜요` -> `일단 술시켜요`): 이 셋의 붙임
+# 근거는 **다른 낱말**이 사전에 있다는 것이다 — `N시키다`가 아니라 `N하다`가 표제어인지
+# 를 본다. 그 간접성이 동형이의어 하나에 뚫린다: `술하다`는 한자어 述하다(서술하다)라
+# 표제어이고, 그 때문에 사물 명사 `술`이 동작성으로 판정됐다. `밥하다`(밥을 짓다)도
+# 같은 방식으로 `밥시키다`를 만든다.
+#
+# 제외 목록(`_AFFIX_ACTION_EXCLUDE`)으로 막던 부류인데 목록에는 끝이 없다 — 상·돈·벌
+# 다음이 술·밥이었을 뿐이다. 근거를 강화하는 쪽은 막혔다: 붙임형 등재를 요구하면
+# 정당한 `사랑받다`·`청소시키다`·`교육시키다`가 전부 미등재라 규칙 자체가 죽는다
+# (실측 18건 중 등재된 것은 `무시당하다` 하나뿐).
+#
+# 그래서 **자동 교정에서 내리고 제안으로 남긴다.** 붙여야 할 것을 못 붙이는 대가는
+# §26·§27과 같은 부류이고, 붙이지 말아야 할 것을 붙이는 것보다 낫다. '하다'는 그대로
+# 자동이다 — 그쪽은 붙임형(`청소하다`) 자체가 표제어라 직접 근거다.
+_SUGGEST_ONLY_AFFIX_LEMMAS = {"시키다", "당하다", "받다"}
 
 
 def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
@@ -107,7 +121,9 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
         affix_is_hada = affix.lemma == "하다" or (affix.tag == "XSV" and affix.form == "하")
         if affix.lemma == "되다":
             attach = word_exists(n + "되다")
-        elif affix.lemma in _AFFIX_LEMMAS or affix_is_hada:
+        elif affix.lemma in _SUGGEST_ONLY_AFFIX_LEMMAS:
+            attach = False  # 간접 근거 — check_action_noun_affix()가 제안만 남긴다
+        elif affix_is_hada:
             attach = _is_action_noun(n)
         else:
             attach = False
@@ -432,6 +448,46 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
             reason=(
                 f"'마구/함부로'의 뜻이라면 접두사 '처-'를 써서 '{joined}'처럼 붙여 씁니다"
                 f"(사전 표제어). '치다'의 활용('박수를 쳐 주다')이면 원문이 맞으므로 "
+                "문맥 확인이 필요합니다."
+            ),
+        )
+    return None
+
+
+def check_action_noun_affix(index: int, text: str) -> FlagItem | None:
+    """동작성 명사 뒤에 띄어 쓴 `시키다`·`받다`·`당하다`를 붙일지 확인 플래그한다.
+
+    2026-08-05까지는 자동으로 붙였다. `일단 술 시켜요`가 `일단 술시켜요`가 된 뒤
+    제안으로 내렸다 — 근거가 간접적이기 때문이다(위 `_SUGGEST_ONLY_AFFIX_LEMMAS`
+    주석 참고). 사람이 보면 한눈에 갈리는 자리라 제안으로는 그대로 쓸모가 있다.
+    """
+    tokens = _kiwi.tokenize(text)
+    for i in range(1, len(tokens)):
+        noun, affix = tokens[i - 1], tokens[i]
+        if noun.tag not in ("NNG", "NNP") or affix.lemma not in _SUGGEST_ONLY_AFFIX_LEMMAS:
+            continue
+        if text[noun.start + noun.len : affix.start] != " ":
+            continue
+        n = noun.form
+        if n in _AFFIX_ACTION_EXCLUDE or not _is_action_noun(n):
+            continue
+        joined = n + affix.lemma
+        suggested = text[: noun.start + noun.len] + text[affix.start :]
+        listed = word_exists(joined)
+        evidence = (
+            f"'{joined}'{_josa(joined, '는')} 사전 표제어입니다."
+            if listed
+            else f"'{n}하다'가 표제어라 '{n}'{_josa(n, '을')} 행위로 볼 수 있습니다 — "
+            f"다만 '{joined}'{_josa(joined, '는')} 사전에 없습니다."
+        )
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            suggested_fix=suggested,
+            reason=(
+                f"'{n}'{_josa(n, '이')} 행위를 뜻하면 '{affix.lemma[:-1]}-'는 접미사라 "
+                f"'{joined}'처럼 붙여 씁니다. {evidence} '{n}'{_josa(n, '이')} 사물을 "
+                f"뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 "
                 "문맥 확인이 필요합니다."
             ),
         )

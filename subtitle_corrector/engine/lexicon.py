@@ -173,3 +173,38 @@ def is_hada_stem(tokens, token) -> bool:
             return False
         return word_exists(token.form + "하다")
     return False
+
+
+# 한 어절 안에서 명사끼리 붙어 복합어를 이루는 태그.
+_COMPOUND_NOUN_TAGS = ("NNG", "NNP", "SL")
+
+
+def _inside_unknown_compound(text: str, tokens, token) -> bool:
+    """이 외래어 토큰이 **사전에 없는 복합어의 조각**인지 — 맞으면 자동 반영하지 않는다.
+
+    `매직블럭 제품을 샀다`에서 kiwi는 `매직`(NNP)+`블럭`(NNG)으로 쪼갠다. 그러면
+    조각 `블럭`만 보고 `블록`으로 고쳐 **상표 이름이 조용히 바뀐다**(2026-08-05
+    사용자 지적: "브랜드 명칭은 전부 한국 지사 공식 명칭을 확인해 줘야 한다").
+
+    복합어 전체(`매직블럭`)가 사전에 없다는 것은 이 도구가 그 말이 무엇인지 모른다는
+    뜻이다 — 상표일 수도, 신조어일 수도 있다. 모르는 말의 **일부만** 규칙으로 고치는
+    것은 `docs/DESIGN_PRINCIPLES.md` 원리 1(조각 대조)이 금지하는 바로 그 동작이다.
+    자동 반영 대신 확인 플래그로 넘겨 사람이 공식 표기를 확인하게 한다.
+
+    조사·어미가 붙은 것은 복합어가 아니다(`초코렛이라도`의 `이`는 VCP) — 붙어 있는
+    **명사**가 있을 때만 이 조건이 성립한다.
+    """
+    for i, candidate in enumerate(tokens):
+        if candidate is not token:
+            continue
+        start, end = token.start, token.start + token.len
+        left = tokens[i - 1] if i > 0 else None
+        right = tokens[i + 1] if i + 1 < len(tokens) else None
+        if left is not None and left.tag in _COMPOUND_NOUN_TAGS and left.start + left.len == start:
+            start = left.start
+        if right is not None and right.tag in _COMPOUND_NOUN_TAGS and right.start == end:
+            end = right.start + right.len
+        if (start, end) == (token.start, token.start + token.len):
+            return False  # 붙어 있는 명사가 없다 — 이 토큰이 곧 낱말이다
+        return not word_exists(text[start:end])
+    return False

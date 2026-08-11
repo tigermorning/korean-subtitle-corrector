@@ -22,12 +22,14 @@ from .options import (
 from .markers import _is_marker_only_line, _screen_text_spans, _split_by_marker
 from .spacing import (
     _aux_verb_spacing,
+    join_term_phrases,
     check_ambiguous_compound,
     check_compound_merge_candidate,
     correct_compound_spacing,
     correct_particle_spacing,
 )
 from .affix import (
+    check_action_noun_affix,
     check_adnominal_noun_verb_split,
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
@@ -64,7 +66,7 @@ from .consistency import (
     check_aux_verb_consistency,
     check_street_name_spacing,
     check_term_spacing_consistency,
-    unify_term_spacing_by_principle,
+    unify_term_spacing,
 )
 from .dependent_nouns import (
     check_hanpan_spacing,
@@ -235,6 +237,13 @@ def _correct_line(
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
     corrected_text = _guard("감탄사·호격 쉼표", before, corrected_text, comma_fixes)
     before = corrected_text
+    # 제50항 허용 기준을 고른 문서에서만 — 사전이 전문 용어(명사구)로 확인해 준
+    # 구간을 붙인다. 원칙 기준에서는 띄어 쓴 원문이 이미 정답이라 부르지 않는다.
+    term_join_fixes: list[str] = []
+    if spacing_mode == "allowance":
+        corrected_text, term_join_fixes = join_term_phrases(corrected_text)
+        corrected_text = _guard("전문 용어 붙임(허용)", before, corrected_text, term_join_fixes)
+        before = corrected_text
     corrected_text, compound_fixes = correct_compound_spacing(corrected_text)
     corrected_text = _guard("합성어 붙임", before, corrected_text, compound_fixes)
     before = corrected_text
@@ -280,6 +289,7 @@ def _correct_line(
             + honorific_fixes
             + cheo_fixes
             + comma_fixes
+            + term_join_fixes
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
@@ -435,6 +445,7 @@ def _correct_line(
         check_intensive_prefix_cheo(index, corrected_text),
         # 제42항 의존명사 검사도 일반 띄어쓰기 검사보다 **먼저** 온다(도로명과 같은
         # 이유) — 같은 제안이면 규칙 이름과 근거를 말해 주는 쪽이 남아야 한다.
+        check_action_noun_affix(index, corrected_text),
         check_purpose_cha_spacing(index, corrected_text),
         check_hanpan_spacing(index, corrected_text),
         check_spacing(index, corrected_text),
@@ -606,14 +617,14 @@ def correct_entries(
     # 제49항·제50항 혼용 검사는 한 줄만 봐서는 알 수 없다(같은 용어를 다른 줄에서
     # 어떻게 썼는지 비교해야 한다). 그래서 줄 단위 파이프라인이 모두 끝나고
     # 교정이 확정된 뒤에 문서 전체를 한 번 훑는다.
-    # 2단계에서 '원칙'을 고른 문서는 이 혼용을 **묻지 않고 맞춘다**(2026-08-05 사용자
-    # 지적: "2단계 선택에 따라 자동 교정했어야 함"). 목표 표기가 문서에 이미 있는
-    # 띄어 쓴 변이형이라 붙임 경계를 추측할 일이 없다 — 자동 통일을 미뤄 두었던
-    # 이유는 붙이는 방향에만 해당한다(`unify_term_spacing_by_principle` 참고).
-    if spacing_mode == "principle":
+    # 2단계에서 기준을 고른 문서는 이 혼용을 **묻지 않고 맞춘다**(2026-08-05 사용자
+    # 지적: "2단계 선택에 따라 자동 교정했어야 함", "붙임도 허용이므로 2단계 지정에
+    # 따라 달라질 수 있다"). 원칙이면 띄어 쓴 변이형으로, 허용이면 붙여 쓴 변이형으로
+    # 맞춘다 — 둘 다 문서에 이미 있는 표기라 경계를 추측할 일이 없다.
+    if spacing_mode in ("principle", "allowance"):
         by_index = {e.index: i for i, e in enumerate(corrected_entries)}
-        for entry_index, run, principle, summary in unify_term_spacing_by_principle(
-            corrected_entries, protected_indices
+        for entry_index, run, principle, summary in unify_term_spacing(
+            corrected_entries, spacing_mode, protected_indices
         ):
             position = by_index.get(entry_index)
             if position is None:

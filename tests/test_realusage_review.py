@@ -430,8 +430,9 @@ def test_historical_headword_is_not_join_evidence():
     out, flags = _run("미림이도 오고 했는데 얼른 오라고 혀라")
     assert out == "미림이도 오고 했는데 얼른 오라고 혀라"
     assert not any("오고했는데" in (f.suggested_fix or "") for f in flags)
-    # 정당한 붙임은 그대로 유지된다
-    assert _run("선물 받았어")[0] == "선물받았어"
+    # 정당한 붙임은 그대로 유지된다('하다'는 붙임형이 표제어라 자동 교정을 유지한다.
+    # '선물 받았어'류는 2026-08-05에 제안으로 내렸다 — §75)
+    assert _run("청소 했다")[0] == "청소했다"
 
 
 def test_comma_never_splits_a_word():
@@ -461,7 +462,7 @@ def test_noun_phrase_before_hada_is_not_merged():
     assert _run("나물 타령 하셨어")[0] == "나물 타령 하셨어"
     assert _run("수학 공부 하다")[0] == "수학 공부 하다"
     # 앞 명사가 없으면 예전처럼 붙인다
-    assert _run("선물 받았어")[0] == "선물받았어"
+    assert _run("청소 했다")[0] == "청소했다"
     # 앞말이 부사로도 읽히면('어제') 수식 관계가 아니므로 붙임을 유지한다
     assert _run("어제 청소 했다")[0] == "어제 청소했다"
 
@@ -698,7 +699,7 @@ def test_possessive_adnominal_blocks_affix_join():
     assert _run("내 탓 하지 마")[0] == "내 탓 하지 마"
     assert _run("네 탓 하지 마")[0] == "네 탓 하지 마"
     # 관형어가 없으면 예전처럼 붙인다
-    assert _run("선물 받았어")[0] == "선물받았어"
+    assert _run("청소 했다")[0] == "청소했다"
 
 
 def test_adnominal_reading_interjection_is_flagged_not_auto_comma():
@@ -841,16 +842,16 @@ def test_term_spacing_is_unified_when_principle_is_chosen():
     assert any("제49·50항 통일" in note.message for note in log)
 
 
-def test_term_spacing_stays_a_flag_when_allowance_is_chosen():
-    """'허용'은 붙임 경계를 새로 정해야 하므로 지금도 사람에게 묻는다."""
+def test_term_spacing_unifies_toward_joined_when_allowance_is_chosen():
+    """'허용'을 고르면 붙여 쓴 변이형으로 통일한다(2026-08-05 사용자 지적으로 바로잡음)."""
     from subtitle_corrector.engine import correct_entries
     from subtitle_corrector.parsers import SubtitleEntry
 
     lines = ["무게 중심이 앞으로 쏠린다", "무게중심을 낮춰라"]
     entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
     corrected, flags, _log = correct_entries(entries, spacing_mode="allowance")
-    assert [e.text for e in corrected] == lines
-    assert [f for f in flags if "혼용" in f.reason]
+    assert [e.text for e in corrected] == ["무게중심이 앞으로 쏠린다", "무게중심을 낮춰라"]
+    assert not [f for f in flags if "혼용" in f.reason]
 
 
 def test_loanword_evidence_states_which_side_is_settled():
@@ -908,3 +909,55 @@ def test_brand_name_flag_points_to_the_official_korean_spelling():
     reason = next(f.reason for f in flags if "고유명사 외래어 표기" in f.reason)
     assert "상표·브랜드" in reason
     assert "한국 지사 공식 표기가 우선" in reason
+
+
+def _unify(lines, mode):
+    from subtitle_corrector.engine import correct_entries
+    from subtitle_corrector.parsers import SubtitleEntry
+
+    entries = [SubtitleEntry(index=i + 1, start="", end="", text=t) for i, t in enumerate(lines)]
+    corrected, flags, log = correct_entries(entries, spacing_mode=mode)
+    return [e.text for e in corrected], flags, log
+
+
+def test_term_spacing_is_unified_in_both_directions():
+    """2단계 선택이 곧 답이다 — 원칙이면 띄우고 허용이면 붙인다.
+
+    처음에는 띄우는 방향만 자동으로 했다가 사용자 지적으로 바로잡았다("붙임도
+    허용이므로 2단계 지정에 따라 달라질 수 있다"). 혼용이라는 말 자체가 붙여 쓴
+    표기도 문서에 있다는 뜻이라 붙이는 쪽도 경계를 추측할 일이 없다."""
+    lines = ["무게 중심이 앞으로 쏠린다", "무게중심을 낮춰라", "무게 중심을 잡아"]
+    joined, flags, _ = _unify(lines, "allowance")
+    assert joined == ["무게중심이 앞으로 쏠린다", "무게중심을 낮춰라", "무게중심을 잡아"]
+    assert not [f for f in flags if "혼용" in f.reason]
+
+
+def test_partial_join_is_not_spread_under_allowance():
+    """부분만 붙인 변이형밖에 없으면 허용에서도 통일하지 않는다 — 제50항의 전문
+    용어 붙임은 전부 붙이거나 전부 띄어야 한다."""
+    lines = ["만성 골수성 백혈병 진단", "만성골수성 백혈병 치료"]
+    kept, flags, _ = _unify(lines, "allowance")
+    assert kept == lines
+    assert [f for f in flags if "혼용" in f.reason]
+
+
+def test_dictionary_confirmed_term_phrase_joins_under_allowance():
+    """혼용이 아니어도 사전이 전문 용어(명사구)로 확인해 준 구간은 허용에서 붙인다.
+    표준국어대사전의 캐럿 표기(`무게^중심`)가 제50항 대상이라는 확인이다."""
+    joined, _flags, _log = _unify(["무게 중심이 쏠린다", "예방 접종을 받았다"], "allowance")
+    assert joined == ["무게중심이 쏠린다", "예방접종을 받았다"]
+    # 원칙에서는 띄어 쓴 원문이 이미 정답이다.
+    kept, _f, _l = _unify(["무게 중심이 쏠린다", "예방 접종을 받았다"], "principle")
+    assert kept == ["무게 중심이 쏠린다", "예방 접종을 받았다"]
+
+
+def test_brand_compound_is_not_partially_corrected():
+    """사전에 없는 복합어의 조각만 고치면 상표 이름이 조용히 바뀐다.
+
+    `매직블럭`이 `매직`+`블럭`으로 쪼개져 `매직블록`이 됐다(2026-08-05 사용자 지적:
+    "브랜드 명칭은 전부 한국 지사 공식 명칭을 확인해 줘야 한다")."""
+    out, flags = _run("매직블럭 제품을 샀다")
+    assert out == "매직블럭 제품을 샀다"
+    assert [f for f in flags if "외래어" in f.reason]
+    # 조사가 붙은 것은 복합어가 아니므로 정상 교정은 그대로다.
+    assert _run("초코렛이라도 좀 먹어")[0] == "초콜릿이라도 좀 먹어"
