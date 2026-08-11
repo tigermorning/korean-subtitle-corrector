@@ -52,7 +52,10 @@ def run_item(item: dict):
 
 def judge(item: dict, got: str, flags: list) -> tuple[bool, str]:
     gold = item["gold"]
-    text_ok = got == gold
+    # 규정이 둘 다 맞다고 한 자리가 있다. 하나만 정답으로 두면 맞는 답을 틀렸다고
+    # 센다 — 작업자 자료에는 (o)가 둘인 항목이 여럿이다(초과근무 했다 / 초과 근무 했다).
+    accepted = [gold, *item.get("gold_alt", [])]
+    text_ok = got in accepted
 
     # 텍스트가 gold와 다르면 대부분 즉시 실패(함정/protect 포함)
     if not text_ok:
@@ -74,7 +77,13 @@ def judge(item: dict, got: str, flags: list) -> tuple[bool, str]:
 
 
 def main():
-    items = [json.loads(l) for l in CORPUS.read_text(encoding="utf-8").splitlines() if l.strip()]
+    # 코퍼스를 골라 돌린다. 기본은 held-out이고, 작업자 자료 정답지는 따로 둔다
+    # — 출처가 다르면 정확도도 따로 읽어야 한다(하나로 합치면 어느 쪽이 나빠졌는지 모른다).
+    corpus = Path(sys.argv[1]) if len(sys.argv) > 1 else CORPUS
+    if not corpus.is_absolute():
+        corpus = Path(__file__).resolve().parent / corpus.name
+    print(f"코퍼스: {corpus.name}\n")
+    items = [json.loads(l) for l in corpus.read_text(encoding="utf-8").splitlines() if l.strip()]
     by_cat: dict[str, list[bool]] = {}
     to_verify = []
     passed = 0
