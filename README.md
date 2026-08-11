@@ -24,7 +24,7 @@
 
 ## 상태
 
-개발 완료. CLI(`main.py`)와 웹 API(`subtitle_corrector/api.py`, FastAPI + `static/index.html`) 모두 구현되어 있고, Supabase 연동(교정 결과 저장/재조회)까지 확인됨.
+개발 완료(2026-08-11 기준 테스트 401건 전부 통과). CLI(`main.py`)와 웹 API(`subtitle_corrector/api.py`, FastAPI + `static/index.html`) 모두 구현되어 있고, Supabase 연동(교정 결과 저장/재조회)까지 확인됨.
 
 **실행은 로컬에서 합니다(2026-08-02 결정).** 클라우드 배포는 하지 않습니다 — 형태소 분석기 kiwipiepy 모델이 약 310MB라 Render 무료 티어 512MB 안에서 교정 요청을 처리할 수 없습니다(`POST /api/correct`가 502). 자원 한계라 코드로 우회되지 않습니다. 배포 절차 자체는 [DEPLOY.md](./DEPLOY.md)에 남겨 두었고, 예전에 올려 둔 Render 주소가 아직 열리지만 **옛 버전이고 교정이 동작하지 않으니 사용하지 마세요.** 아래 "실행 방법"대로 로컬에서 띄우면 모든 기능이 동작합니다.
 
