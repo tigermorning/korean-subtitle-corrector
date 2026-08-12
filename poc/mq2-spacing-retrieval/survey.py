@@ -7,7 +7,10 @@ from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 CORRECTOR = Path(__file__).resolve().parents[2]
-EDITOR = CORRECTOR.parent / "subtitle-editor"
+# 옆 프로젝트(자막 및 TC 생성기). 2026-08-12에 저장소 이름이 subtitle-editor에서
+# subtitle-tc-generator로 바뀌었다 — 둘 다 본다.
+EDITOR = next((CORRECTOR.parent / n for n in ("subtitle-tc-generator", "subtitle-editor")
+               if (CORRECTOR.parent / n).is_dir()), CORRECTOR.parent / "subtitle-tc-generator")
 
 # 규범이 양쪽 표기를 모두 인정하되 **뜻이 갈리는** 것들.
 # 사전 조회만으로는 어느 쪽인지 정할 수 없는 부류다.
