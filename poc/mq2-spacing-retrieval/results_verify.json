@@ -1,0 +1,2464 @@
+{
+ "arms": {
+  "B0": {
+   "총건수": 46,
+   "정답": 34,
+   "정확도": 0.739,
+   "오답": 12,
+   "기권해서_틀림": 12,
+   "판정_오답": 0,
+   "오답률": 0.0,
+   "과잉교정": 1,
+   "근거_제시율": 0.196,
+   "소요초": 94.4
+  },
+  "B1": {
+   "총건수": 46,
+   "정답": 10,
+   "정확도": 0.217,
+   "오답": 36,
+   "기권해서_틀림": 36,
+   "판정_오답": 0,
+   "오답률": 0.0,
+   "과잉교정": 0,
+   "근거_제시율": 0.0,
+   "소요초": 0.0
+  },
+  "B2a": {
+   "총건수": 46,
+   "정답": 38,
+   "정확도": 0.826,
+   "오답": 8,
+   "기권해서_틀림": 0,
+   "판정_오답": 8,
+   "오답률": 0.174,
+   "과잉교정": 2,
+   "근거_제시율": 1.0,
+   "소요초": 0.1
+  },
+  "B2b": {
+   "총건수": 46,
+   "정답": 34,
+   "정확도": 0.739,
+   "오답": 12,
+   "기권해서_틀림": 0,
+   "판정_오답": 12,
+   "오답률": 0.261,
+   "과잉교정": 4,
+   "근거_제시율": 1.0,
+   "소요초": 11.9
+  }
+ },
+ "cases": [
+  {
+   "id": "bun01",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "남은 건 너 뿐이야",
+   "gold": "남은 건 너뿐이야",
+   "output": "남은 건 너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun02",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "그냥 웃을뿐이다",
+   "gold": "그냥 웃을 뿐이다",
+   "output": "그냥 웃을 뿐이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun03",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "믿을 건 실력 뿐이었다",
+   "gold": "믿을 건 실력뿐이었다",
+   "output": "믿을 건 실력뿐이었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun04",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "학생이 셋 뿐이야",
+   "gold": "학생이 셋뿐이야",
+   "output": "학생이 셋뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun05",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "결국 나는 추워서 덜덜 떨뿐이었다",
+   "gold": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "output": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "bun06",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "그 말을 들었을뿐이네",
+   "gold": "그 말을 들었을 뿐이네",
+   "output": "그 말을 들었을 뿐이네",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man01",
+   "arm": "B0",
+   "word": "만",
+   "input": "십 년만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "띄어쓰기 확인 필요 (문맥에 따라 정답이 다를 수 있음)"
+   ]
+  },
+  {
+   "id": "man02",
+   "arm": "B0",
+   "word": "만",
+   "input": "세 번만에 합격했다",
+   "gold": "세 번 만에 합격했다",
+   "output": "세 번만에 합격했다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "man03",
+   "arm": "B0",
+   "word": "만",
+   "input": "잠 만 자다 왔어",
+   "gold": "잠만 자다 왔어",
+   "output": "잠만 자다 왔어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man04",
+   "arm": "B0",
+   "word": "만",
+   "input": "눈 만 감으면 보여",
+   "gold": "눈만 감으면 보여",
+   "output": "눈만 감으면 보여",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man05",
+   "arm": "B0",
+   "word": "만",
+   "input": "사과 하나 만 먹었으면",
+   "gold": "사과 하나만 먹었으면",
+   "output": "사과 하나만 먹었으면",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "ji01",
+   "arm": "B0",
+   "word": "지",
+   "input": "떠난지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "띄어쓰기 확인 필요 (문맥에 따라 정답이 다를 수 있음)"
+   ]
+  },
+  {
+   "id": "ji02",
+   "arm": "B0",
+   "word": "지",
+   "input": "얼마나 지난 지 모르겠지만",
+   "gold": "얼마나 지난지 모르겠지만",
+   "output": "얼마나 지난 지 모르겠지만",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ji03",
+   "arm": "B0",
+   "word": "지",
+   "input": "큰 지 작은 지 모르겠다",
+   "gold": "큰지 작은지 모르겠다",
+   "output": "큰 지 작은 지 모르겠다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ji04",
+   "arm": "B0",
+   "word": "지",
+   "input": "밥을 먹은지 두 시간 지났다",
+   "gold": "밥을 먹은 지 두 시간 지났다",
+   "output": "밥을 먹은지 두 시간 지났다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha01",
+   "arm": "B0",
+   "word": "차",
+   "input": "입사 3년차입니다",
+   "gold": "입사 3년 차입니다",
+   "output": "입사 3년 차입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha02",
+   "arm": "B0",
+   "word": "차",
+   "input": "임신 8주차예요",
+   "gold": "임신 8주 차예요",
+   "output": "임신 8주 차예요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha03",
+   "arm": "B0",
+   "word": "차",
+   "input": "결혼 10년차 부부입니다",
+   "gold": "결혼 10년 차 부부입니다",
+   "output": "결혼 10년 차 부부입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha04",
+   "arm": "B0",
+   "word": "차",
+   "input": "인사 차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사차 들렀습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "'인사'을 하러 간다는 **목적**의 뜻이면 '차'는 접미사라 '인사차'처럼 붙여 씁니다(온라인가나다: '택배 접수차'). '인사차'는 사전 표제어입니다. 마실 것(茶)이나 탈것(車)을 뜻하는 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "cha05",
+   "arm": "B0",
+   "word": "차",
+   "input": "사업 차 서울에 왔어요",
+   "gold": "사업차 서울에 왔어요",
+   "output": "사업차 서울에 왔어요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "'사업'을 하러 간다는 **목적**의 뜻이면 '차'는 접미사라 '사업차'처럼 붙여 씁니다(온라인가나다: '택배 접수차'). '사업차'는 사전 표제어입니다. 마실 것(茶)이나 탈것(車)을 뜻하는 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "cha06",
+   "arm": "B0",
+   "word": "차",
+   "input": "택배 접수 차 우체국에 들렀다",
+   "gold": "택배 접수차 우체국에 들렀다",
+   "output": "택배 접수차 우체국에 들렀다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "'접수'을 하러 간다는 **목적**의 뜻이면 '차'는 접미사라 '접수차'처럼 붙여 씁니다(온라인가나다: '택배 접수차'). '접수차'는 사전에 없지만 접미사 결합은 규칙적이라 파생어가 다 오르지는 않습니다. 마실 것(茶)이나 탈것(車)을 뜻하는 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "cha07",
+   "arm": "B0",
+   "word": "차",
+   "input": "고향에 갔던차에 들렀다",
+   "gold": "고향에 갔던 차에 들렀다",
+   "output": "고향에 갔던차에 들렀다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha08",
+   "arm": "B0",
+   "word": "차",
+   "input": "마침 가려던차였다",
+   "gold": "마침 가려던 차였다",
+   "output": "마침 가려던차였다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha09",
+   "arm": "B0",
+   "word": "차",
+   "input": "회사 차 타고 가자",
+   "gold": "회사 차 타고 가자",
+   "output": "회사 차 타고 가자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha10",
+   "arm": "B0",
+   "word": "차",
+   "input": "따뜻한 차 한 잔",
+   "gold": "따뜻한 차 한 잔",
+   "output": "따뜻한 차 한 잔",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha11",
+   "arm": "B0",
+   "word": "차",
+   "input": "커피랑 차 좀 내와",
+   "gold": "커피랑 차 좀 내와",
+   "output": "커피랑 차 좀 내와",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha12",
+   "arm": "B0",
+   "word": "차",
+   "input": "연구 차 방문했습니다",
+   "gold": "연구차 방문했습니다",
+   "output": "연구차 방문했습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "'연구'을 하러 간다는 **목적**의 뜻이면 '차'는 접미사라 '연구차'처럼 붙여 씁니다(온라인가나다: '택배 접수차'). '연구차'는 사전 표제어입니다. 마실 것(茶)이나 탈것(車)을 뜻하는 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "cha13",
+   "arm": "B0",
+   "word": "차",
+   "input": "면접 차 서울에 갑니다",
+   "gold": "면접차 서울에 갑니다",
+   "output": "면접차 서울에 갑니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "'면접'을 하러 간다는 **목적**의 뜻이면 '차'는 접미사라 '면접차'처럼 붙여 씁니다(온라인가나다: '택배 접수차'). '면접차'는 사전에 없지만 접미사 결합은 규칙적이라 파생어가 다 오르지는 않습니다. 마실 것(茶)이나 탈것(車)을 뜻하는 것이면 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "pan01",
+   "arm": "B0",
+   "word": "판",
+   "input": "한판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "승부·판을 세는 단위면 '판'은 의존명사라 '한 판'처럼 띄어 씁니다(온라인가나다: \"수 관형사 '한'과 의존 명사 '판'의 구성\"). '한판 잔치를 벌이다'처럼 '한 번 크게 벌이는 판'을 뜻하는 한 낱말이면(표준국어대사전 표제어) 붙여 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "pan02",
+   "arm": "B0",
+   "word": "판",
+   "input": "한 판 잔치를 벌였다",
+   "gold": "한판 잔치를 벌였다",
+   "output": "한 판 잔치를 벌였다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "pan03",
+   "arm": "B0",
+   "word": "판",
+   "input": "두판을 더 이겨야 한다",
+   "gold": "두 판을 더 이겨야 한다",
+   "output": "두판을 더 이겨야 한다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "deul01",
+   "arm": "B0",
+   "word": "들",
+   "input": "사람 들이 모였다",
+   "gold": "사람들이 모였다",
+   "output": "사람들이 모였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "deul02",
+   "arm": "B0",
+   "word": "들",
+   "input": "학생 들이 떠들었다",
+   "gold": "학생들이 떠들었다",
+   "output": "학생들이 떠들었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "deul03",
+   "arm": "B0",
+   "word": "들",
+   "input": "사과, 배, 감들을 먹었다",
+   "gold": "사과, 배, 감 들을 먹었다",
+   "output": "사과, 배, 감들을 먹었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "daero01",
+   "arm": "B0",
+   "word": "대로",
+   "input": "말한대로 했다",
+   "gold": "말한 대로 했다",
+   "output": "말한 대로 했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "띄어쓰기 확인 필요 (문맥에 따라 정답이 다를 수 있음)"
+   ]
+  },
+  {
+   "id": "daero02",
+   "arm": "B0",
+   "word": "대로",
+   "input": "법 대로 하자",
+   "gold": "법대로 하자",
+   "output": "법대로 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "mankeum01",
+   "arm": "B0",
+   "word": "만큼",
+   "input": "노력한만큼 얻는다",
+   "gold": "노력한 만큼 얻는다",
+   "output": "노력한만큼 얻는다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "mankeum02",
+   "arm": "B0",
+   "word": "만큼",
+   "input": "너 만큼 잘한다",
+   "gold": "너만큼 잘한다",
+   "output": "너만큼 잘한다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "stt01",
+   "arm": "B0",
+   "word": "번",
+   "input": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "gold": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "output": "자, 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "stt02",
+   "arm": "B0",
+   "word": "번",
+   "input": "한번만 더 해보자",
+   "gold": "한번만 더 해보자",
+   "output": "한번만 더 해보자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "stt03",
+   "arm": "B0",
+   "word": "번",
+   "input": "딱 한번 만났어요",
+   "gold": "딱 한 번 만났어요",
+   "output": "딱 한번 만났어요",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ok01",
+   "arm": "B0",
+   "word": "뿐",
+   "input": "너뿐이야",
+   "gold": "너뿐이야",
+   "output": "너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok02",
+   "arm": "B0",
+   "word": "차",
+   "input": "인사차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사차 들렀습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok03",
+   "arm": "B0",
+   "word": "판",
+   "input": "한 판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok04",
+   "arm": "B0",
+   "word": "지",
+   "input": "떠난 지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok05",
+   "arm": "B0",
+   "word": "만",
+   "input": "십 년 만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "bun01",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "남은 건 너 뿐이야",
+   "gold": "남은 건 너뿐이야",
+   "output": "남은 건 너 뿐이야",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun02",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "그냥 웃을뿐이다",
+   "gold": "그냥 웃을 뿐이다",
+   "output": "그냥 웃을뿐이다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun03",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "믿을 건 실력 뿐이었다",
+   "gold": "믿을 건 실력뿐이었다",
+   "output": "믿을 건 실력 뿐이었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun04",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "학생이 셋 뿐이야",
+   "gold": "학생이 셋뿐이야",
+   "output": "학생이 셋 뿐이야",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "bun05",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "결국 나는 추워서 덜덜 떨뿐이었다",
+   "gold": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "output": "결국 나는 추워서 덜덜 떨뿐이었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "bun06",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "그 말을 들었을뿐이네",
+   "gold": "그 말을 들었을 뿐이네",
+   "output": "그 말을 들었을뿐이네",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man01",
+   "arm": "B1",
+   "word": "만",
+   "input": "십 년만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년만의 귀국이다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "man02",
+   "arm": "B1",
+   "word": "만",
+   "input": "세 번만에 합격했다",
+   "gold": "세 번 만에 합격했다",
+   "output": "세 번만에 합격했다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "man03",
+   "arm": "B1",
+   "word": "만",
+   "input": "잠 만 자다 왔어",
+   "gold": "잠만 자다 왔어",
+   "output": "잠 만 자다 왔어",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man04",
+   "arm": "B1",
+   "word": "만",
+   "input": "눈 만 감으면 보여",
+   "gold": "눈만 감으면 보여",
+   "output": "눈 만 감으면 보여",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "man05",
+   "arm": "B1",
+   "word": "만",
+   "input": "사과 하나 만 먹었으면",
+   "gold": "사과 하나만 먹었으면",
+   "output": "사과 하나 만 먹었으면",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "ji01",
+   "arm": "B1",
+   "word": "지",
+   "input": "떠난지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난지 삼 년이 됐다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "ji02",
+   "arm": "B1",
+   "word": "지",
+   "input": "얼마나 지난 지 모르겠지만",
+   "gold": "얼마나 지난지 모르겠지만",
+   "output": "얼마나 지난 지 모르겠지만",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ji03",
+   "arm": "B1",
+   "word": "지",
+   "input": "큰 지 작은 지 모르겠다",
+   "gold": "큰지 작은지 모르겠다",
+   "output": "큰 지 작은 지 모르겠다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ji04",
+   "arm": "B1",
+   "word": "지",
+   "input": "밥을 먹은지 두 시간 지났다",
+   "gold": "밥을 먹은 지 두 시간 지났다",
+   "output": "밥을 먹은지 두 시간 지났다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha01",
+   "arm": "B1",
+   "word": "차",
+   "input": "입사 3년차입니다",
+   "gold": "입사 3년 차입니다",
+   "output": "입사 3년차입니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha02",
+   "arm": "B1",
+   "word": "차",
+   "input": "임신 8주차예요",
+   "gold": "임신 8주 차예요",
+   "output": "임신 8주차예요",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha03",
+   "arm": "B1",
+   "word": "차",
+   "input": "결혼 10년차 부부입니다",
+   "gold": "결혼 10년 차 부부입니다",
+   "output": "결혼 10년차 부부입니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "cha04",
+   "arm": "B1",
+   "word": "차",
+   "input": "인사 차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사 차 들렀습니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha05",
+   "arm": "B1",
+   "word": "차",
+   "input": "사업 차 서울에 왔어요",
+   "gold": "사업차 서울에 왔어요",
+   "output": "사업 차 서울에 왔어요",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha06",
+   "arm": "B1",
+   "word": "차",
+   "input": "택배 접수 차 우체국에 들렀다",
+   "gold": "택배 접수차 우체국에 들렀다",
+   "output": "택배 접수 차 우체국에 들렀다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha07",
+   "arm": "B1",
+   "word": "차",
+   "input": "고향에 갔던차에 들렀다",
+   "gold": "고향에 갔던 차에 들렀다",
+   "output": "고향에 갔던차에 들렀다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha08",
+   "arm": "B1",
+   "word": "차",
+   "input": "마침 가려던차였다",
+   "gold": "마침 가려던 차였다",
+   "output": "마침 가려던차였다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha09",
+   "arm": "B1",
+   "word": "차",
+   "input": "회사 차 타고 가자",
+   "gold": "회사 차 타고 가자",
+   "output": "회사 차 타고 가자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha10",
+   "arm": "B1",
+   "word": "차",
+   "input": "따뜻한 차 한 잔",
+   "gold": "따뜻한 차 한 잔",
+   "output": "따뜻한 차 한 잔",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha11",
+   "arm": "B1",
+   "word": "차",
+   "input": "커피랑 차 좀 내와",
+   "gold": "커피랑 차 좀 내와",
+   "output": "커피랑 차 좀 내와",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha12",
+   "arm": "B1",
+   "word": "차",
+   "input": "연구 차 방문했습니다",
+   "gold": "연구차 방문했습니다",
+   "output": "연구 차 방문했습니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "cha13",
+   "arm": "B1",
+   "word": "차",
+   "input": "면접 차 서울에 갑니다",
+   "gold": "면접차 서울에 갑니다",
+   "output": "면접 차 서울에 갑니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "pan01",
+   "arm": "B1",
+   "word": "판",
+   "input": "한판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한판 더 하자",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "pan02",
+   "arm": "B1",
+   "word": "판",
+   "input": "한 판 잔치를 벌였다",
+   "gold": "한판 잔치를 벌였다",
+   "output": "한 판 잔치를 벌였다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "pan03",
+   "arm": "B1",
+   "word": "판",
+   "input": "두판을 더 이겨야 한다",
+   "gold": "두 판을 더 이겨야 한다",
+   "output": "두판을 더 이겨야 한다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "deul01",
+   "arm": "B1",
+   "word": "들",
+   "input": "사람 들이 모였다",
+   "gold": "사람들이 모였다",
+   "output": "사람 들이 모였다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "deul02",
+   "arm": "B1",
+   "word": "들",
+   "input": "학생 들이 떠들었다",
+   "gold": "학생들이 떠들었다",
+   "output": "학생 들이 떠들었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "deul03",
+   "arm": "B1",
+   "word": "들",
+   "input": "사과, 배, 감들을 먹었다",
+   "gold": "사과, 배, 감 들을 먹었다",
+   "output": "사과, 배, 감들을 먹었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "daero01",
+   "arm": "B1",
+   "word": "대로",
+   "input": "말한대로 했다",
+   "gold": "말한 대로 했다",
+   "output": "말한대로 했다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "daero02",
+   "arm": "B1",
+   "word": "대로",
+   "input": "법 대로 하자",
+   "gold": "법대로 하자",
+   "output": "법 대로 하자",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "mankeum01",
+   "arm": "B1",
+   "word": "만큼",
+   "input": "노력한만큼 얻는다",
+   "gold": "노력한 만큼 얻는다",
+   "output": "노력한만큼 얻는다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "mankeum02",
+   "arm": "B1",
+   "word": "만큼",
+   "input": "너 만큼 잘한다",
+   "gold": "너만큼 잘한다",
+   "output": "너 만큼 잘한다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": []
+  },
+  {
+   "id": "stt01",
+   "arm": "B1",
+   "word": "번",
+   "input": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "gold": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "output": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "stt02",
+   "arm": "B1",
+   "word": "번",
+   "input": "한번만 더 해보자",
+   "gold": "한번만 더 해보자",
+   "output": "한번만 더 해보자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "stt03",
+   "arm": "B1",
+   "word": "번",
+   "input": "딱 한번 만났어요",
+   "gold": "딱 한 번 만났어요",
+   "output": "딱 한번 만났어요",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": []
+  },
+  {
+   "id": "ok01",
+   "arm": "B1",
+   "word": "뿐",
+   "input": "너뿐이야",
+   "gold": "너뿐이야",
+   "output": "너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok02",
+   "arm": "B1",
+   "word": "차",
+   "input": "인사차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사차 들렀습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok03",
+   "arm": "B1",
+   "word": "판",
+   "input": "한 판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok04",
+   "arm": "B1",
+   "word": "지",
+   "input": "떠난 지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "ok05",
+   "arm": "B1",
+   "word": "만",
+   "input": "십 년 만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": []
+  },
+  {
+   "id": "bun01",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "남은 건 너 뿐이야",
+   "gold": "남은 건 너뿐이야",
+   "output": "남은 건 너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "bun02",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "그냥 웃을뿐이다",
+   "gold": "그냥 웃을 뿐이다",
+   "output": "그냥 웃을뿐이다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "bun03",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "믿을 건 실력 뿐이었다",
+   "gold": "믿을 건 실력뿐이었다",
+   "output": "믿을 건 실력뿐이었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "bun04",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "학생이 셋 뿐이야",
+   "gold": "학생이 셋뿐이야",
+   "output": "학생이 셋뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "bun05",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "결국 나는 추워서 덜덜 떨뿐이었다",
+   "gold": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "output": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "bun06",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "그 말을 들었을뿐이네",
+   "gold": "그 말을 들었을 뿐이네",
+   "output": "그 말을 들었을뿐이네",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "man01",
+   "arm": "B2a",
+   "word": "만",
+   "input": "십 년만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "man02",
+   "arm": "B2a",
+   "word": "만",
+   "input": "세 번만에 합격했다",
+   "gold": "세 번 만에 합격했다",
+   "output": "세 번 만에 합격했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "man03",
+   "arm": "B2a",
+   "word": "만",
+   "input": "잠 만 자다 왔어",
+   "gold": "잠만 자다 왔어",
+   "output": "잠만 자다 왔어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 0.667]"
+   ]
+  },
+  {
+   "id": "man04",
+   "arm": "B2a",
+   "word": "만",
+   "input": "눈 만 감으면 보여",
+   "gold": "눈만 감으면 보여",
+   "output": "눈만 감으면 보여",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 0.667]"
+   ]
+  },
+  {
+   "id": "man05",
+   "arm": "B2a",
+   "word": "만",
+   "input": "사과 하나 만 먹었으면",
+   "gold": "사과 하나만 먹었으면",
+   "output": "사과 하나만 먹었으면",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "ji01",
+   "arm": "B2a",
+   "word": "지",
+   "input": "떠난지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "ji02",
+   "arm": "B2a",
+   "word": "지",
+   "input": "얼마나 지난 지 모르겠지만",
+   "gold": "얼마나 지난지 모르겠지만",
+   "output": "얼마나지난 지 모르겠지만",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 지 — 의문이나 추측을 나타내는 어미 '-ㄴ지'다 (qna_seq=314315) [유사도 0.667]"
+   ]
+  },
+  {
+   "id": "ji03",
+   "arm": "B2a",
+   "word": "지",
+   "input": "큰 지 작은 지 모르겠다",
+   "gold": "큰지 작은지 모르겠다",
+   "output": "큰지 작은 지 모르겠다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 지 — 의문이나 추측을 나타내는 어미 '-ㄴ지'다 (qna_seq=314315) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "ji04",
+   "arm": "B2a",
+   "word": "지",
+   "input": "밥을 먹은지 두 시간 지났다",
+   "gold": "밥을 먹은 지 두 시간 지났다",
+   "output": "밥을 먹은 지 두 시간 지났다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.250]"
+   ]
+  },
+  {
+   "id": "cha01",
+   "arm": "B2a",
+   "word": "차",
+   "input": "입사 3년차입니다",
+   "gold": "입사 3년 차입니다",
+   "output": "입사 3년 차입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 기간을 나타내는 명사구 뒤에서 주기나 경과의 해당 시기를 뜻하면 의존명사다 (qna_seq=309642) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "cha02",
+   "arm": "B2a",
+   "word": "차",
+   "input": "임신 8주차예요",
+   "gold": "임신 8주 차예요",
+   "output": "임신 8주 차예요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 기간을 나타내는 명사구 뒤에서 주기나 경과의 해당 시기를 뜻하면 의존명사다 (qna_seq=309642) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "cha03",
+   "arm": "B2a",
+   "word": "차",
+   "input": "결혼 10년차 부부입니다",
+   "gold": "결혼 10년 차 부부입니다",
+   "output": "결혼 10년 차 부부입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 기간을 나타내는 명사구 뒤에서 주기나 경과의 해당 시기를 뜻하면 의존명사다 (qna_seq=309642) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "cha04",
+   "arm": "B2a",
+   "word": "차",
+   "input": "인사 차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사차 들렀습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "cha05",
+   "arm": "B2a",
+   "word": "차",
+   "input": "사업 차 서울에 왔어요",
+   "gold": "사업차 서울에 왔어요",
+   "output": "사업차 서울에 왔어요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "cha06",
+   "arm": "B2a",
+   "word": "차",
+   "input": "택배 접수 차 우체국에 들렀다",
+   "gold": "택배 접수차 우체국에 들렀다",
+   "output": "택배 접수차 우체국에 들렀다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.250]"
+   ]
+  },
+  {
+   "id": "cha07",
+   "arm": "B2a",
+   "word": "차",
+   "input": "고향에 갔던차에 들렀다",
+   "gold": "고향에 갔던 차에 들렀다",
+   "output": "고향에 갔던 차에 들렀다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.667]"
+   ]
+  },
+  {
+   "id": "cha08",
+   "arm": "B2a",
+   "word": "차",
+   "input": "마침 가려던차였다",
+   "gold": "마침 가려던 차였다",
+   "output": "마침 가려던 차였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "cha09",
+   "arm": "B2a",
+   "word": "차",
+   "input": "회사 차 타고 가자",
+   "gold": "회사 차 타고 가자",
+   "output": "회사 차 타고 가자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.250]"
+   ]
+  },
+  {
+   "id": "cha10",
+   "arm": "B2a",
+   "word": "차",
+   "input": "따뜻한 차 한 잔",
+   "gold": "따뜻한 차 한 잔",
+   "output": "따뜻한차 한 잔",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.333]"
+   ]
+  },
+  {
+   "id": "cha11",
+   "arm": "B2a",
+   "word": "차",
+   "input": "커피랑 차 좀 내와",
+   "gold": "커피랑 차 좀 내와",
+   "output": "커피랑차 좀 내와",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.250]"
+   ]
+  },
+  {
+   "id": "cha12",
+   "arm": "B2a",
+   "word": "차",
+   "input": "연구 차 방문했습니다",
+   "gold": "연구차 방문했습니다",
+   "output": "연구차 방문했습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.333]"
+   ]
+  },
+  {
+   "id": "cha13",
+   "arm": "B2a",
+   "word": "차",
+   "input": "면접 차 서울에 갑니다",
+   "gold": "면접차 서울에 갑니다",
+   "output": "면접 차 서울에 갑니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "pan01",
+   "arm": "B2a",
+   "word": "판",
+   "input": "한판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "pan02",
+   "arm": "B2a",
+   "word": "판",
+   "input": "한 판 잔치를 벌였다",
+   "gold": "한판 잔치를 벌였다",
+   "output": "한판 잔치를 벌였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 한 번 벌이는 판이라는 고유한 뜻으로 어휘화된 합성명사다 (qna_seq=326715) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "pan03",
+   "arm": "B2a",
+   "word": "판",
+   "input": "두판을 더 이겨야 한다",
+   "gold": "두 판을 더 이겨야 한다",
+   "output": "두 판을 더 이겨야 한다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "deul01",
+   "arm": "B2a",
+   "word": "들",
+   "input": "사람 들이 모였다",
+   "gold": "사람들이 모였다",
+   "output": "사람들이 모였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 들 — 명사 바로 뒤에 붙어 복수를 뜻하면 접미사다 (qna_seq=325894) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "deul02",
+   "arm": "B2a",
+   "word": "들",
+   "input": "학생 들이 떠들었다",
+   "gold": "학생들이 떠들었다",
+   "output": "학생들이 떠들었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 들 — 명사 바로 뒤에 붙어 복수를 뜻하면 접미사다 (qna_seq=325894) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "deul03",
+   "arm": "B2a",
+   "word": "들",
+   "input": "사과, 배, 감들을 먹었다",
+   "gold": "사과, 배, 감 들을 먹었다",
+   "output": "사과, 배, 감 들을 먹었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 들 — 쉼표로 나열된 두 개 이상의 사물 뒤에서 그 밖에 같은 종류가 더 있음을 뜻하면 의존명사다. 등(等)으로 바꿀 수 있다 (qna_seq=325894) [유사도 0.800]"
+   ]
+  },
+  {
+   "id": "daero01",
+   "arm": "B2a",
+   "word": "대로",
+   "input": "말한대로 했다",
+   "gold": "말한 대로 했다",
+   "output": "말한 대로 했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 대로 — 용언의 관형사형 뒤에 오면 의존명사다 (제42항) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "daero02",
+   "arm": "B2a",
+   "word": "대로",
+   "input": "법 대로 하자",
+   "gold": "법대로 하자",
+   "output": "법대로 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 대로 — 체언 뒤에 오면 조사다 (제42항) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "mankeum01",
+   "arm": "B2a",
+   "word": "만큼",
+   "input": "노력한만큼 얻는다",
+   "gold": "노력한 만큼 얻는다",
+   "output": "노력한 만큼 얻는다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만큼 — 용언의 관형사형 뒤에 오면 의존명사다 (제42항) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "mankeum02",
+   "arm": "B2a",
+   "word": "만큼",
+   "input": "너 만큼 잘한다",
+   "gold": "너만큼 잘한다",
+   "output": "너 만큼 잘한다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만큼 — 용언의 관형사형 뒤에 오면 의존명사다 (제42항) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "stt01",
+   "arm": "B2a",
+   "word": "번",
+   "input": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "gold": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "output": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 시도나 기회를 뜻하는 '한번'은 합성어다 (표준국어대사전 표제어 '한번') [유사도 0.250]"
+   ]
+  },
+  {
+   "id": "stt02",
+   "arm": "B2a",
+   "word": "번",
+   "input": "한번만 더 해보자",
+   "gold": "한번만 더 해보자",
+   "output": "한번만 더 해보자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 시도나 기회를 뜻하는 '한번'은 합성어다 (표준국어대사전 표제어 '한번') [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "stt03",
+   "arm": "B2a",
+   "word": "번",
+   "input": "딱 한번 만났어요",
+   "gold": "딱 한 번 만났어요",
+   "output": "딱 한 번 만났어요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 횟수를 셀 때는 수관형사 '한'과 의존명사 '번'이다 (제42항) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "ok01",
+   "arm": "B2a",
+   "word": "뿐",
+   "input": "너뿐이야",
+   "gold": "너뿐이야",
+   "output": "너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "ok02",
+   "arm": "B2a",
+   "word": "차",
+   "input": "인사차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사차 들렀습니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.000]"
+   ]
+  },
+  {
+   "id": "ok03",
+   "arm": "B2a",
+   "word": "판",
+   "input": "한 판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "ok04",
+   "arm": "B2a",
+   "word": "지",
+   "input": "떠난 지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.500]"
+   ]
+  },
+  {
+   "id": "ok05",
+   "arm": "B2a",
+   "word": "만",
+   "input": "십 년 만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 1.000]"
+   ]
+  },
+  {
+   "id": "bun01",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "남은 건 너 뿐이야",
+   "gold": "남은 건 너뿐이야",
+   "output": "남은 건 너뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.949]"
+   ]
+  },
+  {
+   "id": "bun02",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "그냥 웃을뿐이다",
+   "gold": "그냥 웃을 뿐이다",
+   "output": "그냥 웃을 뿐이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.988]"
+   ]
+  },
+  {
+   "id": "bun03",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "믿을 건 실력 뿐이었다",
+   "gold": "믿을 건 실력뿐이었다",
+   "output": "믿을 건 실력 뿐이었다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.954]"
+   ]
+  },
+  {
+   "id": "bun04",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "학생이 셋 뿐이야",
+   "gold": "학생이 셋뿐이야",
+   "output": "학생이 셋뿐이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 체언이나 부사어 바로 뒤에 오면 조사다. 제한·유일의 뜻이다 (qna_seq=310591) [유사도 0.957]"
+   ]
+  },
+  {
+   "id": "bun05",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "결국 나는 추워서 덜덜 떨뿐이었다",
+   "gold": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "output": "결국 나는 추워서 덜덜 떨 뿐이었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.558]"
+   ]
+  },
+  {
+   "id": "bun06",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "그 말을 들었을뿐이네",
+   "gold": "그 말을 들었을 뿐이네",
+   "output": "그 말을 들었을 뿐이네",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.996]"
+   ]
+  },
+  {
+   "id": "man01",
+   "arm": "B2b",
+   "word": "만",
+   "input": "십 년만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 0.927]"
+   ]
+  },
+  {
+   "id": "man02",
+   "arm": "B2b",
+   "word": "만",
+   "input": "세 번만에 합격했다",
+   "gold": "세 번 만에 합격했다",
+   "output": "세 번 만에 합격했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 0.960]"
+   ]
+  },
+  {
+   "id": "man03",
+   "arm": "B2b",
+   "word": "만",
+   "input": "잠 만 자다 왔어",
+   "gold": "잠만 자다 왔어",
+   "output": "잠만 자다 왔어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 0.901]"
+   ]
+  },
+  {
+   "id": "man04",
+   "arm": "B2b",
+   "word": "만",
+   "input": "눈 만 감으면 보여",
+   "gold": "눈만 감으면 보여",
+   "output": "눈만 감으면 보여",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 0.922]"
+   ]
+  },
+  {
+   "id": "man05",
+   "arm": "B2b",
+   "word": "만",
+   "input": "사과 하나 만 먹었으면",
+   "gold": "사과 하나만 먹었으면",
+   "output": "사과 하나만 먹었으면",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만 — 제한·한정·조건의 뜻이면 보조사다 (mcfaq_seq=6720) [유사도 0.997]"
+   ]
+  },
+  {
+   "id": "ji01",
+   "arm": "B2b",
+   "word": "지",
+   "input": "떠난지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.895]"
+   ]
+  },
+  {
+   "id": "ji02",
+   "arm": "B2b",
+   "word": "지",
+   "input": "얼마나 지난 지 모르겠지만",
+   "gold": "얼마나 지난지 모르겠지만",
+   "output": "얼마나지난 지 모르겠지만",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 지 — 의문이나 추측을 나타내는 어미 '-ㄴ지'다 (qna_seq=314315) [유사도 0.994]"
+   ]
+  },
+  {
+   "id": "ji03",
+   "arm": "B2b",
+   "word": "지",
+   "input": "큰 지 작은 지 모르겠다",
+   "gold": "큰지 작은지 모르겠다",
+   "output": "큰지 작은 지 모르겠다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 지 — 의문이나 추측을 나타내는 어미 '-ㄴ지'다 (qna_seq=314315) [유사도 0.979]"
+   ]
+  },
+  {
+   "id": "ji04",
+   "arm": "B2b",
+   "word": "지",
+   "input": "밥을 먹은지 두 시간 지났다",
+   "gold": "밥을 먹은 지 두 시간 지났다",
+   "output": "밥을 먹은 지 두 시간 지났다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.865]"
+   ]
+  },
+  {
+   "id": "cha01",
+   "arm": "B2b",
+   "word": "차",
+   "input": "입사 3년차입니다",
+   "gold": "입사 3년 차입니다",
+   "output": "입사 3년 차입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 기간을 나타내는 명사구 뒤에서 주기나 경과의 해당 시기를 뜻하면 의존명사다 (qna_seq=309642) [유사도 0.948]"
+   ]
+  },
+  {
+   "id": "cha02",
+   "arm": "B2b",
+   "word": "차",
+   "input": "임신 8주차예요",
+   "gold": "임신 8주 차예요",
+   "output": "임신 8주 차예요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.781]"
+   ]
+  },
+  {
+   "id": "cha03",
+   "arm": "B2b",
+   "word": "차",
+   "input": "결혼 10년차 부부입니다",
+   "gold": "결혼 10년 차 부부입니다",
+   "output": "결혼 10년 차 부부입니다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 차 — 기간을 나타내는 명사구 뒤에서 주기나 경과의 해당 시기를 뜻하면 의존명사다 (qna_seq=309642) [유사도 0.932]"
+   ]
+  },
+  {
+   "id": "cha04",
+   "arm": "B2b",
+   "word": "차",
+   "input": "인사 차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사 차 들렀습니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.954]"
+   ]
+  },
+  {
+   "id": "cha05",
+   "arm": "B2b",
+   "word": "차",
+   "input": "사업 차 서울에 왔어요",
+   "gold": "사업차 서울에 왔어요",
+   "output": "사업 차 서울에 왔어요",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.672]"
+   ]
+  },
+  {
+   "id": "cha06",
+   "arm": "B2b",
+   "word": "차",
+   "input": "택배 접수 차 우체국에 들렀다",
+   "gold": "택배 접수차 우체국에 들렀다",
+   "output": "택배 접수 차 우체국에 들렀다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.647]"
+   ]
+  },
+  {
+   "id": "cha07",
+   "arm": "B2b",
+   "word": "차",
+   "input": "고향에 갔던차에 들렀다",
+   "gold": "고향에 갔던 차에 들렀다",
+   "output": "고향에 갔던 차에 들렀다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.992]"
+   ]
+  },
+  {
+   "id": "cha08",
+   "arm": "B2b",
+   "word": "차",
+   "input": "마침 가려던차였다",
+   "gold": "마침 가려던 차였다",
+   "output": "마침 가려던 차였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.976]"
+   ]
+  },
+  {
+   "id": "cha09",
+   "arm": "B2b",
+   "word": "차",
+   "input": "회사 차 타고 가자",
+   "gold": "회사 차 타고 가자",
+   "output": "회사 차 타고 가자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.948]"
+   ]
+  },
+  {
+   "id": "cha10",
+   "arm": "B2b",
+   "word": "차",
+   "input": "따뜻한 차 한 잔",
+   "gold": "따뜻한 차 한 잔",
+   "output": "따뜻한 차 한 잔",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.601]"
+   ]
+  },
+  {
+   "id": "cha11",
+   "arm": "B2b",
+   "word": "차",
+   "input": "커피랑 차 좀 내와",
+   "gold": "커피랑 차 좀 내와",
+   "output": "커피랑차 좀 내와",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 명사 뒤에서 목적을 뜻하면 접미사다 (qna_seq=319170) [유사도 0.897]"
+   ]
+  },
+  {
+   "id": "cha12",
+   "arm": "B2b",
+   "word": "차",
+   "input": "연구 차 방문했습니다",
+   "gold": "연구차 방문했습니다",
+   "output": "연구 차 방문했습니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.893]"
+   ]
+  },
+  {
+   "id": "cha13",
+   "arm": "B2b",
+   "word": "차",
+   "input": "면접 차 서울에 갑니다",
+   "gold": "면접차 서울에 갑니다",
+   "output": "면접 차 서울에 갑니다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.807]"
+   ]
+  },
+  {
+   "id": "pan01",
+   "arm": "B2b",
+   "word": "판",
+   "input": "한판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 0.855]"
+   ]
+  },
+  {
+   "id": "pan02",
+   "arm": "B2b",
+   "word": "판",
+   "input": "한 판 잔치를 벌였다",
+   "gold": "한판 잔치를 벌였다",
+   "output": "한판 잔치를 벌였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 한 번 벌이는 판이라는 고유한 뜻으로 어휘화된 합성명사다 (qna_seq=326715) [유사도 0.938]"
+   ]
+  },
+  {
+   "id": "pan03",
+   "arm": "B2b",
+   "word": "판",
+   "input": "두판을 더 이겨야 한다",
+   "gold": "두 판을 더 이겨야 한다",
+   "output": "두 판을 더 이겨야 한다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 0.976]"
+   ]
+  },
+  {
+   "id": "deul01",
+   "arm": "B2b",
+   "word": "들",
+   "input": "사람 들이 모였다",
+   "gold": "사람들이 모였다",
+   "output": "사람들이 모였다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 들 — 명사 바로 뒤에 붙어 복수를 뜻하면 접미사다 (qna_seq=325894) [유사도 0.869]"
+   ]
+  },
+  {
+   "id": "deul02",
+   "arm": "B2b",
+   "word": "들",
+   "input": "학생 들이 떠들었다",
+   "gold": "학생들이 떠들었다",
+   "output": "학생들이 떠들었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 들 — 명사 바로 뒤에 붙어 복수를 뜻하면 접미사다 (qna_seq=325894) [유사도 0.815]"
+   ]
+  },
+  {
+   "id": "deul03",
+   "arm": "B2b",
+   "word": "들",
+   "input": "사과, 배, 감들을 먹었다",
+   "gold": "사과, 배, 감 들을 먹었다",
+   "output": "사과, 배, 감 들을 먹었다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 들 — 쉼표로 나열된 두 개 이상의 사물 뒤에서 그 밖에 같은 종류가 더 있음을 뜻하면 의존명사다. 등(等)으로 바꿀 수 있다 (qna_seq=325894) [유사도 0.994]"
+   ]
+  },
+  {
+   "id": "daero01",
+   "arm": "B2b",
+   "word": "대로",
+   "input": "말한대로 했다",
+   "gold": "말한 대로 했다",
+   "output": "말한 대로 했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 대로 — 용언의 관형사형 뒤에 오면 의존명사다 (제42항) [유사도 0.876]"
+   ]
+  },
+  {
+   "id": "daero02",
+   "arm": "B2b",
+   "word": "대로",
+   "input": "법 대로 하자",
+   "gold": "법대로 하자",
+   "output": "법대로 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 대로 — 체언 뒤에 오면 조사다 (제42항) [유사도 0.825]"
+   ]
+  },
+  {
+   "id": "mankeum01",
+   "arm": "B2b",
+   "word": "만큼",
+   "input": "노력한만큼 얻는다",
+   "gold": "노력한 만큼 얻는다",
+   "output": "노력한 만큼 얻는다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만큼 — 용언의 관형사형 뒤에 오면 의존명사다 (제42항) [유사도 0.940]"
+   ]
+  },
+  {
+   "id": "mankeum02",
+   "arm": "B2b",
+   "word": "만큼",
+   "input": "너 만큼 잘한다",
+   "gold": "너만큼 잘한다",
+   "output": "너만큼 잘한다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "easy",
+   "evidence": [
+    "제42항 만큼 — 체언 뒤에 오면 조사다 (제42항) [유사도 0.864]"
+   ]
+  },
+  {
+   "id": "stt01",
+   "arm": "B2b",
+   "word": "번",
+   "input": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "gold": "자 복습 차원에서 지난번 했던 거 비슷한 걸 다시 한번 해보면",
+   "output": "자 복습 차원에서 지난 번 했던 거 비슷한 걸 다시 한번 해보면",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 횟수를 셀 때는 수관형사 '한'과 의존명사 '번'이다 (제42항) [유사도 0.672]"
+   ]
+  },
+  {
+   "id": "stt02",
+   "arm": "B2b",
+   "word": "번",
+   "input": "한번만 더 해보자",
+   "gold": "한번만 더 해보자",
+   "output": "한번만 더 해보자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 시도나 기회를 뜻하는 '한번'은 합성어다 (표준국어대사전 표제어 '한번') [유사도 0.948]"
+   ]
+  },
+  {
+   "id": "stt03",
+   "arm": "B2b",
+   "word": "번",
+   "input": "딱 한번 만났어요",
+   "gold": "딱 한 번 만났어요",
+   "output": "딱 한 번 만났어요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "hard",
+   "evidence": [
+    "제42항 번 — 횟수를 셀 때는 수관형사 '한'과 의존명사 '번'이다 (제42항) [유사도 0.985]"
+   ]
+  },
+  {
+   "id": "ok01",
+   "arm": "B2b",
+   "word": "뿐",
+   "input": "너뿐이야",
+   "gold": "너뿐이야",
+   "output": "너 뿐이야",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 뿐 — 용언의 관형사형 어미 뒤에 오면 의존명사다. '따름'의 뜻이다 (qna_seq=310591) [유사도 0.959]"
+   ]
+  },
+  {
+   "id": "ok02",
+   "arm": "B2b",
+   "word": "차",
+   "input": "인사차 들렀습니다",
+   "gold": "인사차 들렀습니다",
+   "output": "인사 차 들렀습니다",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 차 — 용언의 관형사형 뒤에서 때나 기회를 뜻하면 의존명사다 (qna_seq=326715) [유사도 0.924]"
+   ]
+  },
+  {
+   "id": "ok03",
+   "arm": "B2b",
+   "word": "판",
+   "input": "한 판 더 하자",
+   "gold": "한 판 더 하자",
+   "output": "한 판 더 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 판 — 수관형사 뒤에서 승부나 상황을 세는 단위면 의존명사다 (qna_seq=326715) [유사도 0.903]"
+   ]
+  },
+  {
+   "id": "ok04",
+   "arm": "B2b",
+   "word": "지",
+   "input": "떠난 지 삼 년이 됐다",
+   "gold": "떠난 지 삼 년이 됐다",
+   "output": "떠난 지 삼 년이 됐다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 지 — 관형사형 뒤에서 그 일이 있었던 때로부터 지금까지의 동안을 뜻하면 의존명사다. 자리에 시간·동안·세월을 넣어도 어색하지 않다 (qna_seq=314315) [유사도 0.965]"
+   ]
+  },
+  {
+   "id": "ok05",
+   "arm": "B2b",
+   "word": "만",
+   "input": "십 년 만의 귀국이다",
+   "gold": "십 년 만의 귀국이다",
+   "output": "십 년 만의 귀국이다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": "control",
+   "evidence": [
+    "제42항 만 — 명사나 수관형사구 뒤에서 경과한 시간이나 횟수를 뜻하면 의존명사다 (mcfaq_seq=6720) [유사도 0.967]"
+   ]
+  }
+ ]
+}
