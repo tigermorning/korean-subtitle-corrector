@@ -40,14 +40,33 @@ class TestSettings:
     def test_기본값은_꺼짐(self):
         assert normalize_llm_settings().enabled is False
 
-    def test_주소나_모델이_없으면_켤_수_없다(self):
-        assert normalize_llm_settings(enabled=True, base_url="", model="m").enabled is False
+    def test_모델_이름이_없으면_어느_경로로도_켤_수_없다(self):
         assert normalize_llm_settings(enabled=True, base_url="http://x/v1", model="").enabled is False
+        assert normalize_llm_settings(enabled=True, backend="cli", model="").enabled is False
 
-    def test_둘_다_있으면_켜진다(self):
-        settings = normalize_llm_settings(enabled=True, base_url="http://x/v1/", model="m")
+    def test_http_경로는_주소가_있어야_켜진다(self):
+        assert normalize_llm_settings(
+            enabled=True, backend="http", base_url="", model="m").enabled is False
+        settings = normalize_llm_settings(
+            enabled=True, backend="http", base_url="http://x/v1/", model="m")
         assert settings.enabled is True
         assert settings.base_url == "http://x/v1"  # 끝의 슬래시는 떼어 낸다
+
+    def test_cli_경로는_실행_파일이_있어야_켜진다(self, monkeypatch):
+        from subtitle_corrector.engine import llm_pass
+
+        monkeypatch.setattr(llm_pass, "find_ollama_exe", lambda: "")
+        assert normalize_llm_settings(enabled=True, backend="cli", model="m").enabled is False
+        monkeypatch.setattr(llm_pass, "find_ollama_exe", lambda: "/usr/bin/ollama")
+        assert normalize_llm_settings(enabled=True, backend="cli", model="m").enabled is True
+
+    def test_auto는_주소가_있으면_http_없으면_cli(self, monkeypatch):
+        from subtitle_corrector.engine import llm_pass
+
+        monkeypatch.setattr(llm_pass, "find_ollama_exe", lambda: "/usr/bin/ollama")
+        assert normalize_llm_settings(
+            enabled=True, base_url="http://x/v1", model="m").backend == "http"
+        assert normalize_llm_settings(enabled=True, model="m").backend == "cli"
 
     def test_꺼져_있으면_호출조차_하지_않는다(self):
         def _boom(prompt, settings):
@@ -210,6 +229,32 @@ class TestSkipping:
             entries, ON._replace(max_lines=2), complete=_responder([]),
         )
         assert any("뒤쪽 3줄은 모델이 보지 않았습니다" in n.message for n in notes)
+
+
+class TestTerminalControl:
+    """`ollama run`이 섞어 보내는 커서 제어 코드를 화면 결과로 복원한다.
+
+    2026-08-12 실측: 이것 때문에 모든 응답이 JSON 파싱에 실패해 제안이 0건으로
+    나왔다. 코드를 **떼기만** 하면 안 된다 — `\\x1b[1D\\x1b[K`는 직전 글자를
+    없애라는 뜻이라, 떼기만 하면 지워졌어야 할 글자가 남아 그대로 깨진다.
+    """
+
+    def test_직전_글자를_지우는_코드를_흉내_낸다(self):
+        from subtitle_corrector.engine.llm_pass import _render_terminal
+
+        assert _render_terminal("abc\x1b[1D\x1b[K") == "ab"
+
+    def test_캐리지리턴은_같은_줄을_덮어쓴다(self):
+        from subtitle_corrector.engine.llm_pass import _render_terminal
+
+        assert _render_terminal("가나다\r라") == "라나다"
+
+    def test_깨진_JSON이_복원돼_파싱된다(self):
+        raw = '[{"id": 1, "before": "그렇게 됬다", "after": "그렇게 됐다", "rule": "되/돼",X\x1b[1D\x1b[K "declared": ["됬다 -> 됐다"]}]'
+        flags, _ = propose_corrections(
+            [_entry(1, "그렇게 됬다")], ON, complete=_raw_responder(raw)
+        )
+        assert len(flags) == 1
 
 
 class TestResilience:

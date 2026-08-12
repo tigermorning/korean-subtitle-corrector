@@ -33,8 +33,12 @@
 들고 있는다 — 모델은 숫자를 조용히 틀리고, 자막에서 그건 복구가 어려운 사고다.
 """
 
+import glob
 import json
 import os
+import re
+import shutil
+import subprocess
 from typing import Callable, NamedTuple
 
 import requests
@@ -63,6 +67,11 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 
 
+# "http" / "cli" / "auto". 비워 두면 auto — 주소가 있으면 HTTP, 없고 `ollama`
+# 실행 파일이 있으면 명령으로 부른다(WSL에서는 이쪽이 유일한 길이다).
+LLM_BACKEND = os.getenv("LLM_BACKEND", "")
+
+
 # 한 번에 보낼 줄 수. 너무 크면 모델이 뒤쪽 줄을 성의 없이 처리하고, 너무 작으면
 # 문맥이 끊겨 이 패스의 존재 이유(문맥 판단)가 사라진다.
 _DEFAULT_BATCH_SIZE = 40
@@ -86,6 +95,9 @@ class LlmSettings(NamedTuple):
     base_url: str = ""
     model: str = ""
     api_key: str = ""
+    # "http" — OpenAI 호환 주소로 부른다. "cli" — `ollama run`을 직접 부른다.
+    # WSL에서 Windows 쪽 Ollama는 HTTP로 닿지 않아 cli가 유일한 길이다(_chat_cli 참고).
+    backend: str = "http"
     timeout: float = 60.0
     batch_size: int = _DEFAULT_BATCH_SIZE
     # 0이면 제한 없음. 값을 주면 앞에서부터 그만큼만 보고 나머지는 건너뛴다 —
@@ -98,14 +110,25 @@ def normalize_llm_settings(
     base_url: str | None = None,
     model: str | None = None,
     api_key: str | None = None,
+    backend: str | None = None,
     timeout: float | str | None = None,
     batch_size: int | str | None = None,
     max_lines: int | str | None = None,
 ) -> LlmSettings:
     """설정값을 정규화한다. 값이 모자라면 **꺼진 설정**으로 떨어뜨린다.
 
-    주소나 모델 이름이 없으면 켤 수 없다 — 그 상태로 호출하면 매 요청이 실패하고
-    로그만 쌓인다. 켜졌다고 표시해 놓고 아무 일도 안 하는 것보다 꺼진 것이 정직하다.
+    모델 이름은 어느 경로로든 반드시 있어야 한다. 그 위에서 부르는 길을 정한다.
+
+        backend=http   주소가 있어야 켜진다 (OpenAI 호환 서버·상용 API)
+        backend=cli    `ollama` 실행 파일이 있어야 켜진다 (주소 불필요)
+        backend=auto   주소가 있으면 http, 없고 실행 파일이 있으면 cli
+
+    기본값이 `auto`인 이유: 이 도구를 쓰는 자리가 WSL이면 HTTP가 아예 닿지 않고
+    (`_chat_cli` 참고) 사용자가 그 사실을 미리 알 방법이 없다. 주소를 안 적었는데
+    Ollama가 깔려 있으면 조용히 되는 쪽으로 붙는 것이 맞다.
+
+    켤 수 없는 설정은 꺼진 것으로 떨어뜨린다 — 그 상태로 호출하면 매 요청이
+    실패하고 로그만 쌓인다. 켜졌다고 표시해 놓고 아무 일도 안 하는 것보다 낫다.
     """
     if isinstance(enabled, str):
         enabled_value = enabled.strip().lower() in ("1", "true", "yes", "on", "y")
@@ -114,7 +137,17 @@ def normalize_llm_settings(
 
     resolved_base = (base_url or LLM_BASE_URL or "").strip().rstrip("/")
     resolved_model = (model or LLM_MODEL or "").strip()
-    if not resolved_base or not resolved_model:
+    resolved_backend = (backend or LLM_BACKEND or "auto").strip().lower()
+    if resolved_backend not in ("http", "cli", "auto"):
+        resolved_backend = "auto"
+    if resolved_backend == "auto":
+        resolved_backend = "http" if resolved_base else ("cli" if find_ollama_exe() else "http")
+
+    if not resolved_model:
+        enabled_value = False
+    elif resolved_backend == "http" and not resolved_base:
+        enabled_value = False
+    elif resolved_backend == "cli" and not find_ollama_exe():
         enabled_value = False
 
     def _number(value, fallback):
@@ -128,6 +161,7 @@ def normalize_llm_settings(
         base_url=resolved_base,
         model=resolved_model,
         api_key=(api_key or LLM_API_KEY or "").strip(),
+        backend=resolved_backend,
         timeout=max(1.0, _number(timeout, 60.0)),
         batch_size=max(1, _number(batch_size, _DEFAULT_BATCH_SIZE)),
         max_lines=max(0, _number(max_lines, 0)),
@@ -193,13 +227,117 @@ def _chat(prompt: str, settings: LlmSettings) -> str:
     return response.json()["choices"][0]["message"]["content"] or ""
 
 
+# WSL에서 Windows 쪽 Ollama를 부를 때 쓸 실행 파일 자리. 사용자 이름이 리눅스
+# 쪽과 다를 수 있어 별표로 훑는다.
+_OLLAMA_EXE_PATTERNS = (
+    "/mnt/c/Users/{user}/AppData/Local/Programs/Ollama/ollama.exe",
+    "/mnt/c/Program Files/Ollama/ollama.exe",
+)
+
+
+def find_ollama_exe() -> str:
+    """`ollama` 실행 파일을 찾는다. 없으면 빈 문자열."""
+    for name in ("ollama", "ollama.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for pattern in _OLLAMA_EXE_PATTERNS:
+        matches = glob.glob(pattern.replace("{user}", "*"))
+        if matches:
+            return matches[0]
+    return ""
+
+
+# `ollama run`은 진행 표시를 그리느라 커서 제어 코드를 출력에 섞는다(2026-08-12
+# 실측). 그냥 지우면 안 된다 — `\x1b[1D\x1b[K`는 "한 칸 왼쪽으로 가서 거기부터
+# 지워라", 즉 **직전 글자를 없애라**는 뜻이라, 코드만 떼면 지워졌어야 할 글자가
+# 남아 JSON이 깨진다. 실제로 이것 때문에 모든 응답이 파싱에 실패해 제안이 0건으로
+# 나왔다. 그래서 코드가 시키는 대로 흉내 내서 최종 화면을 복원한다.
+_CSI = re.compile(r"\x1b\[([0-9;]*)([A-Za-z])")
+
+
+def _render_terminal(raw: str) -> str:
+    """커서 제어 코드를 실행해 '화면에 남았을 글자'만 남긴다.
+
+    다루는 것은 실제로 관측된 것뿐이다: 커서 좌우 이동(D/C), 줄 끝까지 지우기(K),
+    캐리지 리턴. 나머지 코드는 화면 색깔 같은 것이라 떼기만 한다.
+    """
+    lines: list[list[str]] = [[]]
+    col = 0
+    index = 0
+    while index < len(raw):
+        match = _CSI.match(raw, index)
+        if match:
+            amount = int(match.group(1) or 1) if match.group(1).isdigit() else 1
+            command = match.group(2)
+            if command == "D":
+                col = max(0, col - amount)
+            elif command == "C":
+                col = min(len(lines[-1]), col + amount)
+            elif command == "K":
+                del lines[-1][col:]
+            index = match.end()
+            continue
+        char = raw[index]
+        index += 1
+        if char == "\n":
+            lines.append([])
+            col = 0
+        elif char == "\r":
+            col = 0
+        elif char == "\x08":
+            col = max(0, col - 1)
+        else:
+            current = lines[-1]
+            if col < len(current):
+                current[col] = char
+            else:
+                current.extend([" "] * (col - len(current)))
+                current.append(char)
+            col += 1
+    return "\n".join("".join(line) for line in lines)
+
+
+def _chat_cli(prompt: str, settings: LlmSettings) -> str:
+    """`ollama run`을 직접 부른다. **포트를 하나도 열지 않는다.**
+
+    WSL에서 작업할 때 Windows 쪽 Ollama는 127.0.0.1에만 붙어 있어 HTTP로 닿지
+    않는다(2026-08-12 실측: 게이트웨이 172.27.112.1도 마찬가지). 뚫으려면 Ollama를
+    `0.0.0.0`에 열어야 하는데, 그건 같은 망의 다른 컴퓨터에도 열어 주는 일이다 —
+    남의 원고를 다루는 자리에서 할 일이 아니다. 자막 편집기 쪽도 같은 이유로 같은
+    선택을 했다(`checker/translate.py`).
+
+    `ollama run`에는 시스템 지시를 따로 주는 자리가 없어 프롬프트 앞에 붙인다.
+    """
+    exe = find_ollama_exe()
+    if not exe:
+        raise RuntimeError(
+            "ollama 실행 파일을 찾지 못했습니다. 설치했다면 LLM_BASE_URL로 "
+            "HTTP 주소를 지정해 주세요."
+        )
+    result = subprocess.run(
+        [exe, "run", settings.model],
+        input=f"{_SYSTEM_PROMPT}\n\n{prompt}\n",
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=settings.timeout,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or "").replace("\r", "").strip()[:200]
+        raise RuntimeError(f"Ollama 오류: {detail}")
+    return (result.stdout or "").strip()
+
+
 def _extract_json_array(raw: str) -> list:
     """응답에서 JSON 배열을 꺼낸다. 못 꺼내면 빈 목록 — 여기서 터뜨리지 않는다.
 
     지시에 코드펜스를 붙이지 말라고 적어도 모델은 종종 붙인다. 설명 문장을 앞에
     다는 경우도 있다. 그런 응답 하나 때문에 교정 전체가 실패하면 안 되므로,
     가장 바깥 대괄호 쌍만 잘라서 읽어 본다.
+
+    커서 제어 코드부터 실행한다(`_render_terminal`). 어느 경로로 받은 응답이든
+    같은 방어가 걸려야 해서 백엔드가 아니라 여기에 둔다.
     """
+    raw = _render_terminal(raw)
     start, end = raw.find("["), raw.rfind("]")
     if start < 0 or end <= start:
         return []
@@ -325,7 +463,7 @@ def propose_corrections(
     if not settings.enabled or not entries:
         return [], []
 
-    caller = complete or _chat
+    caller = complete or (_chat_cli if settings.backend == "cli" else _chat)
     notes: list[AppliedNote] = []
 
     candidates: list[tuple[int, str]] = []

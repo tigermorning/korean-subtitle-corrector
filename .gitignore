@@ -18,3 +18,8 @@ _check*.vtt
 # 판정 기록장(FEEDBACK_LOG_DIR). 남의 원고 대사가 그대로 들어 있으므로 커밋하지 않는다.
 decisions-*.jsonl
 feedback/
+
+# 감사 도구 실행 산출물(그때그때 다시 만든다). PoC 결과(poc/**/results*.json)는 제출
+# 증거이므로 여기 넣지 않는다.
+audit_result.json
+audit_run.log
