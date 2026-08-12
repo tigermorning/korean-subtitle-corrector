@@ -22,7 +22,7 @@ import requests
 from fastapi import FastAPI, Form, HTTPException, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 
-from . import store
+from . import feedback, store
 from .decoding import decode_bytes, verify_ingest_fidelity
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
 from .dictionary import DIALECT_MARKERS, lookup_by_source
@@ -32,6 +32,7 @@ from .engine import (
     normalize_punctuation_style,
     normalize_subtitle_markers,
     normalize_dialect_mode,
+    normalize_llm_settings,
     normalize_spacing_mode,
     register_custom_words,
 )
@@ -228,6 +229,11 @@ def correct_subtitle(
                 screen_text_marker, line_break_marker, position_marker,
                 speaker_bracket, tone_bracket,
             ),
+            # 언어 모델 패스. 화면에서 켜고 끄는 항목으로 두지 않고 **서버 설정
+            # (.env)으로만** 정한다 — 원고를 외부로 보낼지 말지는 그 서버를 세운
+            # 사람이 정할 문제이지, 업로드하는 사람이 체크칸으로 정할 문제가 아니다.
+            # 주소·모델 이름이 없으면 normalize가 알아서 꺼진 설정으로 떨어뜨린다.
+            llm=normalize_llm_settings(enabled=True),
         )
 
         # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른
@@ -269,6 +275,39 @@ def correct_subtitle(
             for e in corrected_entries
         ],
     }
+
+
+@app.post("/api/feedback")
+def record_feedback(decisions: str = Form(""), document: str = Form("")):
+    """화면에서 '반영'을 누른 순간의 판정을 기록한다(기본 꺼짐).
+
+    화면이 이 창구를 부르는 것은 교정의 부수 작업이므로 **어떤 경우에도 사용자의
+    작업을 막지 않는다** — 형식이 깨졌으면 0건으로 답하고 끝낸다. 400을 돌려주면
+    화면이 오류를 띄우게 되는데, 사용자 입장에서는 방금 반영한 교정과 아무 상관도
+    없는 실패라 혼란만 준다.
+
+    `document`는 원고 전문이다. 여기서 즉시 해시로 바꾸고 **원문은 버린다**
+    (`feedback.document_id` 참고) — 같은 원고의 중복 판정을 나중에 걸러내는
+    용도라 문서를 가릴 수만 있으면 된다.
+    """
+    if not feedback.is_enabled():
+        return {"enabled": False, "recorded": 0}
+    try:
+        parsed = json.loads(decisions) if decisions.strip() else []
+    except json.JSONDecodeError:
+        return {"enabled": True, "recorded": 0}
+    if not isinstance(parsed, list):
+        return {"enabled": True, "recorded": 0}
+    written = feedback.record_decisions(
+        parsed, doc_hash=feedback.document_id(document) if document else ""
+    )
+    return {"enabled": True, "recorded": written}
+
+
+@app.get("/api/feedback/summary")
+def feedback_summary():
+    """쌓인 판정 건수. 학습을 시작할 만큼 모였는지 보는 용도다."""
+    return feedback.summarize()
 
 
 def _try_save_report(

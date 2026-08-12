@@ -77,6 +77,7 @@ from .dependent_nouns import (
 from .spacing_guards import check_spacing
 from .text_utils import _josa
 from .edit_guard import verify_edit
+from .llm_pass import LlmSettings, propose_corrections
 
 def _headword_evidence(token: str) -> str:
     """사전이 그 표기를 쓰는 표제어를 근거 문구로 만든다(§66).
@@ -472,6 +473,7 @@ def correct_entries(
     dialect_mode: str | None = None,
     markers: SubtitleMarkers | None = None,
     style: PunctuationStyle | None = None,
+    llm: LlmSettings | None = None,
 ) -> tuple[list[SubtitleEntry], list[FlagItem], list[AppliedNote]]:
     """entries를 처리한다.
 
@@ -508,6 +510,10 @@ def correct_entries(
     dialect_region/dialect_mode는 문서 전체 사투리 설정이다. 화자별 지정이 없는
     줄에 이 값이 적용되므로, 화자 표기가 없는 일반 글(소설 등) 전체를 한 사투리로
     다룰 수 있다. 화자별 지정이 있으면 그쪽이 우선한다.
+
+    llm은 언어 모델 패스 설정이다(기본값 None = 끔). 켜면 규칙 교정이 **모두 끝난
+    뒤** 남은 텍스트를 모델에게 보여 주고 확인 플래그만 더 받는다. 텍스트는 바뀌지
+    않는다 — 자세한 이유는 `llm_pass.py` 참고.
     """
     corrected_entries = []
     flags = []
@@ -644,6 +650,18 @@ def correct_entries(
             )
     flags.extend(check_term_spacing_consistency(corrected_entries, protected_indices))
     flags.extend(check_aux_verb_consistency(corrected_entries, protected_indices))
+
+    # 언어 모델 패스는 **맨 마지막**이다. 규칙과 경쟁시키지 않고 뒤에 줄 세운다 —
+    # 사전으로 확정되는 자리는 규칙이 이미 다 가져갔고, 모델에게는 그러고도 남은
+    # 것만 보여 준다. 순서를 반대로 하면 확정 근거가 있는 자리까지 확률적 판단이
+    # 먼저 손대게 되고, 그건 이 프로젝트가 처음부터 하지 않기로 한 일이다.
+    # 반환되는 것은 플래그뿐이며 corrected_entries는 건드리지 않는다.
+    if llm is not None and llm.enabled:
+        llm_flags, llm_notes = propose_corrections(
+            corrected_entries, llm, markers=markers, skip_indices=protected_indices
+        )
+        flags.extend(llm_flags)
+        applied_log.extend(llm_notes)
 
     # 사투리 자동 감지는 넣지 않는다(2026-08-02 재확인). 화자 단위로 모아 봐도
     # 현재 표지 사전으로는 표준어 화자와 갈리지 않는다 — 실측에서 전라도 화자의

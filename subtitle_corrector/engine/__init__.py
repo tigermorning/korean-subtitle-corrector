@@ -54,6 +54,8 @@
     consistency     문서 전체 일관성 (제49항·제50항 혼용)
     ── 그 위 ──
     spacing_guards  띄어쓰기 제안에서 근거 없는 부분을 되돌리는 가드 + check_spacing
+    llm_pass        규칙이 못 잡는 문맥 판단을 언어 모델에 묻는 선택 패스 (기본 꺼짐,
+                    플래그만 만들고 텍스트는 바꾸지 않는다)
     pipeline        correct_entries 오케스트레이션 (규칙을 두지 않고 순서만 정한다)
 
 새 규칙은 규칙 모듈에 넣고 `pipeline.py`에는 호출 순서만 추가한다. 새 공개 함수는
@@ -130,6 +132,7 @@ from .dependent_nouns import (
     correct_duration_cha_spacing,
 )
 from .spacing_guards import check_spacing
+from .llm_pass import LlmSettings, normalize_llm_settings, propose_corrections
 from .pipeline import apply_report_fixes, correct_entries
 
 __all__ = [
@@ -137,6 +140,9 @@ __all__ = [
     "FlagItem",
     "PunctuationStyle",
     "SubtitleMarkers",
+    "LlmSettings",
+    "normalize_llm_settings",
+    "propose_corrections",
     "ELLIPSIS_STYLES",
     "QUOTE_STYLES",
     "SPACING_MODES",
