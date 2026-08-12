@@ -132,14 +132,18 @@ def apply_verdict(text: str, word: str, pos: int, verdict: str) -> str:
 # ---------------------------------------------------------------- B0 현재 시스템
 
 def run_b0(text: str, word: str | None = None) -> tuple[str, list[str]]:
-    """지금 배포돼 있는 파이프라인 전체. 이것이 기준선이다."""
+    """지금 배포돼 있는 파이프라인 전체. 이것이 기준선이다.
+
+    **답은 자동 교정된 본문이고, 플래그는 근거로만 센다.** 처음에는 플래그의
+    `suggested_fix`를 답으로 삼았는데, 그러면 "본문을 안 바꾸고 사람에게 물었다"가
+    "이렇게 고쳤다"로 잘못 기록된다(2026-08-12 실측: `술 시켜요`가 §75에서 자동
+    교정 대상에서 내려갔는데도 오교정으로 집계됐다). 이 도구가 파일에 실제로 쓰는
+    것은 본문이고, 제안은 사람이 고를 때만 반영된다 — 그 차이를 지표가 지켜야 한다.
+    """
     entry = SubtitleEntry(index=1, start="", end="", text=text)
     fixed, flags, _notes = correct_entries([entry], doc_type="subtitle")
-    # 플래그가 제안을 냈으면 그것도 시스템의 답으로 친다 — 작업자가 실제로 보는 것이다.
-    for flag in flags:
-        if flag.suggested_fix:
-            return flag.suggested_fix, [flag.reason]
-    return fixed[0].text, []
+    why = [f"[제안] {f.suggested_fix} — {f.reason}" for f in flags if f.suggested_fix]
+    return fixed[0].text, why
 
 
 # ---------------------------------------------------------------- B1 정확 일치 판례
@@ -300,3 +304,133 @@ def run_b3(text: str, word: str | None = None) -> tuple[str, list[str]]:
 
 
 ARMS = {"B0": run_b0, "B1": run_b1, "B2a": run_b2a, "B2b": run_b2b, "B3": run_b3}
+
+
+# ============================================================ 실사용 오교정용 arm
+#
+# 위 arm들은 제42항 이중 기능 단어 전용이다. 여기부터는 **사용자가 실제로 보고한
+# 오교정**(`dataset_realusage.jsonl`)을 겨냥한다. 그 사례들의 공통 원인은 하나다:
+#
+#   표제어가 있다는 사실만으로 붙였다. 그 표제어의 **뜻**은 보지 않았다.
+#
+# `사진하다`가 그 증거다. 표준국어대사전에 있고 분야 표시도 없어 현대 일반어
+# 게이트를 통과하지만, 뜻풀이 첫 줄이 "벼슬아치가 규정된 시간에 근무지로
+# 출근하다"(仕進하다)이다. 사진(寫眞)과 아무 상관이 없다. 반면 `요리하다`·`공부하다`의
+# 뜻풀이는 문장 문맥과 맞는다.
+#
+# 즉 **가르는 근거가 사전 안에 이미 있는데 지금은 안 꺼내 쓴다.** 불리언 하나로 뭉갠다.
+# 이 arm은 그 뜻풀이를 꺼내 문맥과 대조하는 가드다. §73의 `건초` 판정(표준 용어
+# 뜻풀이와의 낱말 겹침)을 붙임 판정으로 확장한 것이다.
+
+_defs_cache: dict = {}
+
+
+def _definitions(word: str) -> list[str]:
+    from subtitle_corrector.dictionary import headword_definitions
+    if word not in _defs_cache:
+        try:
+            _defs_cache[word] = list(headword_definitions(word) or [])
+        except Exception:
+            _defs_cache[word] = []
+    return _defs_cache[word]
+
+
+def _merged_spans(before: str, after: str) -> list[tuple[int, str]]:
+    """B0가 붙인 자리를 찾는다. 반환: (입력 어절 위치, 붙여진 어절)."""
+    a, b = before.split(), after.split()
+    merges, i, j = [], 0, 0
+    while i < len(a) and j < len(b):
+        if a[i] == b[j]:
+            i += 1; j += 1
+        elif i + 1 < len(a) and b[j] == a[i] + a[i + 1]:
+            merges.append((i, b[j])); i += 2; j += 1
+        else:
+            i += 1; j += 1
+    return merges
+
+
+def _lemma_of(surface: str) -> str:
+    """붙여진 어절에서 사전에 조회할 기본형을 뽑는다('사진하러' -> '사진하다').
+
+    **`_content_lemmas`를 쓰면 안 된다.** 그것은 NNG/VV/VA만 남기므로 파생 접미사
+    '하'(XSV)가 걸러져 `요리하는`에서 `요리`만 나온다. 그러면 가드가 엉뚱한 표제어를
+    조회한다 — 실측에서 `요리`(利料, "재물을 불리어 이익을 늘림")를 보고 정당한
+    붙임을 되돌렸다(2026-08-12). 조회할 낱말을 틀리면 뒤의 판정은 전부 무의미하다.
+
+    그래서 형태소 태그를 직접 본다. 파생 접미사가 있으면 앞말에 붙여 기본형을 만들고
+    (`사진`+`하`+`다`), 없으면 명사 연쇄 자체를 쓴다(`턱밑`, `노천카페`).
+    """
+    from subtitle_corrector.engine.kiwi_adapter import _kiwi
+
+    try:
+        toks = _kiwi.tokenize(surface)
+    except Exception:
+        return surface
+    # 명사 연쇄 뒤에 오는 첫 용언·접미사를 기본형의 어간으로 삼는다. kiwi는 같은
+    # '하'를 문장에 따라 XSV로도 VV로도 태깅하므로(실측: `요리하는`은 XSV,
+    # `사진하는`은 VV) 태그 하나만 보면 절반을 놓친다.
+    for i, t in enumerate(toks):
+        if t.tag in ("XSV", "XSA", "VV", "VA", "VX"):
+            stem = "".join(x.form for x in toks[:i] if x.tag.startswith("NN"))
+            if stem:
+                return f"{stem}{t.form}다"
+            break
+    nouns = [t.form for t in toks if t.tag.startswith("NN")]
+    return "".join(nouns) if nouns else surface
+
+
+def _definition_fits(sentence: str, lemma: str, scorer) -> tuple[bool, float, str]:
+    """붙임형의 뜻풀이가 이 문장 문맥과 맞는가.
+
+    맞지 않으면 그 표제어는 이 문장에서 쓰인 것이 아니므로 붙일 근거가 없다.
+    """
+    defs = _definitions(lemma)
+    if not defs:
+        # 뜻풀이를 못 가져왔으면 판단하지 않는다 — 근거가 없으면 기존 동작을 바꾸지
+        # 않는다는 이 프로젝트의 관례를 따른다.
+        return True, 0.0, "뜻풀이 없음(판단 보류)"
+    best, best_def = -1.0, ""
+    for d in defs:
+        s = scorer(sentence, d)
+        if s > best:
+            best, best_def = s, d
+    return best >= _FIT_THRESHOLD, best, best_def
+
+
+# 문턱값. 낮추면 놓치고 높이면 정당한 붙임까지 되돌린다. 0.02는 자카드 유사도
+# 기준으로 "뜻풀이와 문장이 내용어를 하나도 안 겹치지는 않는다" 수준이다.
+_FIT_THRESHOLD = 0.02
+
+
+def _run_definition_guard(text: str, scorer) -> tuple[str, list[str]]:
+    out, why = run_b0(text)
+    if out == text:
+        return out, why
+    reverted = out
+    for _idx, merged in _merged_spans(text, out):
+        lemma = _lemma_of(merged)
+        fits, score, evidence = _definition_fits(text, lemma, scorer)
+        if not fits:
+            # 되돌린다 — 그 표제어의 뜻이 이 문장에 없다.
+            a = text.split()
+            for i in range(len(a) - 1):
+                if a[i] + a[i + 1] == merged:
+                    reverted = reverted.replace(merged, f"{a[i]} {a[i + 1]}", 1)
+                    break
+            why = why + [f"[가드] '{lemma}' 뜻풀이가 문맥과 맞지 않아 붙임을 되돌렸다 "
+                         f"(유사도 {score:.3f}, 뜻풀이: {evidence[:40]})"]
+    return reverted, why
+
+
+def run_b4a(text: str, word: str | None = None) -> tuple[str, list[str]]:
+    """B0 + 뜻풀이 가드 (낱말 겹침, 비신경)."""
+    return _run_definition_guard(text, _overlap)
+
+
+def run_b4b(text: str, word: str | None = None) -> tuple[str, list[str]]:
+    """B0 + 뜻풀이 가드 (문장 임베딩)."""
+    return _run_definition_guard(text, _cosine)
+
+
+ARMS["B4a"] = run_b4a
+ARMS["B4b"] = run_b4b

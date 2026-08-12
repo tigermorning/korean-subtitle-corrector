@@ -30,8 +30,9 @@ DATASET = HERE / "dataset.jsonl"
 RESULTS = HERE / "results.json"
 
 
-def load_dataset(limit: int = 0) -> list[dict]:
-    items = [json.loads(l) for l in DATASET.read_text(encoding="utf-8").splitlines() if l.strip()]
+def load_dataset(limit: int = 0, path: Path | None = None) -> list[dict]:
+    src = path or DATASET
+    items = [json.loads(l) for l in src.read_text(encoding="utf-8").splitlines() if l.strip()]
     return items[:limit] if limit else items
 
 
@@ -134,6 +135,7 @@ def main() -> int:
     ap.add_argument("--arms", nargs="*", default=["B0", "B1", "B2a", "B2b"],
                     help="돌릴 arm (기본: B3 제외 — 라이선스 제약으로 결론 근거 아님)")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--dataset", default="", help="다른 평가셋 파일")
     ap.add_argument("--llm-model", default="", help="B3가 쓸 Ollama 모델")
     ap.add_argument("-o", "--out", default=str(RESULTS))
     args = ap.parse_args()
@@ -141,7 +143,7 @@ def main() -> int:
     if args.llm_model:
         arms.LLM_MODEL = args.llm_model      # B3 모델 교체(라이선스 대안 비교용)
         print(f'B3 모델: {arms.LLM_MODEL}')
-    items = load_dataset(args.limit)
+    items = load_dataset(args.limit, Path(args.dataset) if args.dataset else None)
     print(f"평가셋 {len(items)}건, arm {args.arms}")
     report = evaluate(items, args.arms)
     print_report(report, items)

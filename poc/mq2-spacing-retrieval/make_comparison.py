@@ -16,17 +16,25 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-FILES = {
-    "results.json": None,                       # B0 B1 B2a B2b
-    "results_b3.json": "B3(EXAONE)",
-    "results_b3_qwen.json": "B3(Qwen)",
+# 실험 1(제42항 이중 기능 단어)과 실험 2(실사용 오교정)는 평가셋이 달라 표를 나눈다.
+EXPERIMENTS = {
+    "comparison.md": (
+        "실험 1 — 제42항 이중 기능 단어",
+        {"results.json": None, "results_b3.json": "B3(EXAONE)",
+         "results_b3_qwen.json": "B3(Qwen)"},
+        ["B0", "B1", "B2a", "B2b", "B3(EXAONE)", "B3(Qwen)"],
+    ),
+    "comparison_realusage.md": (
+        "실험 2 — 사용자가 실제로 보고한 오교정",
+        {"results_realusage.json": None},
+        ["B0", "B4a", "B4b"],
+    ),
 }
-ORDER = ["B0", "B1", "B2a", "B2b", "B3(EXAONE)", "B3(Qwen)"]
 
 
-def load() -> dict:
+def load(files: dict) -> dict:
     by: dict = {}
-    for fname, rename in FILES.items():
+    for fname, rename in files.items():
         path = HERE / fname
         if not path.exists():
             continue
@@ -43,15 +51,14 @@ def mark(case: dict) -> str:
     return "X!" if case["overcorrected"] else "X"
 
 
-def main() -> int:
-    by = load()
+def build(title: str, files: dict, order: list, out_name: str) -> bool:
+    by = load(files)
     if not by:
-        print("결과 파일이 없다. 먼저 run_poc.py를 돌려라.")
-        return 1
-    arms = [a for a in ORDER if any(a in v for v in by.values())]
+        return False
+    arms = [a for a in order if any(a in v for v in by.values())]
 
     lines = [
-        "# 큐별 대조표 (정성 자료)",
+        f"# 큐별 대조표 — {title}",
         "",
         "`run_poc.py` 결과에서 자동 생성. `make_comparison.py`로 다시 만들 수 있다.",
         "",
@@ -88,10 +95,20 @@ def main() -> int:
             lines.append(f"  - 고른 근거: {why}")
         lines.append("")
 
-    out = HERE / "comparison.md"
+    out = HERE / out_name
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"대조표 {len(by)}건 -> {out}")
-    print(f"arm: {arms}")
+    print(f"{title}: {len(by)}건 -> {out.name}  arm={arms}")
+    return True
+
+
+def main() -> int:
+    made = 0
+    for name, (title, files, order) in EXPERIMENTS.items():
+        if build(title, files, order, name):
+            made += 1
+    if not made:
+        print("결과 파일이 없다. 먼저 run_poc.py를 돌려라.")
+        return 1
     return 0
 
 

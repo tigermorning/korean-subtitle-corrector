@@ -1,0 +1,1160 @@
+{
+ "arms": {
+  "B0": {
+   "총건수": 30,
+   "정답": 26,
+   "정확도": 0.867,
+   "오답": 4,
+   "기권해서_틀림": 3,
+   "판정_오답": 1,
+   "오답률": 0.033,
+   "과잉교정": 3,
+   "근거_제시율": 0.167,
+   "소요초": 56.7
+  },
+  "B4a": {
+   "총건수": 30,
+   "정답": 28,
+   "정확도": 0.933,
+   "오답": 2,
+   "기권해서_틀림": 0,
+   "판정_오답": 2,
+   "오답률": 0.067,
+   "과잉교정": 0,
+   "근거_제시율": 0.3,
+   "소요초": 0.1
+  },
+  "B4b": {
+   "총건수": 30,
+   "정답": 26,
+   "정확도": 0.867,
+   "오답": 4,
+   "기권해서_틀림": 3,
+   "판정_오답": 1,
+   "오답률": 0.033,
+   "과잉교정": 3,
+   "근거_제시율": 0.167,
+   "소요초": 11.2
+  }
+ },
+ "cases": [
+  {
+   "id": "ru01",
+   "arm": "B0",
+   "word": null,
+   "input": "나물 타령 하셨어",
+   "gold": "나물 타령 하셨어",
+   "output": "나물 타령 하셨어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru02",
+   "arm": "B0",
+   "word": null,
+   "input": "사진 하러 가",
+   "gold": "사진 하러 가",
+   "output": "사진하러 가",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru03",
+   "arm": "B0",
+   "word": null,
+   "input": "사진 하는 사람 맞아",
+   "gold": "사진 하는 사람 맞아",
+   "output": "사진하는 사람 맞아",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru04",
+   "arm": "B0",
+   "word": null,
+   "input": "요리 하는 게 좋아",
+   "gold": "요리하는 게 좋아",
+   "output": "요리하는 게 좋아",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru05",
+   "arm": "B0",
+   "word": null,
+   "input": "커피 한잔 하자",
+   "gold": "커피 한잔 하자",
+   "output": "커피 한잔 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru06",
+   "arm": "B0",
+   "word": null,
+   "input": "개나리길 입구에서 봐",
+   "gold": "개나리길 입구에서 봐",
+   "output": "개나리길 입구에서 봐",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru07",
+   "arm": "B0",
+   "word": null,
+   "input": "에라이!",
+   "gold": "에라이!",
+   "output": "에라이!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru08",
+   "arm": "B0",
+   "word": null,
+   "input": "아싸!",
+   "gold": "아싸!",
+   "output": "아싸!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru09",
+   "arm": "B0",
+   "word": null,
+   "input": "한짓골에 살아요",
+   "gold": "한짓골에 살아요",
+   "output": "한짓골에 살아요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru10",
+   "arm": "B0",
+   "word": null,
+   "input": "평생을 껄쩍지근하게 살았다",
+   "gold": "평생을 껄쩍지근하게 살았다",
+   "output": "평생을 껄쩍지근하게 살았다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru11",
+   "arm": "B0",
+   "word": null,
+   "input": "얄짤없어",
+   "gold": "얄짤없어",
+   "output": "얄짤없어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru12",
+   "arm": "B0",
+   "word": null,
+   "input": "큰 애들이 왔다",
+   "gold": "큰 애들이 왔다",
+   "output": "큰 애들이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru13",
+   "arm": "B0",
+   "word": null,
+   "input": "턱 밑까지 왔다",
+   "gold": "턱 밑까지 왔다",
+   "output": "턱 밑까지 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 턱밑까지 왔다 — '턱밑'로 붙여 쓰면 사전 표제어(비유·준말)가 되지만, '턱 밑'처럼 띄어 쓰면 글자 그대로의 뜻일 수 있어 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru14",
+   "arm": "B0",
+   "word": null,
+   "input": "만성골수성백혈병 치료는 길다",
+   "gold": "만성골수성백혈병 치료는 길다",
+   "output": "만성골수성백혈병 치료는 길다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru15",
+   "arm": "B0",
+   "word": null,
+   "input": "마포경찰서 강력팀이 왔다",
+   "gold": "마포경찰서 강력팀이 왔다",
+   "output": "마포경찰서 강력팀이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru16",
+   "arm": "B0",
+   "word": null,
+   "input": "부탁드릴 생각도 못 했는데",
+   "gold": "부탁드릴 생각도 못 했는데",
+   "output": "부탁드릴 생각도 못 했는데",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru17",
+   "arm": "B0",
+   "word": null,
+   "input": "아, 그럼 한번 부탁드려 볼게요",
+   "gold": "아, 그럼 한번 부탁드려 볼게요",
+   "output": "아, 그럼 한번 부탁드려 볼게요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru18",
+   "arm": "B0",
+   "word": null,
+   "input": "마음의 준비 해",
+   "gold": "마음의 준비 해",
+   "output": "마음의 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru19",
+   "arm": "B0",
+   "word": null,
+   "input": "받을 준비 해",
+   "gold": "받을 준비 해",
+   "output": "받을 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru20",
+   "arm": "B0",
+   "word": null,
+   "input": "술 시켜요",
+   "gold": "술 시켜요",
+   "output": "술 시켜요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 술시켜요 — '술'이 행위를 뜻하면 '시키-'는 접미사라 '술시키다'처럼 붙여 씁니다. '술하다'가 표제어라 '술'을 행위로 볼 수 있습니다 — 다만 '술시키다'는 사전에 없습니다. '술'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru21",
+   "arm": "B0",
+   "word": null,
+   "input": "밥 시켜 먹자",
+   "gold": "밥 시켜 먹자",
+   "output": "밥 시켜 먹자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 밥시켜 먹자 — '밥'이 행위를 뜻하면 '시키-'는 접미사라 '밥시키다'처럼 붙여 씁니다. '밥하다'가 표제어라 '밥'을 행위로 볼 수 있습니다 — 다만 '밥시키다'는 사전에 없습니다. '밥'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru22",
+   "arm": "B0",
+   "word": null,
+   "input": "회전축에 목이 걸렸다",
+   "gold": "회전축에 목이 걸렸다",
+   "output": "회전축에 목이 걸렸다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru23",
+   "arm": "B0",
+   "word": null,
+   "input": "그때 그 사람",
+   "gold": "그때 그 사람",
+   "output": "그때 그 사람",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru24",
+   "arm": "B0",
+   "word": null,
+   "input": "쓴맛이 났다",
+   "gold": "쓴맛이 났다",
+   "output": "쓴맛이 났다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru25",
+   "arm": "B0",
+   "word": null,
+   "input": "노천 카페에 앉았다",
+   "gold": "노천카페에 앉았다",
+   "output": "노천 카페에 앉았다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 노천카페에 앉았다 — '노천카페'가 사전 표제어이므로 '노천 카페'를 붙여 쓸 수 있습니다. 다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 바꾸지 않았습니다 — 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru26",
+   "arm": "B0",
+   "word": null,
+   "input": "백 배 나 좋다",
+   "gold": "백 배 나 좋다",
+   "output": "백 배나 좋다",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru27",
+   "arm": "B0",
+   "word": null,
+   "input": "건숭건숭이야",
+   "gold": "건숭건숭이야",
+   "output": "건숭건숭이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru28",
+   "arm": "B0",
+   "word": null,
+   "input": "콸콸콸 쏟아졌다",
+   "gold": "콸콸콸 쏟아졌다",
+   "output": "콸콸콸 쏟아졌다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru29",
+   "arm": "B0",
+   "word": null,
+   "input": "어제 청소 했다",
+   "gold": "어제 청소했다",
+   "output": "어제 청소했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru30",
+   "arm": "B0",
+   "word": null,
+   "input": "생일 선물 받았어",
+   "gold": "생일 선물 받았어",
+   "output": "생일 선물 받았어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 생일 선물받았어 — '선물'이 행위를 뜻하면 '받-'는 접미사라 '선물받다'처럼 붙여 씁니다. '선물하다'가 표제어라 '선물'을 행위로 볼 수 있습니다 — 다만 '선물받다'는 사전에 없습니다. '선물'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru01",
+   "arm": "B4a",
+   "word": null,
+   "input": "나물 타령 하셨어",
+   "gold": "나물 타령 하셨어",
+   "output": "나물 타령 하셨어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru02",
+   "arm": "B4a",
+   "word": null,
+   "input": "사진 하러 가",
+   "gold": "사진 하러 가",
+   "output": "사진 하러 가",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[가드] '사진하다' 뜻풀이가 문맥과 맞지 않아 붙임을 되돌렸다 (유사도 0.000, 뜻풀이: 벼슬아치가 규정된 시간에 근무지로 출근하다.)"
+   ]
+  },
+  {
+   "id": "ru03",
+   "arm": "B4a",
+   "word": null,
+   "input": "사진 하는 사람 맞아",
+   "gold": "사진 하는 사람 맞아",
+   "output": "사진 하는 사람 맞아",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[가드] '사진하다' 뜻풀이가 문맥과 맞지 않아 붙임을 되돌렸다 (유사도 0.000, 뜻풀이: 벼슬아치가 규정된 시간에 근무지로 출근하다.)"
+   ]
+  },
+  {
+   "id": "ru04",
+   "arm": "B4a",
+   "word": null,
+   "input": "요리 하는 게 좋아",
+   "gold": "요리하는 게 좋아",
+   "output": "요리하는 게 좋아",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru05",
+   "arm": "B4a",
+   "word": null,
+   "input": "커피 한잔 하자",
+   "gold": "커피 한잔 하자",
+   "output": "커피 한잔 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru06",
+   "arm": "B4a",
+   "word": null,
+   "input": "개나리길 입구에서 봐",
+   "gold": "개나리길 입구에서 봐",
+   "output": "개나리길 입구에서 봐",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru07",
+   "arm": "B4a",
+   "word": null,
+   "input": "에라이!",
+   "gold": "에라이!",
+   "output": "에라이!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru08",
+   "arm": "B4a",
+   "word": null,
+   "input": "아싸!",
+   "gold": "아싸!",
+   "output": "아싸!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru09",
+   "arm": "B4a",
+   "word": null,
+   "input": "한짓골에 살아요",
+   "gold": "한짓골에 살아요",
+   "output": "한짓골에 살아요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru10",
+   "arm": "B4a",
+   "word": null,
+   "input": "평생을 껄쩍지근하게 살았다",
+   "gold": "평생을 껄쩍지근하게 살았다",
+   "output": "평생을 껄쩍지근하게 살았다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru11",
+   "arm": "B4a",
+   "word": null,
+   "input": "얄짤없어",
+   "gold": "얄짤없어",
+   "output": "얄짤없어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru12",
+   "arm": "B4a",
+   "word": null,
+   "input": "큰 애들이 왔다",
+   "gold": "큰 애들이 왔다",
+   "output": "큰 애들이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru13",
+   "arm": "B4a",
+   "word": null,
+   "input": "턱 밑까지 왔다",
+   "gold": "턱 밑까지 왔다",
+   "output": "턱 밑까지 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 턱밑까지 왔다 — '턱밑'로 붙여 쓰면 사전 표제어(비유·준말)가 되지만, '턱 밑'처럼 띄어 쓰면 글자 그대로의 뜻일 수 있어 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru14",
+   "arm": "B4a",
+   "word": null,
+   "input": "만성골수성백혈병 치료는 길다",
+   "gold": "만성골수성백혈병 치료는 길다",
+   "output": "만성골수성백혈병 치료는 길다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru15",
+   "arm": "B4a",
+   "word": null,
+   "input": "마포경찰서 강력팀이 왔다",
+   "gold": "마포경찰서 강력팀이 왔다",
+   "output": "마포경찰서 강력팀이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru16",
+   "arm": "B4a",
+   "word": null,
+   "input": "부탁드릴 생각도 못 했는데",
+   "gold": "부탁드릴 생각도 못 했는데",
+   "output": "부탁드릴 생각도 못 했는데",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru17",
+   "arm": "B4a",
+   "word": null,
+   "input": "아, 그럼 한번 부탁드려 볼게요",
+   "gold": "아, 그럼 한번 부탁드려 볼게요",
+   "output": "아, 그럼 한번 부탁드려 볼게요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru18",
+   "arm": "B4a",
+   "word": null,
+   "input": "마음의 준비 해",
+   "gold": "마음의 준비 해",
+   "output": "마음의 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru19",
+   "arm": "B4a",
+   "word": null,
+   "input": "받을 준비 해",
+   "gold": "받을 준비 해",
+   "output": "받을 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru20",
+   "arm": "B4a",
+   "word": null,
+   "input": "술 시켜요",
+   "gold": "술 시켜요",
+   "output": "술 시켜요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 술시켜요 — '술'이 행위를 뜻하면 '시키-'는 접미사라 '술시키다'처럼 붙여 씁니다. '술하다'가 표제어라 '술'을 행위로 볼 수 있습니다 — 다만 '술시키다'는 사전에 없습니다. '술'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru21",
+   "arm": "B4a",
+   "word": null,
+   "input": "밥 시켜 먹자",
+   "gold": "밥 시켜 먹자",
+   "output": "밥 시켜 먹자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 밥시켜 먹자 — '밥'이 행위를 뜻하면 '시키-'는 접미사라 '밥시키다'처럼 붙여 씁니다. '밥하다'가 표제어라 '밥'을 행위로 볼 수 있습니다 — 다만 '밥시키다'는 사전에 없습니다. '밥'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru22",
+   "arm": "B4a",
+   "word": null,
+   "input": "회전축에 목이 걸렸다",
+   "gold": "회전축에 목이 걸렸다",
+   "output": "회전축에 목이 걸렸다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru23",
+   "arm": "B4a",
+   "word": null,
+   "input": "그때 그 사람",
+   "gold": "그때 그 사람",
+   "output": "그때 그 사람",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru24",
+   "arm": "B4a",
+   "word": null,
+   "input": "쓴맛이 났다",
+   "gold": "쓴맛이 났다",
+   "output": "쓴맛이 났다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru25",
+   "arm": "B4a",
+   "word": null,
+   "input": "노천 카페에 앉았다",
+   "gold": "노천카페에 앉았다",
+   "output": "노천 카페에 앉았다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 노천카페에 앉았다 — '노천카페'가 사전 표제어이므로 '노천 카페'를 붙여 쓸 수 있습니다. 다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 바꾸지 않았습니다 — 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru26",
+   "arm": "B4a",
+   "word": null,
+   "input": "백 배 나 좋다",
+   "gold": "백 배 나 좋다",
+   "output": "백 배 나 좋다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[가드] '배' 뜻풀이가 문맥과 맞지 않아 붙임을 되돌렸다 (유사도 0.000, 뜻풀이: 사람이나 짐 따위를 싣고 물 위로 떠다니도록 나무나 쇠 따위로 만든 물건)"
+   ]
+  },
+  {
+   "id": "ru27",
+   "arm": "B4a",
+   "word": null,
+   "input": "건숭건숭이야",
+   "gold": "건숭건숭이야",
+   "output": "건숭건숭이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru28",
+   "arm": "B4a",
+   "word": null,
+   "input": "콸콸콸 쏟아졌다",
+   "gold": "콸콸콸 쏟아졌다",
+   "output": "콸콸콸 쏟아졌다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru29",
+   "arm": "B4a",
+   "word": null,
+   "input": "어제 청소 했다",
+   "gold": "어제 청소했다",
+   "output": "어제 청소 했다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[가드] '청소하다' 뜻풀이가 문맥과 맞지 않아 붙임을 되돌렸다 (유사도 0.000, 뜻풀이: 더럽거나 어지러운 것을 쓸고 닦아서 깨끗하게 하다.)"
+   ]
+  },
+  {
+   "id": "ru30",
+   "arm": "B4a",
+   "word": null,
+   "input": "생일 선물 받았어",
+   "gold": "생일 선물 받았어",
+   "output": "생일 선물 받았어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 생일 선물받았어 — '선물'이 행위를 뜻하면 '받-'는 접미사라 '선물받다'처럼 붙여 씁니다. '선물하다'가 표제어라 '선물'을 행위로 볼 수 있습니다 — 다만 '선물받다'는 사전에 없습니다. '선물'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru01",
+   "arm": "B4b",
+   "word": null,
+   "input": "나물 타령 하셨어",
+   "gold": "나물 타령 하셨어",
+   "output": "나물 타령 하셨어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru02",
+   "arm": "B4b",
+   "word": null,
+   "input": "사진 하러 가",
+   "gold": "사진 하러 가",
+   "output": "사진하러 가",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru03",
+   "arm": "B4b",
+   "word": null,
+   "input": "사진 하는 사람 맞아",
+   "gold": "사진 하는 사람 맞아",
+   "output": "사진하는 사람 맞아",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru04",
+   "arm": "B4b",
+   "word": null,
+   "input": "요리 하는 게 좋아",
+   "gold": "요리하는 게 좋아",
+   "output": "요리하는 게 좋아",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru05",
+   "arm": "B4b",
+   "word": null,
+   "input": "커피 한잔 하자",
+   "gold": "커피 한잔 하자",
+   "output": "커피 한잔 하자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru06",
+   "arm": "B4b",
+   "word": null,
+   "input": "개나리길 입구에서 봐",
+   "gold": "개나리길 입구에서 봐",
+   "output": "개나리길 입구에서 봐",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru07",
+   "arm": "B4b",
+   "word": null,
+   "input": "에라이!",
+   "gold": "에라이!",
+   "output": "에라이!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru08",
+   "arm": "B4b",
+   "word": null,
+   "input": "아싸!",
+   "gold": "아싸!",
+   "output": "아싸!",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru09",
+   "arm": "B4b",
+   "word": null,
+   "input": "한짓골에 살아요",
+   "gold": "한짓골에 살아요",
+   "output": "한짓골에 살아요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru10",
+   "arm": "B4b",
+   "word": null,
+   "input": "평생을 껄쩍지근하게 살았다",
+   "gold": "평생을 껄쩍지근하게 살았다",
+   "output": "평생을 껄쩍지근하게 살았다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru11",
+   "arm": "B4b",
+   "word": null,
+   "input": "얄짤없어",
+   "gold": "얄짤없어",
+   "output": "얄짤없어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru12",
+   "arm": "B4b",
+   "word": null,
+   "input": "큰 애들이 왔다",
+   "gold": "큰 애들이 왔다",
+   "output": "큰 애들이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru13",
+   "arm": "B4b",
+   "word": null,
+   "input": "턱 밑까지 왔다",
+   "gold": "턱 밑까지 왔다",
+   "output": "턱 밑까지 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 턱밑까지 왔다 — '턱밑'로 붙여 쓰면 사전 표제어(비유·준말)가 되지만, '턱 밑'처럼 띄어 쓰면 글자 그대로의 뜻일 수 있어 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru14",
+   "arm": "B4b",
+   "word": null,
+   "input": "만성골수성백혈병 치료는 길다",
+   "gold": "만성골수성백혈병 치료는 길다",
+   "output": "만성골수성백혈병 치료는 길다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru15",
+   "arm": "B4b",
+   "word": null,
+   "input": "마포경찰서 강력팀이 왔다",
+   "gold": "마포경찰서 강력팀이 왔다",
+   "output": "마포경찰서 강력팀이 왔다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru16",
+   "arm": "B4b",
+   "word": null,
+   "input": "부탁드릴 생각도 못 했는데",
+   "gold": "부탁드릴 생각도 못 했는데",
+   "output": "부탁드릴 생각도 못 했는데",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru17",
+   "arm": "B4b",
+   "word": null,
+   "input": "아, 그럼 한번 부탁드려 볼게요",
+   "gold": "아, 그럼 한번 부탁드려 볼게요",
+   "output": "아, 그럼 한번 부탁드려 볼게요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru18",
+   "arm": "B4b",
+   "word": null,
+   "input": "마음의 준비 해",
+   "gold": "마음의 준비 해",
+   "output": "마음의 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru19",
+   "arm": "B4b",
+   "word": null,
+   "input": "받을 준비 해",
+   "gold": "받을 준비 해",
+   "output": "받을 준비 해",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru20",
+   "arm": "B4b",
+   "word": null,
+   "input": "술 시켜요",
+   "gold": "술 시켜요",
+   "output": "술 시켜요",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 술시켜요 — '술'이 행위를 뜻하면 '시키-'는 접미사라 '술시키다'처럼 붙여 씁니다. '술하다'가 표제어라 '술'을 행위로 볼 수 있습니다 — 다만 '술시키다'는 사전에 없습니다. '술'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru21",
+   "arm": "B4b",
+   "word": null,
+   "input": "밥 시켜 먹자",
+   "gold": "밥 시켜 먹자",
+   "output": "밥 시켜 먹자",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 밥시켜 먹자 — '밥'이 행위를 뜻하면 '시키-'는 접미사라 '밥시키다'처럼 붙여 씁니다. '밥하다'가 표제어라 '밥'을 행위로 볼 수 있습니다 — 다만 '밥시키다'는 사전에 없습니다. '밥'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru22",
+   "arm": "B4b",
+   "word": null,
+   "input": "회전축에 목이 걸렸다",
+   "gold": "회전축에 목이 걸렸다",
+   "output": "회전축에 목이 걸렸다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru23",
+   "arm": "B4b",
+   "word": null,
+   "input": "그때 그 사람",
+   "gold": "그때 그 사람",
+   "output": "그때 그 사람",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru24",
+   "arm": "B4b",
+   "word": null,
+   "input": "쓴맛이 났다",
+   "gold": "쓴맛이 났다",
+   "output": "쓴맛이 났다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru25",
+   "arm": "B4b",
+   "word": null,
+   "input": "노천 카페에 앉았다",
+   "gold": "노천카페에 앉았다",
+   "output": "노천 카페에 앉았다",
+   "correct": false,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 노천카페에 앉았다 — '노천카페'가 사전 표제어이므로 '노천 카페'를 붙여 쓸 수 있습니다. 다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 바꾸지 않았습니다 — 문맥 확인이 필요합니다."
+   ]
+  },
+  {
+   "id": "ru26",
+   "arm": "B4b",
+   "word": null,
+   "input": "백 배 나 좋다",
+   "gold": "백 배 나 좋다",
+   "output": "백 배나 좋다",
+   "correct": false,
+   "overcorrected": true,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru27",
+   "arm": "B4b",
+   "word": null,
+   "input": "건숭건숭이야",
+   "gold": "건숭건숭이야",
+   "output": "건숭건숭이야",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru28",
+   "arm": "B4b",
+   "word": null,
+   "input": "콸콸콸 쏟아졌다",
+   "gold": "콸콸콸 쏟아졌다",
+   "output": "콸콸콸 쏟아졌다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru29",
+   "arm": "B4b",
+   "word": null,
+   "input": "어제 청소 했다",
+   "gold": "어제 청소했다",
+   "output": "어제 청소했다",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": []
+  },
+  {
+   "id": "ru30",
+   "arm": "B4b",
+   "word": null,
+   "input": "생일 선물 받았어",
+   "gold": "생일 선물 받았어",
+   "output": "생일 선물 받았어",
+   "correct": true,
+   "overcorrected": false,
+   "difficulty": null,
+   "evidence": [
+    "[제안] 생일 선물받았어 — '선물'이 행위를 뜻하면 '받-'는 접미사라 '선물받다'처럼 붙여 씁니다. '선물하다'가 표제어라 '선물'을 행위로 볼 수 있습니다 — 다만 '선물받다'는 사전에 없습니다. '선물'이 사물을 뜻하면(술을 시키다, 상을 받다) 동사라 띄어 쓴 원문이 맞으므로 문맥 확인이 필요합니다."
+   ]
+  }
+ ]
+}
