@@ -14,6 +14,10 @@
 </p>
 <!-- lang-switcher:end -->
 
+> **번역본은 과거 시점의 스냅샷이며 최신이 아닙니다.** 정본은 이 한국어 문서입니다.
+> 판단 근거로 쓰지 마세요 — 필요하면 그때 다시 생성합니다(`PRD.md`도 같은 안내를 답니다).
+
+
 # 한국어 띄어쓰기·맞춤법 자동 교정 도구
 
 > ### 📌 Main Quest 2 제출물 → **[`poc/mq2-spacing-retrieval/`](./poc/mq2-spacing-retrieval/)**
@@ -41,7 +45,11 @@
 
 ## 상태
 
-개발 완료(2026-08-11 기준 테스트 401건 전부 통과). CLI(`main.py`)와 웹 API(`subtitle_corrector/api.py`, FastAPI + `static/index.html`) 모두 구현되어 있고, Supabase 연동(교정 결과 저장/재조회)까지 확인됨.
+개발 완료. CLI(`main.py`)와 웹 API(`subtitle_corrector/api.py`, FastAPI + `static/index.html`) 모두 구현되어 있고, Supabase 연동(교정 결과 저장/재조회)까지 확인됨. 실사용 원고 감수를 여러 차례 거쳤고, 규칙 뒤에 줄 세운 선택적 언어 모델 패스(기본 꺼짐)까지 들어가 있다.
+
+**테스트 건수에 대해**: 시험 함수는 정적 집계로 440개다. "401건 전부 통과"는 **2026-08-11 실측치이고 그 뒤로 다시 재지 않았다** — `pytest`가 표준국어대사전·우리말샘 API를 실시간으로 조회하므로 네트워크와 API 키가 있어야 잴 수 있다. 재지 않은 숫자를 현재 상태로 적지 않는다.
+
+**커밋 전에 기계가 막는다(2026-08-14).** `tools/hooks/pre-commit`이 `tools/check_names.py`를 돌려 미해석 이름이 있으면 커밋을 만들지 않는다. 새 클론에서 한 번 켠다: `git config core.hooksPath tools/hooks`. `pytest`를 훅에 넣지 않은 이유는 [CLAUDE.md](./CLAUDE.md)에 적어 두었다(네트워크와 사전 개정에 묶이면 사람이 `--no-verify`를 손에 익힌다).
 
 **실행은 로컬에서 합니다(2026-08-02 결정).** 클라우드 배포는 하지 않습니다 — 형태소 분석기 kiwipiepy 모델이 약 310MB라 Render 무료 티어 512MB 안에서 교정 요청을 처리할 수 없습니다(`POST /api/correct`가 502). 자원 한계라 코드로 우회되지 않습니다. 배포 절차 자체는 [DEPLOY.md](./DEPLOY.md)에 남겨 두었고, 예전에 올려 둔 Render 주소가 아직 열리지만 **옛 버전이고 교정이 동작하지 않으니 사용하지 마세요.** 아래 "실행 방법"대로 로컬에서 띄우면 모든 기능이 동작합니다.
 
