@@ -1,0 +1,50 @@
+#!/bin/sh
+# 커밋 직전에 정적 검사를 돌린다. 실패하면 커밋이 만들어지지 않는다.
+#
+# 왜 있나. 규칙을 글로 적어 두는 것으로는 안 지켜진다는 것을 옆 저장소에서 세 번
+# 확인했다(자막 및 TC 생성기 CLAUDE.md 규칙 9). 파이프가 종료 코드를 가리고,
+# 세미콜론이 실패를 넘긴다. 훅은 git이 돌리므로 명령을 어떻게 잇든 상관없다.
+#
+# 왜 pytest가 아니냐. 이 저장소의 시험은 국립국어원 API를 실시간으로 친다 —
+# 네트워크·API 키가 필요하고 사전이 개정되면 코드가 멀쩡해도 실패한다. 그런 것으로
+# 커밋을 막으면 사람이 --no-verify를 손에 익히고, 그러면 훅이 없는 것만 못하다.
+#
+# WSL과 Windows git-bash 양쪽에서 돈다. 파이썬 이름이 서로 달라서 찾아 쓴다.
+
+ROOT=$(git rev-parse --show-toplevel) || exit 1
+cd "$ROOT" || exit 1
+
+PY=""
+for candidate in python3 python py; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import sys" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PY" ]; then
+    echo "pre-commit: 파이썬을 찾지 못했다."
+    echo "  검사를 못 돌리면 통과했다고 말할 수 없으므로 커밋을 막는다."
+    echo "  정말 건너뛰려면: git commit --no-verify  (그러면 판단은 사람 몫이다)"
+    exit 1
+fi
+
+echo "pre-commit: tools/check_names.py"
+if ! "$PY" tools/check_names.py; then
+    echo ""
+    echo "pre-commit: 미해석 이름이 있다. 커밋하지 않는다."
+    echo "  이 검사가 잡는 것은 '시험이 밟지 않는 분기에서만 터지는 NameError'다."
+    echo "  실제로 조사+보조 용언 줄에서만 터지던 잠복 크래시를 이 검사가 잡았다."
+    exit 1
+fi
+
+# 엔진·사전 쪽을 건드렸으면 사람이 따로 돌려야 하는 것을 알린다. 막지는 않는다 —
+# 네트워크가 필요한 검사를 훅이 강제하면 커밋이 인터넷 사정에 묶인다.
+if git diff --cached --name-only | grep -qE '^subtitle_corrector/(engine|dictionary)/'; then
+    echo ""
+    echo "pre-commit: 엔진/사전을 건드렸다. 이것들은 훅이 대신 못 한다:"
+    echo "  pytest                        (국립국어원 API를 실시간으로 친다)"
+    echo "  python tools/diff_behavior.py (구조만 옮겼다면 SHA256까지 같아야 한다)"
+fi
+
+exit 0
