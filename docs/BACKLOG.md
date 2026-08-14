@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-08-14 마감 — 이날 끝낸 것과 남긴 것
+
+**끝낸 것**
+
+- **`CLAUDE.md`를 뒀다.** Claude Code는 `AGENTS.md`를 읽지 않는다. 커밋 238개가 쌓이는
+  동안 이 저장소의 규칙이 세션에 한 줄도 실리지 않고 있었다
+- **pre-commit 훅** — `check_public_api.py`와 `check_names.py`를 돌린다.
+  새 클론에서 한 번: `git config core.hooksPath tools/hooks`
+- **공개 계약을 기계로 고정했다**(`tools/check_public_api.py` + `docs/PUBLIC_API.md`).
+  밖에서 이 저장소를 라이브러리로 부르는 쪽이 조용히 깨지던 자리다(2026-08-04 §59가 그 사고)
+- **PRD 갱신** — §19 언어 모델 패스, §20 MQ2 PoC 결론, §17-1 OCR 제거.
+  제목의 "(초안)"과 "CLI 도구"를 뗐다
+- **README 갱신** — 재지 않은 시험 건수를 현재 상태로 적지 않게 고치고, 훅·`CLAUDE.md`를
+  적고, 번역본 7종에 낡음 경고를 달았다
+- **`docs/LOANWORD_EXCEPTIONS.md`** — 외래어 표기법 예외 규정 모음(작업자 자료에서 옮김).
+  아래 31번의 착수 자료다
+- MQ2 제출물(`poc/mq2-spacing-retrieval/`)을 검증된 최종 상태로 맞췄다
+
+**남긴 것 중 가장 큰 것은 31번(외래어 언어별 세칙)이다.** 착수 전에 확인한 것:
+**kornorms API는 용례만 주고 세칙 본문은 주지 않는다**(`exampleReqList.do`). 세칙은
+열람 페이지(`kornorms/regltn/regltnView.do?regltn_code=0003`)에 있다. 규정 원문을 어디서
+가져올지 정하는 것이 첫 갈림길이다.
+
+---
+
 ## 최우선 — 표제어가 있다는 이유로 문맥에 안 맞는 띄어쓰기를 한다 (2026-08-11 접수)
 
 사용자 보고: **"'사진 하다'를 '사진하다'로 붙여 버린다."**
