@@ -29,6 +29,16 @@ if [ -z "$PY" ]; then
     exit 1
 fi
 
+echo "pre-commit: tools/check_public_api.py"
+if ! "$PY" tools/check_public_api.py; then
+    echo ""
+    echo "pre-commit: 공개 계약이 어긋났다. 커밋하지 않는다."
+    echo "  이 저장소는 다른 도구가 라이브러리로 부른다. 함수 이름과 반환 모양을 바꾸면"
+    echo "  그쪽이 조용히 깨지는데, **우리 시험은 그대로 통과한다**(우리 호출부만 보므로)."
+    echo "  일부러 바꿨다면 CONTRACT와 docs/PUBLIC_API.md를 함께 고친다."
+    exit 1
+fi
+
 echo "pre-commit: tools/check_names.py"
 if ! "$PY" tools/check_names.py; then
     echo ""
