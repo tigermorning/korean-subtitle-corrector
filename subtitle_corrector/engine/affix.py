@@ -7,7 +7,7 @@ from .text_utils import _josa, _localized_change
 from .kiwi_adapter import _kiwi
 from .lexicon import _is_action_noun
 
-# 동작성 신호로 쓰는 word_exists(N+"하다")가 동형이의어로 오탐하는 명사들.
+# 동작성 신호로 쓰는 word_exists(N+"하다")가 동형이의어로 오탐지하는 명사들.
 # '상'(賞)은 '상하다'(음식이 상하다)·'상당하다'·'상되다'가 사전에 있어 동작성으로
 # 오판되지만 실제로는 동작성이 없다('상 받다'는 띄움). '돈'·'벌'도 마찬가지.
 _AFFIX_ACTION_EXCLUDE = {"상", "돈", "벌"}
@@ -28,7 +28,7 @@ def is_honorific_drida_affix(noun_form: str) -> bool:
     `인사드리다`·`축하드리다`·`연락드리다`는 미등재다(2026-08-05 조회).
     '-받다'에서 `호출받다`·`사랑받다`가 미등재인 것과 같은 사정이다.
 
-    동작성 신호가 동형이의어로 오탐하는 명사(`_AFFIX_ACTION_EXCLUDE`)는 뺀다 —
+    동작성 신호가 동형이의어로 오탐지하는 명사(`_AFFIX_ACTION_EXCLUDE`)는 뺀다 —
     '상'·'돈'은 이 자리에서 바로 사물 명사 쪽('상 드리다'·'돈 드리다')이다.
     """
     return noun_form not in _AFFIX_ACTION_EXCLUDE and _is_action_noun(noun_form)
@@ -65,7 +65,7 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
     띄어 쓴다('상 받다', '짜장면 시키다', '팀장 되다'는 그대로).
 
     동작성 판정 = _is_action_noun(word_exists(N+'하다')). 다만 이 신호는 '상하다'
-    (부패) 같은 동형이의어로 오탐하므로 _AFFIX_ACTION_EXCLUDE(상/돈/벌)를 먼저
+    (부패) 같은 동형이의어로 오탐지하므로 _AFFIX_ACTION_EXCLUDE(상/돈/벌)를 먼저
     배제한다. '되다'는 동작성 heuristic을 쓰지 않고 붙임형(N되다)이 사전 표제어일
     때만 붙인다('해체되다' O / '도움 되다'·'팀장 되다' X). 접사가 명사 바로 뒤에
     공백 하나로 떨어져 있을 때만 붙인다.

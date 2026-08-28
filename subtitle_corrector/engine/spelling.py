@@ -65,7 +65,7 @@ def _dictionary_backed_variants(word: str) -> list[str]:
 
 def _unknown_content_words(text: str) -> list[str]:
     """맞춤법 확인 대상(내용어) 중 진짜 미등록어만 돌려준다. kiwi가 사전 표제어를
-    조각내는 경우의 오탐은 _covered_by_larger_dictionary_unit()(원리 1 공유 가드)로
+    조각내는 경우의 오탐지은 _covered_by_larger_dictionary_unit()(원리 1 공유 가드)로
     걸러낸다."""
     brackets = _bracket_spans(text)
     tokens = _kiwi.tokenize(text)

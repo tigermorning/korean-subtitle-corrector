@@ -180,7 +180,7 @@ def report(result: dict) -> None:
     # 판정 기준: 용례 0건이면 안 쓰이는 낱말로 보는 규칙을 세웠을 때의 성능
     if joined and spaced:
         tp = sum(1 for r in spaced if r["examples"] == 0)     # 안 붙여야 하는데 용례 0
-        fp = sum(1 for r in joined if r["examples"] == 0)     # 붙여야 하는데 용례 0 (오탐)
+        fp = sum(1 for r in joined if r["examples"] == 0)     # 붙여야 하는데 용례 0 (오탐지)
         print(f"'용례 0건이면 붙이지 않는다' 규칙을 세우면:")
         print(f"    맞게 막는다   {tp}/{len(spaced)} ({tp/len(spaced):.0%})")
         print(f"    잘못 막는다   {fp}/{len(joined)} ({fp/len(joined):.0%})  <- 이것이 새 오답")

@@ -1,6 +1,6 @@
 """실사용 감수 수정(A·B·C)의 정답표 회귀 테스트.
 
-실제 자막 텍스트에서 발견된 과교정/오탐 사례를 고정한다. 각 케이스의 근거는
+실제 자막 텍스트에서 발견된 과교정/오탐지 사례를 고정한다. 각 케이스의 근거는
 docs/HANDOFF_realusage_review.md 및 docs/IMPLEMENTATION_LOG.md 참고. 기존
 테스트들과 마찬가지로 실시간 사전 API를 호출한다.
 """
@@ -56,10 +56,10 @@ def test_b2_line_final_na_flagged_not_attached():
     assert any(f.suggested_fix == "영화 보는 거보다 백 배나" for f in flags)
 
 
-# --- C: 유효 표제어 오탐 억제 ---
+# --- C: 유효 표제어 오탐지 억제 ---
 
 def test_c1_verb_lemma_fragment_not_flagged_foreign():
-    # '얄짤없다' 표제어. '얄짤' 조각을 외국어로 오탐하지 않는다.
+    # '얄짤없다' 표제어. '얄짤' 조각을 외국어로 오탐지하지 않는다.
     out, flags = _run("얄짤없어")
     assert out == "얄짤없어"
     assert not any("사전에 없는 단어" in f.reason for f in flags)
@@ -73,7 +73,7 @@ def test_c2_dialect_headword_not_split():
 
 
 def test_c3_reduplication_not_flagged_foreign():
-    # '건숭'(방언 표제어) 첩어. 외국어로 오탐하지 않는다.
+    # '건숭'(방언 표제어) 첩어. 외국어로 오탐지하지 않는다.
     _out, flags = _run("돌아 버리게 건숭건숭이야")
     assert not any("사전에 없는 단어" in f.reason for f in flags)
 
@@ -189,7 +189,7 @@ def test_sound_effect_brackets_not_speakers(tmp_path):
 
 def test_native_compound_not_flagged_foreign():
     # '김치찌갯집' = '김치'+'찌갯집'(둘 다 표제어) 고유어 합성어 — kiwi가 문맥에
-    # 따라 통짜 NNG로 태깅해도 외래어 음차로 오탐하지 않는다.
+    # 따라 통짜 NNG로 태깅해도 외래어 음차로 오탐지하지 않는다.
     entry = SubtitleEntry(index=1, start="0", end="1", text="여기 김치찌갯집이 유명해", speaker=None)
     _c, flags, _l = correct_entries([entry])
     assert not any("사전에 없는 단어" in f.reason for f in flags)
@@ -204,7 +204,7 @@ def test_headword_derived_word_not_split_by_spacing():
 
 def test_no_dialect_auto_recommendation_for_unassigned_speaker():
     # 사투리는 작업자가 직접 지정한다 — dialect_map에 없는 화자에게는 사투리
-    # 자동 감지 '추천' 플래그를 띄우지 않는다(지문/효과음 오탐 방지).
+    # 자동 감지 '추천' 플래그를 띄우지 않는다(지문/효과음 오탐지 방지).
     entry = SubtitleEntry(index=1, start="0", end="1", text="아이고 마 그래 가꼬", speaker="늘어지며")
     _corrected, flags, _log = correct_entries([entry])  # dialect_map 없음
     assert not any("사투리" in f.reason for f in flags)
@@ -259,10 +259,10 @@ def test_e_subtitle_removes_final_period_every_line():
     assert c2[0].text == "네, 그래\n알겠어"
 
 
-# --- 2026-08-02 실사용 감수: 사전 표제어 오탐 3건 + 브래킷 연속 ---
+# --- 2026-08-02 실사용 감수: 사전 표제어 오탐지 3건 + 브래킷 연속 ---
 
 def test_verb_stem_mistagged_as_noun_not_flagged_unknown():
-    """'덖는'의 '덖'을 kiwi가 명사로 태깅해 미등록어로 플래그하던 오탐.
+    """'덖는'의 '덖'을 kiwi가 명사로 태깅해 미등록어로 플래그하던 오탐지.
 
     명사 뒤에는 어미가 붙지 않는다 — 어미가 붙어 있으면 어간으로 보고
     '어간+다'(덖다, 사전 등재)를 확인해야 한다.
@@ -273,7 +273,7 @@ def test_verb_stem_mistagged_as_noun_not_flagged_unknown():
 
 def test_headword_with_particle_not_split():
     """'짬짜면을'처럼 조사가 붙으면 표제어 조회가 실패해 '짬 짜면을'로 쪼개자고
-    제안하던 오탐. 어절 끝 조사를 떼고 다시 확인한다."""
+    제안하던 오탐지. 어절 끝 조사를 떼고 다시 확인한다."""
     out, flags = _run("짬짜면을 시켰다")
     assert out == "짬짜면을 시켰다"
     assert not any("짬 짜면" in (f.suggested_fix or "") for f in flags)
@@ -410,7 +410,7 @@ def test_determiner_not_treated_as_interjection():
 
 
 def test_marker_content_not_merged():
-    """SDH 효과음 '[탁 - 차 문]'의 '차 문'이 '차문'으로 병합되던 오탐.
+    """SDH 효과음 '[탁 - 차 문]'의 '차 문'이 '차문'으로 병합되던 오탐지.
 
     '차문'은 표제어이긴 하나 뜻이 借文(대작)·借問(물음)·조선 상소문뿐이라 자동차
     문과 무관하다. 자막 표시 안은 일반 문장 규칙의 대상이 아니므로 병합하지 않는다.

@@ -2,7 +2,7 @@
 
 근거: 번역가_교육자료_요약.md §"동사/접사 구분법" + 사용자 실사용 피드백.
 핵심: 동작성 있는 명사 뒤 접사는 붙이고, 동작성 없는 명사 뒤에서는 동사라 띄운다.
-동작성 신호(word_exists(N+'하다'))의 동형이의어 오탐(상하다 등)은 제외 집합으로 막는다.
+동작성 신호(word_exists(N+'하다'))의 동형이의어 오탐지(상하다 등)은 제외 집합으로 막는다.
 """
 from subtitle_corrector.engine import correct_action_noun_affix
 
@@ -60,10 +60,10 @@ def test_object_noun_is_never_joined_to_sikida():
     assert _attach("국어 공부 시키다") == "국어 공부 시키다"
 
 
-# --- 띄워야(동작성 없음 / 동형이의어 오탐 / 되다 비피동 / 명사구) ---
+# --- 띄워야(동작성 없음 / 동형이의어 오탐지 / 되다 비피동 / 명사구) ---
 
 def test_space_non_action_and_homonyms():
-    # 동형이의어 오탐 방지(상하다·상당하다·상되다가 있어도 상은 동작성 아님)
+    # 동형이의어 오탐지 방지(상하다·상당하다·상되다가 있어도 상은 동작성 아님)
     assert _attach("상 받다") == "상 받다"
     assert _attach("돈 받다") == "돈 받다"
     assert _attach("벌 받다") == "벌 받다"
