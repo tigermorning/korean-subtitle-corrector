@@ -10,7 +10,11 @@ from .lexicon import _is_action_noun
 # 동작성 신호로 쓰는 word_exists(N+"하다")가 동형이의어로 오탐지하는 명사들.
 # '상'(賞)은 '상하다'(음식이 상하다)·'상당하다'·'상되다'가 사전에 있어 동작성으로
 # 오판되지만 실제로는 동작성이 없다('상 받다'는 띄움). '돈'·'벌'도 마찬가지.
-_AFFIX_ACTION_EXCLUDE = {"상", "돈", "벌"}
+# '사진'은 다른 이유다 — '사진하다' 표제어 3개(仕進하다/査陳하다/寫眞하다)가 전부
+# 현대에 안 쓰이는 옛 뜻(관직 출근·옛 토지조사·"그림 그리다")뿐이라 동작성 신호
+# 자체가 무효다(2026-08-28, docs/BACKLOG.md 최우선 항목). is_contemporary_general_word()가
+# 이걸 못 잡는 이유는 우리말샘이 세 뜻 다 cat/type을 안 채워서다.
+_AFFIX_ACTION_EXCLUDE = {"상", "돈", "벌", "사진"}
 
 
 def is_honorific_drida_affix(noun_form: str) -> bool:

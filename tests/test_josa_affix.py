@@ -68,6 +68,10 @@ def test_space_non_action_and_homonyms():
     assert _attach("돈 받다") == "돈 받다"
     assert _attach("벌 받다") == "벌 받다"
     assert _attach("상 하다") == "상 하다"
+    # '사진하다' 표제어 3개(仕進/査陳/寫眞)가 전부 현대에 안 쓰이는 옛 뜻이라
+    # 동작성 신호가 무효다(2026-08-28 사용자 실사용 보고, BACKLOG 최우선 항목)
+    assert _attach("사진 하러 가") == "사진 하러 가"
+    assert _attach("사진 하는 사람 맞아") == "사진 하는 사람 맞아"
     # 동작성 없는 명사
     assert _attach("짜장면 시켜서") == "짜장면 시켜서"
     assert _attach("카톡 해") == "카톡 해"
