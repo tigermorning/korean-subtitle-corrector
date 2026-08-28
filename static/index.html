@@ -149,11 +149,13 @@
     <div class="panel-body">
       <div class="opt-group">
         <span class="opt-label">사용 목적</span>
-        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="docType" value="subtitle" checked> 자막</label>
-        <label style="font-size:0.9em"><input type="radio" name="docType" value="prose"> 일반 글</label>
+        <label style="margin-right:14px;font-size:0.9em"><input type="radio" name="docType" value="subtitle"> 자막</label>
+        <label style="font-size:0.9em"><input type="radio" name="docType" value="prose" checked> 일반 글</label>
         <!-- 차이를 일부만 나열하면 그것이 전부인 줄 오해하게 된다. 규칙은 계속
-             늘어나므로 열거하지 않고, 무엇이 갈리는지만 밝힌다. -->
-        <p class="opt-note">자막을 고르면 자막 편집 관례가 함께 적용됩니다. 일반 글은 원문의 구두점과 표기를 그대로 둡니다.</p>
+             늘어나므로 열거하지 않고, 무엇이 갈리는지만 밝힌다.
+             기본값은 일반 글이다(2026-08-28) — 자막 작업자보다 일반 문서
+             교정 사용자가 다수라고 판단, 자막 작업자만 따로 고르게 한다. -->
+        <p class="opt-note">자막을 작업 중이면 자막을 고르세요(기본값은 일반 글입니다). 자막을 고르면 자막 편집 관례가 함께 적용됩니다. 일반 글은 원문의 구두점과 표기를 그대로 둡니다.</p>
       </div>
 
       <div class="opt-group" id="punctuationOptions">
