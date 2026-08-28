@@ -141,6 +141,8 @@
       <span class="step-label">1단계 · 파일 선택</span>
       <input type="file" id="fileInput" accept=".srt,.vtt,.smi,.sami,.ass,.ssa,.sbv,.sub,.ttml,.dfxp,.xml,.txt,.docx,.pdf">
       <div class="opt-note" id="fileNote">자막(.srt, .vtt, .smi, .ass/.ssa, .sbv, .sub, .ttml/.dfxp)과 문서(.txt, .docx, .pdf)를 올릴 수 있습니다. 자막은 원본 형식 그대로 돌려드리고, PDF는 텍스트를 뽑아 교정합니다(글자가 이미지인 스캔본은 읽을 수 없습니다).</div>
+      <div class="opt-note" style="margin-top:10px">또는, 파일 없이 글을 바로 붙여넣어도 됩니다(일반 텍스트로 처리됩니다):</div>
+      <textarea id="pasteInput" placeholder="여기에 교정할 글을 붙여넣으세요" style="width:100%;min-height:120px;margin-top:6px;border:1px solid #ccc;border-radius:8px;padding:12px;font-size:0.95em;font-family:inherit;resize:vertical"></textarea>
     </div>
   </section>
 
@@ -584,7 +586,7 @@ function renderResult(data) {
   // corrected는 서버가 고친 결과를 그대로 붙들어 둔다 — 되돌리기 체크를 풀면
   // 이 값으로 되돌아가야 하므로 text와 따로 들고 있어야 한다.
   resultState.entries = (data.entries || []).map(e => ({ ...e, corrected: e.text }));
-  const source = document.getElementById('fileInput').files[0];
+  const source = document.getElementById('fileInput').files[0] || pastedTextAsFile();
   resultState.filename = suggestFilename(source ? source.name : '');
   document.getElementById('correctedSrt').textContent = data.corrected_srt;
   document.getElementById('downloadNote').textContent = `파일 이름: ${resultState.filename}`;
@@ -952,9 +954,18 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// 파일 없이 붙여넣은 글은 .txt 파일과 똑같은 경로로 태워 보낸다 — 서버는 이미
+// .txt 업로드를 지원하므로 새 엔드포인트가 필요 없다(korean-corrector-guide-bot
+// 세션에서 "붙여넣기 칸이 없다"는 실사용 지적을 받아 추가, 2026-08-28).
+function pastedTextAsFile() {
+  const text = document.getElementById('pasteInput').value;
+  if (!text.trim()) return null;
+  return new File([text], '붙여넣은글.txt', { type: 'text/plain' });
+}
+
 submitBtn.addEventListener('click', async () => {
-  const file = document.getElementById('fileInput').files[0];
-  if (!file) { statusEl.textContent = '파일을 먼저 선택하세요.'; return; }
+  const file = document.getElementById('fileInput').files[0] || pastedTextAsFile();
+  if (!file) { statusEl.textContent = '파일을 선택하거나 글을 붙여넣으세요.'; return; }
 
   submitBtn.disabled = true;
   askNotifyPermission();
