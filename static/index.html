@@ -7,8 +7,8 @@
 <style>
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{font-family:system-ui,sans-serif;max-width:1500px;margin:0 auto;padding:36px 32px 48px;color:#222;line-height:1;font-size:17px}
-  h1{font-size:1.8em;margin:0 0 8px}
+  body{font-family:system-ui,sans-serif;max-width:1500px;margin:0 auto;padding:36px 32px 48px;color:#222;line-height:1.6;font-size:17px;word-break:keep-all;overflow-wrap:break-word}
+  h1{font-size:1.8em;margin:0 0 8px;line-height:1.3}
   section{margin-top:32px}
   .drop{border:2px dashed #aaa;border-radius:10px;padding:26px;text-align:center;margin:14px 0 0}
   input[type=file]{margin:10px 0;font-size:0.9em}
@@ -116,6 +116,23 @@
   .legend b{border-radius:3px;padding:0 4px}
   .legend .hl-edit{color:#1a1a1a}
   .legend .hl-flag{color:#1a1a1a}
+
+  /* 가벼운 상호작용 다듬기(2026-08-31). 레이아웃·색은 그대로 두고, 눌러도 되는
+     것과 안 되는 것을 손이 먼저 알게 하는 최소한의 신호만 더한다 — hover·focus·
+     눌림, 체크박스/라디오 색을 버튼과 맞추기, 카드에 아주 옅은 그림자. */
+  button,input,select,textarea,summary,.corr-line,.revert-pick,#appliedList li[data-line],#flagBody tr{
+    transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .1s ease
+  }
+  button:not(:disabled):hover{background:#3f4749;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  button:not(:disabled):active{transform:translateY(1px);box-shadow:none}
+  button:focus-visible{outline:2px solid #0b6bcb;outline-offset:2px}
+  input[type=text]:focus,input[type=file]:focus,textarea:focus,select:focus{
+    outline:none;border-color:#8fb8e6;box-shadow:0 0 0 3px rgba(11,107,203,.15)
+  }
+  details.panel>summary:hover,details.panel>summary:focus-visible{background:#eef1f5;border-radius:10px}
+  details.panel>summary:focus-visible{outline:2px solid #0b6bcb;outline-offset:-2px}
+  input[type=checkbox],input[type=radio]{accent-color:#2d3436;cursor:pointer}
+  .features,.dialect-section,.run,.share,details.panel,pre{box-shadow:0 1px 3px rgba(20,20,30,.05)}
 </style>
 </head>
 <body>
