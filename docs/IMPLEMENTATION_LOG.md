@@ -1115,3 +1115,40 @@ kiwi가 `매직`(NNP)+`블럭`(NNG)으로 쪼개니 조각 `블럭`만 보고 �
 - `tests/test_feedback.py` 18건 — 꺼진 기본값, 상한, 원문 미저장, 창구가 어떤
   입력에도 200을 돌려주는지.
 - 전체 421건 통과(기존 401 + 신규 20) 후 기록장 18건 추가.
+
+## 77. `word_exists()`가 방언 동형이의어에 뚫리던 것 — 용도별로 함수를 갈랐다 (2026-09-01)
+
+`docs/BACKLOG.md` 33번(2026-08-28 접수). `_opendict_item_is_standard()`는 표제어의
+뜻풀이 중 하나라도 "규범 표기는 …" 재지정 안내가 없으면 그 표기를 표준으로
+판정하는데, `type`/`cat`(방언·역사·옛말·은어) 자체는 보지 않았다. 그래서 무관한
+방언 뜻이 우연히 같은 표기를 쓰면(`빠리`=파리/장도리의 방언, `커리`=카레/걸·켤레의
+방언) 그 뜻 때문에 전체가 "표준"으로 오판됐다 — 원리3류(우연한 사전 충돌) 오탐지.
+
+**측정: `_NON_CONTEMPORARY_FIELDS` 필터를 그대로 적용하면 안 됐다.** `is_contemporary_general_word()`가
+쓰는 필터를 `_opendict_item_is_standard()`에 그대로 넣고 돌려 보니
+`test_c3_reduplication_not_flagged_foreign`(`건숭건숭` 첩어 판정)이 깨졌다.
+`word_exists('건숭')`은 방언 표제어뿐이라 새로 `False`가 됐고, `_is_reduplication()`이
+그 값에 기대어 "첩어 단위가 사전에 있다"를 판정하는 자리(`engine/lexicon.py`)가
+무너졌다. 코드 주석(`headwords.py`)이 애초에 "방언은 제외하지 않는다"고 명시해 둔
+이유가 이거였다 — `word_exists()`는 "표준 표기인가"와 "실존하는 한국어 낱말인가"
+두 가지 다른 질문에 동시에 쓰이고 있었다.
+
+**수정: 함수를 분리했다.** `word_exists()`는 기존 동작(방언 표제어도 실존 낱말로
+인정) 그대로 두고, `_opendict_item_is_standard(item, contemporary_only=True)`로
+비현대 분야 뜻을 표준 자격에서 제외하는 `is_standard_word()`를 새로 추가했다
+(`subtitle_corrector/dictionary/headwords.py`). "표준 표기인가"만 따져야 하는
+자리 중 실제로 오탐지가 있던 곳(`engine/loanwords.py`의 `correct_loanwords`·
+`check_colloquial_loanword` — 방언 동형이의어가 표준으로 오판되어 외래어 교정을
+막던 지점)만 `is_standard_word()`로 교체했다. 나머지 30여 곳의 `word_exists()`
+호출부(affix·spacing 등 "긍정 근거"로 붙임/치환을 정당화하는 자리)는 이번에
+감사하지 않았다 — 같은 문제가 있는지는 개별 사례가 나오면 그때 다룬다.
+
+### 검증
+
+- 직접 조회: `is_standard_word('빠리')`=False, `is_standard_word('커리')`=False
+  (수정 전 `word_exists()`로는 둘 다 True라 외래어 교정이 조용히 건너뛰어졌다),
+  `word_exists('건숭')`=True(유지). `correct_loanwords('빠리에 갔다')`가 이제
+  '빠리 -> 파리' 고유명사 확인 플래그를 낸다.
+- `tests/test_realusage_review.py` 78건 전부 통과(c3 포함).
+- `pytest tests/` 전체 444건 통과.
+- `tools/check_names.py` 0건.

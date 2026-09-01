@@ -21,7 +21,7 @@ from .clients import (
 _NONSTANDARD_REDIRECT_MARKERS = ("규범 표기는", "표준 용어는")
 
 
-def _opendict_item_is_standard(item: dict) -> bool:
+def _opendict_item_is_standard(item: dict, *, contemporary_only: bool = False) -> bool:
     """우리말샘은 이미 알려진 비표준 표기("초코렛", "스노우 체인" 등)도
     하나의 표제어처럼 등재해 두고, 그 뜻풀이 끝에 "⇒규범 표기는 'OO'이다"라고
     정답을 안내한다. 화학·의학 등 전문 용어는 "⇒표준 용어는 'OO'이다"라는
@@ -34,7 +34,20 @@ def _opendict_item_is_standard(item: dict) -> bool:
     안내하는 게 아니라 국립국어원이 아직 표준 표기를 정하지 못했다는
     뜻이다 — 이 표기 자체가 현재로선 유일하게 등재된 표기이므로, 다른
     대안이 있는 경우("규범 표기는/표준 용어는 'X'이다")와 구분해서 표준으로
-    인정한다."""
+    인정한다.
+
+    `contemporary_only=True`이면 방언·역사·옛말·은어 전용 뜻(비현대 분야,
+    `_NON_CONTEMPORARY_FIELDS`)도 표준 자격 뜻에서 제외한다 — 기본값(False)은
+    이 검사를 하지 않는다. **기본값을 False로 유지하는 이유(`docs/BACKLOG.md`
+    33번)**: 이 함수를 체인으로 쓰는 `word_exists()`는 "실존하는 한국어
+    낱말인가"(예: `_is_reduplication`의 첩어 단위 확인 — '건숭건숭'의 '건숭'은
+    방언 표제어뿐이지만 실존 낱말이라 외국어 오탐지를 막는 근거로 써야 한다)
+    용도로도 널리 쓰이므로, 방언까지 배제하면 그 경로들이 깨진다(실측:
+    `test_c3_reduplication_not_flagged_foreign` FAIL). `contemporary_only=True`는
+    "이 표기가 **표준** 표기인가"만 따지는 자리(`is_standard_word()`)에서만
+    쓴다 — '빠리'(파리/장도리의 방언)·'커리'(카레/걸·켤레의 방언)처럼 무관한
+    방언 동형이의어가 우연히 같은 표기를 쓰는 바람에 전체가 표준으로 새는
+    것을 막기 위함이다."""
     senses = item.get("sense", [])
     if not senses:
         return True
@@ -50,9 +63,15 @@ def _opendict_item_is_standard(item: dict) -> bool:
         )
         # '북한어' 뜻(예: "'로봇'의 북한어.")은 남한 표준어가 아니므로 표준 자격
         # 뜻으로 치지 않는다 — 이게 없으면 '로보트'(재지정 뜻 + 북한어 뜻)가
-        # 표준으로 오판되어 외래어 교정(로보트→로봇)이 막힌다. 방언은 제외하지
-        # 않는다(건숭 등 방언 표제어는 존재하는 단어로 인정해야 오탐지를 막는다).
+        # 표준으로 오판되어 외래어 교정(로보트→로봇)이 막힌다. 방언은 기본
+        # 제외하지 않는다(건숭 등 방언 표제어는 존재하는 단어로 인정해야
+        # 오탐지를 막는다) — `contemporary_only`로만 선택적으로 배제한다.
         is_north_korean = "북한어" in definition
+        if contemporary_only:
+            field = (sense.get("cat") or "").strip()
+            lexical_type = (sense.get("type") or "").strip()
+            if field in _NON_CONTEMPORARY_FIELDS or lexical_type in _NON_CONTEMPORARY_FIELDS:
+                continue
         if not redirects and not is_north_korean:
             return True
     return False
@@ -266,6 +285,36 @@ def standard_headword_example(word: str) -> tuple[str, str]:
     return headword, origin
 
 
+def _word_exists_impl(query: str, *, contemporary_only: bool) -> bool:
+    stdict_hit = int(search_stdict(query).get("channel", {}).get("total", 0)) > 0
+    opendict_result = search_opendict(query)
+    opendict_matches = [
+        item
+        for item in opendict_result.get("channel", {}).get("item", [])
+        if (item.get("word") or "").replace("-", "").replace("^", "") == query
+    ]
+    # "집"처럼 같은 표제어 아래 여러 동형이의어가 있을 수 있다("집"=거처인
+    # 표준 표기 vs "집"=즙의 비표준 표기가 우연히 같은 글자). 하나라도
+    # 비표준으로 확인되면 전체를 비표준으로 단정하지 않는다 — 그중 표준으로
+    # 확인되는 동형이의어가 하나라도 있으면 그 뜻으로 정상 존재하는 단어로
+    # 본다. 반대로, 검색된 동형이의어 전부가 비표준으로 명시되어 있으면
+    # (예: "요오드" — 일치하는 항목이 이것 하나뿐이고 그마저 비표준) 표준
+    # 국어대사전 등재 여부와 무관하게 비표준으로 판단한다.
+    if opendict_matches:
+        if any(
+            _opendict_item_is_standard(item, contemporary_only=contemporary_only)
+            for item in opendict_matches
+        ):
+            return True
+        return False
+    if stdict_hit:
+        return True
+    precedent = check_precedent(query)
+    if precedent is not None:
+        return precedent
+    return False
+
+
 def word_exists(query: str) -> bool:
     """표준국어대사전 또는 우리말샘에 정확히 일치하는 표제어가 있는지 확인.
 
@@ -290,31 +339,32 @@ def word_exists(query: str) -> bool:
     용어 표준화가 표준국어대사전보다 우리말샘에 먼저/추가로 반영된 것으로
     보임)를 놓치게 된다 — 실사용 검증으로 발견됨. 그래서 표준국어대사전에
     있어도 우리말샘에 정확히 일치하는 표제어가 있으면 그 비표준 안내
-    여부까지 항상 확인한다."""
-    stdict_hit = int(search_stdict(query).get("channel", {}).get("total", 0)) > 0
-    opendict_result = search_opendict(query)
-    opendict_matches = [
-        item
-        for item in opendict_result.get("channel", {}).get("item", [])
-        if (item.get("word") or "").replace("-", "").replace("^", "") == query
-    ]
-    # "집"처럼 같은 표제어 아래 여러 동형이의어가 있을 수 있다("집"=거처인
-    # 표준 표기 vs "집"=즙의 비표준 표기가 우연히 같은 글자). 하나라도
-    # 비표준으로 확인되면 전체를 비표준으로 단정하지 않는다 — 그중 표준으로
-    # 확인되는 동형이의어가 하나라도 있으면 그 뜻으로 정상 존재하는 단어로
-    # 본다. 반대로, 검색된 동형이의어 전부가 비표준으로 명시되어 있으면
-    # (예: "요오드" — 일치하는 항목이 이것 하나뿐이고 그마저 비표준) 표준
-    # 국어대사전 등재 여부와 무관하게 비표준으로 판단한다.
-    if opendict_matches:
-        if any(_opendict_item_is_standard(item) for item in opendict_matches):
-            return True
-        return False
-    if stdict_hit:
-        return True
-    precedent = check_precedent(query)
-    if precedent is not None:
-        return precedent
-    return False
+    여부까지 항상 확인한다.
+
+    **방언·역사·옛말·은어 전용 표제어도 "실존하는 낱말"로 인정한다**(예:
+    '건숭'은 방언 표제어뿐이지만 참을 돌려준다) — 이 함수는 "이 문자열이
+    실존하는 한국어 낱말인가"를 묻는 자리(외국어 오탐지 억제 등)에 쓰인다.
+    "이 표기가 **표준** 표기인가"만 따져야 하는 자리(외래어 표기 교정 등,
+    무관한 방언 동형이의어에 막히면 안 되는 경우)는 `is_standard_word()`를
+    대신 쓴다(`docs/BACKLOG.md` 33번)."""
+    return _word_exists_impl(query, contemporary_only=False)
+
+
+def is_standard_word(query: str) -> bool:
+    """`word_exists()`와 같은 조회 절차를 쓰되, 우리말샘 쪽 판정에서 방언·
+    역사·옛말·은어 전용 뜻(현대 일반어 뜻이 하나도 없는 표제어,
+    `_NON_CONTEMPORARY_FIELDS`)은 표준 자격으로 인정하지 않는다.
+
+    '빠리'(파리/장도리의 방언)·'커리'(카레/걸·켤레의 방언)처럼 무관한 방언
+    동형이의어가 우연히 같은 표기를 쓰면, `word_exists()`는 그 뜻 때문에
+    전체를 "표준"으로 오판한다 — 외래어 표기 교정(`correct_loanwords`)이
+    이 오판을 근거로 정당한 교정(빠리→파리, 커리→카레)을 건너뛴다
+    (`docs/BACKLOG.md` 33번). `word_exists()` 자체를 이렇게 좁히면 방언
+    표제어를 "실존 낱말"로 인정해야 하는 다른 자리(예: `_is_reduplication`의
+    '건숭건숭' 첩어 판정)가 깨지므로(실측: `test_c3_reduplication_not_flagged_foreign`
+    FAIL), 두 용도를 함수로 분리했다 — "표준 표기인가"만 따지는 자리에서만
+    이 함수를 쓴다."""
+    return _word_exists_impl(query, contemporary_only=True)
 
 
 def compound_status(word: str) -> str | None:

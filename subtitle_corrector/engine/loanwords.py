@@ -1,7 +1,7 @@
 """외래어 표기(kornorms 확정 표기). 일반 용어는 자동 반영, 고유명사는 플래그만 남긴다.
 """
 
-from ..dictionary import loanword_fix, word_exists
+from ..dictionary import is_standard_word, loanword_fix
 from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
 from .kiwi_adapter import _has_reading
@@ -40,11 +40,15 @@ def correct_loanwords(
         # 표제어이므로 이 결합 자체가 사전에 있다(2026-08-03 실사용 감수).
         if is_hada_stem(tokens, t):
             continue
-        # 이미 표준국어대사전에 정식 등재된 단어는 애초에 외래어 오표기 후보가
+        # 이미 사전에 정식 등재된 표준 표기는 애초에 외래어 오표기 후보가
         # 아니므로 건드리지 않는다. 그렇지 않으면 "집"처럼 흔한 고유어가
         # kornorms의 전혀 무관한 외래어 항목과 우연히 겹쳐 "지브" 같은 엉뚱한
-        # 말로 둔갑하는 사고가 생긴다 (실제로 발견된 버그).
-        if word_exists(t.form):
+        # 말로 둔갑하는 사고가 생긴다 (실제로 발견된 버그). `word_exists()`가
+        # 아니라 `is_standard_word()`를 쓴다 — 방언 동형이의어('빠리'=파리의
+        # 방언, '커리'=카레의 방언)가 실존 낱말이라는 이유로 여기서 표준으로
+        # 오판되면 정당한 외래어 교정(빠리→파리, 커리→카레)이 막힌다
+        # (`docs/BACKLOG.md` 33번).
+        if is_standard_word(t.form):
             continue
         # 된소리 구어형이 사전 표제어면(빤스→빤쓰) 외래어 표기로 자동 교정하지
         # 않고 check_colloquial_loanword()가 사람 확인 플래그를 남긴다.
@@ -93,7 +97,9 @@ def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
     표제어로 있어 화자의 말투일 수 있는 경우, 자동 교정하지 않고 구어형과
     외래어 표기 중 어느 쪽으로 적을지 사람이 정하도록 플래그한다."""
     for t in _kiwi.tokenize(text):
-        if t.tag not in _LOANWORD_TAGS or word_exists(t.form):
+        # `correct_loanwords()`와 같은 이유로 `is_standard_word()`를 쓴다 —
+        # 방언 동형이의어가 이미 "표준 표기"인 것처럼 걸러내면 안 된다.
+        if t.tag not in _LOANWORD_TAGS or is_standard_word(t.form):
             continue
         variant = _tensified_headword_variant(t.form)
         if not variant:
