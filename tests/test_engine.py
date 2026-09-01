@@ -20,6 +20,7 @@ from subtitle_corrector.engine import (
     check_spacing,
     check_spelling,
     check_compound_merge_candidate,
+    check_palatal_glide_loanword,
     check_term_spacing_consistency,
     correct_always_wrong,
     correct_aux_verb_spacing,
@@ -457,6 +458,43 @@ class TestLoanwordFix:
         """'집'(house)처럼 이미 정식 등재된 고유어는 kornorms의 무관한
         외래어 항목과 우연히 겹쳐도 절대 건드리면 안 된다 (실사용 버그)."""
         assert correct_loanwords("나는 집에 간다") == ("나는 집에 간다", [], [], [])
+
+
+class TestPalatalGlideLoanword:
+    """「외래어 표기법」 제3장 제7절(중국어의 표기) 제2항 — ㅈ·ㅉ·ㅊ 뒤에는
+    반모음(ㅑㅖㅛㅠ)을 적지 않는다. kornorms에 등재된 영어·독일어·프랑스어·
+    에스파냐어·중국어·일본어 오표기 수십 건이 전부 이 12음절을 오표기로
+    지목해(실측, 2026-09-01) 출처 언어를 가리지 않는 일반 표기 관행임을
+    확인했다 — `docs/LOANWORD_TRANSCRIPTION_RULES.md` 참고."""
+
+    def test_unregistered_word_flagged(self):
+        """'쥬시'는 kornorms·표준국어대사전·우리말샘 어디에도 없는 미심의
+        표기다(실측 확인) — correct_loanwords()의 kornorms 조회로는 못 잡는
+        빈틈을 이 규칙이 메운다."""
+        flag = check_palatal_glide_loanword(1, "쥬시한 입술이었다")
+        assert flag is not None
+        assert flag.suggested_fix == "주시한 입술이었다"
+
+    def test_standard_headword_not_flagged(self):
+        """'주시'(注視)는 표준국어대사전 표제어다 — 붙여 읽은 음절이 우연히
+        겹쳐도 실존하는 표준 표기는 건드리지 않는다."""
+        assert check_palatal_glide_loanword(1, "주시하고 있었다") is None
+
+    def test_already_correct_loanword_not_flagged(self):
+        assert check_palatal_glide_loanword(1, "메이저 리그를 봤다") is None
+
+    def test_native_verb_form_not_flagged(self):
+        """'가져'(가지다+어)는 ㅕ(여)라 애초에 대상 음절(ㅑㅖㅛㅠ)이 아니고,
+        kiwi가 용언(VV+EC)으로 태깅해 외래어 후보 태그(NNG/NNP)에도 안 든다
+        — 이중으로 안전하다."""
+        assert check_palatal_glide_loanword(1, "가져와") is None
+        assert check_palatal_glide_loanword(1, "가져다줘") is None
+
+    def test_kornorms_registered_form_handled_by_loanword_fix_not_this_rule(self):
+        """kornorms가 이미 정답을 확정해 둔 표기('메이쟈'->'메이저')는
+        correct_loanwords()가 자동/확인 플래그로 먼저 처리한다 — 이 규칙은
+        관여하지 않는다(중복 플래그 방지)."""
+        assert check_palatal_glide_loanword(1, "메이쟈 리그를 봤다") is None
 
 
 class TestNonstandardTermReplacement:

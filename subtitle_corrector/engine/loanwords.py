@@ -119,6 +119,59 @@ def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
     return None
 
 
+# 「외래어 표기법」제3장 제7절(중국어의 표기) 제2항: "'ㅈ, ㅉ, ㅊ'으로 표기되는
+# 자음(ㄐ, ㄓ, ㄗ, ㄑ, ㄔ, ㄘ) 뒤의 'ㅑ, ㅖ, ㅛ, ㅠ' 음은 'ㅏ, ㅔ, ㅗ, ㅜ'로 적는다"
+# (docs/LOANWORD_TRANSCRIPTION_RULES.md 제3장 제7절). 한글의 ㅈ·ㅉ·ㅊ은 이미
+# 항상 구개음이라 뒤에 반모음을 더 적어도 소리가 달라지지 않는다 — 그래서 이
+# 규정은 중국어 전용이 아니라 출처 언어를 가리지 않는 일반 표기 관행이다.
+# kornorms에 등재된 영어·독일어·프랑스어·에스파냐어·중국어·일본어 오표기
+# 수십 건이 전부 이 12음절을 오표기로 지목하고 있다(실측, 2026-09-01:
+# 메이져(X)/메이저(영어), 솔페쥬(X)/솔페주(프랑스어), 산쵸(X)/산초(에스파냐어),
+# 왕스졔(중국어 인명 표기 자체), 쬬끼(X)/조끼(일본어) 등). 다만 코드로 옮긴
+# 근거는 이 조항 하나뿐이므로 반드시 이 12음절에만 한정한다 — 다른 반모음
+# 결합(예: '여'가 오는 '져')은 이 조항이 언급하지 않아 대상이 아니다(실사용
+# '가져'가 이 패턴에 걸리면 안 된다 — '여'는애초에 대상 밖이라 안전하다).
+_PALATAL_GLIDE_FIX = {
+    "쟈": "자", "졔": "제", "죠": "조", "쥬": "주",
+    "쨔": "짜", "쪠": "쩨", "쬬": "쪼", "쮸": "쭈",
+    "챠": "차", "쳬": "체", "쵸": "초", "츄": "추",
+}
+
+
+def check_palatal_glide_loanword(index: int, text: str) -> FlagItem | None:
+    """ㅈ·ㅉ·ㅊ 뒤에 반모음이 덧붙은 외래어 표기(쟈·졔·죠·쥬 등)를 확인
+    플래그한다 — 위 `_PALATAL_GLIDE_FIX` 주석 근거. kornorms에 이미 등재된
+    단어는 `correct_loanwords()`의 `loanword_fix()`가 먼저 처리하므로,
+    여기서는 kornorms에 없는(아직 심의되지 않은) 새 표기만 대상으로 한다.
+    자동 반영하지 않는다 — 원리4를 피하려 언어를 가리지 않고 기계적으로
+    걸지만, 그래도 이 글자 조합 자체가 다른 정당한 표기의 일부일 가능성을
+    사람이 최종 확인해야 한다."""
+    for t in _kiwi.tokenize(text):
+        if t.tag not in _LOANWORD_TAGS or is_standard_word(t.form):
+            continue
+        hit_syllables = [ch for ch in t.form if ch in _PALATAL_GLIDE_FIX]
+        if not hit_syllables:
+            continue
+        fix, _needs_review, _context = loanword_fix(t.form)
+        if fix:
+            continue  # kornorms가 이미 다른 정답을 확정해 뒀다 — correct_loanwords()가 처리
+        suggested_word = t.form
+        for syllable in hit_syllables:
+            suggested_word = suggested_word.replace(syllable, _PALATAL_GLIDE_FIX[syllable])
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{t.form}'{_josa(t.form, '은')} 외래어 표기법상 'ㅈ·ㅉ·ㅊ 뒤에는 "
+                f"반모음을 적지 않는다'는 원칙에 걸립니다(제3장 제7절 제2항 — 중국어 "
+                "세칙이지만 한글 표기 관행이라 출처 언어를 가리지 않습니다). "
+                f"'{suggested_word}'가 맞는 표기인지 확인하세요."
+            ),
+            suggested_fix=text[: t.start] + suggested_word + text[t.start + t.len :],
+        )
+    return None
+
+
 def _has_proper_noun_reading(text: str, token) -> bool:
     """kiwi 대안 분석에 이 자리를 고유명사(NNP)로 읽는 후보가 있는지."""
     return _has_reading(text, token, ("NNP",))

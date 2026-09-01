@@ -108,7 +108,7 @@ from .subtitle_rules import (
     correct_subtitle_internal_period,
     correct_subtitle_quotes,
 )
-from .loanwords import check_colloquial_loanword, correct_loanwords
+from .loanwords import check_colloquial_loanword, check_palatal_glide_loanword, correct_loanwords
 from .replacements import (
     check_ambiguous_particle,
     check_contracted_form,
@@ -189,6 +189,7 @@ __all__ = [
     "check_ambiguous_particle",
     "check_contracted_form",
     "check_colloquial_loanword",
+    "check_palatal_glide_loanword",
     "check_dialect",
     "check_aux_verb_consistency",
     "check_street_name_spacing",
