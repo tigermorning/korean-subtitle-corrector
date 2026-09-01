@@ -415,6 +415,35 @@ class TestCompoundSpacing:
         # '보물선'(표제어)이라 '선'이 좌우 어디에도 붙을 수 있어 '선투자'로 병합하지 않는다.
         assert correct_compound_spacing("보물선 투자를 했다") == ("보물선 투자를 했다", [])
 
+    def test_left_grouping_ambiguous_still_flags(self):
+        """자동 병합은 안 하되 **플래그는 낸다**(BACKLOG 32번, 2026-09-01).
+
+        예전에는 좌측 결합이 가능하면 후보 목록에서 통째로 빼서, 자동 교정은 안 하니
+        안전했지만 `보물 선투자를 했다`처럼 진짜 틀린 입력도 플래그 없이 통과했다.
+        이제는 후보를 버리지 않고 사람에게 확인을 맡긴다.
+        """
+        correct_compound_spacing("보물선 투자를 했다")
+        flag = check_compound_merge_candidate(1, "보물선 투자를 했다")
+        assert flag is not None, "애매하다는 이유로 플래그까지 빠지면 안 된다"
+
+    def test_left_grouping_ambiguous_shows_both_readings(self):
+        """어느 쪽에 붙는지가 갈리므로 **대안 결합형까지** 보여 준다.
+
+        '선'이 앞말과 붙으면 '보물선', 뒷말과 붙으면 '선투자' — 둘 다 표제어다.
+        한쪽만 보여 주면 사람이 다른 가능성을 못 보고 고른다.
+        """
+        correct_compound_spacing("보물선 투자를 했다")
+        flag = check_compound_merge_candidate(1, "보물선 투자를 했다")
+        assert flag and "보물선" in flag.reason
+        assert "어느 쪽에 붙어야 하는지" in flag.reason
+
+    def test_unambiguous_candidate_has_no_alternative_clause(self):
+        """애매하지 않은 후보에는 그 문구를 붙이지 않는다 — 모든 플래그에 달리면
+        사람이 읽지 않게 된다."""
+        correct_compound_spacing("노천 카페에 갔다")
+        flag = check_compound_merge_candidate(1, "노천 카페에 갔다")
+        assert flag and "어느 쪽에 붙어야 하는지" not in flag.reason
+
 
 class TestLoanwordFix:
     def test_chocolate_misspelling_fixed(self):

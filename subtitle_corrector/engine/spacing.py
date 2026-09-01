@@ -292,20 +292,26 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     for idx, tok in enumerate(tokens):
         start_to_idx.setdefault(tok.start, idx)
 
-    def left_grouping_ambiguous(start: int) -> bool:
+    def left_grouping_alt(start: int) -> str | None:
         """병합 시작 토큰(예: '보물선 투자'에서 kiwi가 '보물선'을 '보물'+'선'으로
         쪼갠 '선')이 바로 앞 명사와 붙어 다른 사전 표제어(보물+선='보물선')를
-        이루면, 그 토큰은 좌우 어느 쪽에도 붙을 수 있어 병합 결과가 유일하지
-        않다 — 자동 병합하지 않는다."""
+        이루면, 그 대안 결합형을 돌려준다 — 그 토큰은 좌우 어느 쪽에도 붙을 수
+        있어 병합 결과가 유일하지 않다는 뜻이다. 없으면 None.
+
+        `docs/BACKLOG.md` 32번: 예전에는 이게 참이면 후보 자체를 버려서(자동
+        교정은 안 하니 안전은 하지만) 실제로 잘못된 입력까지 플래그 없이
+        통과시켰다. 이제는 후보를 버리지 않고, 대안 결합형을 함께 실어 사람이
+        어느 쪽이 맞는지 확인하게 한다."""
         idx = start_to_idx.get(start)
-        if not idx:
-            return False
+        if idx is None or idx == 0:
+            return None  # 대안 결합이 성립하려면 바로 앞 토큰이 있어야 한다
         prev, lead = tokens[idx - 1], tokens[idx]
         if prev.tag not in ("NNG", "NNP"):
-            return False
+            return None
         if prev.start + prev.len != lead.start:
-            return False  # 사이에 공백/다른 토큰이 있으면 좌측 결합 후보 아님
-        return word_exists(prev.form + lead.form)
+            return None  # 사이에 공백/다른 토큰이 있으면 좌측 결합 후보 아님
+        alt = prev.form + lead.form
+        return alt if word_exists(alt) else None
 
     # 자막 표시(효과음·지문·화자명) 안쪽은 일반 문장 규칙의 대상이 아니다.
     # 2026-08-02 실사용: SDH 효과음 '[탁 - 차 문]'의 '차 문'이 '차문'으로 병합됐다.
@@ -315,14 +321,17 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
     brackets = _bracket_spans(text)
 
     fixes = []  # (start, end, replacement, description) — 지금은 비어 있다(아래 주석 참고)
-    candidates = []  # (start, end, 붙임형, 원문) — 사람에게 물을 후보
+    candidates = []  # (start, end, 붙임형, 원문, 좌측 대안 결합형 또는 None) — 사람에게 물을 후보
     for start, boundary, end in _compound_candidate_spans(text):
         if _inside_any_span(start, brackets) or _inside_any_span(boundary, brackets):
             continue
         if start in adnominal_starts:
             continue
-        if left_grouping_ambiguous(start):
-            continue
+        # 좌측으로도 결합할 수 있어(`left_grouping_alt`) 병합 방향이 애매해도
+        # 후보 자체를 버리지 않는다(`docs/BACKLOG.md` 32번) — 대안 결합형을
+        # 함께 실어 아래 check_compound_merge_candidate()가 사람에게 두 가능성을
+        # 모두 보여주게 한다.
+        alt_grouping = left_grouping_alt(start)
         original = text[start:end]
         combined = text[start:boundary] + text[boundary:end].lstrip(" ")
         if original == combined:
@@ -344,7 +353,7 @@ def correct_compound_spacing(text: str) -> tuple[str, list[str]]:
             # '예산 안에서'->'예산안'. 사전은 이 넷과 '노천 카페'->'노천카페'(타당)를
             # 가르지 못한다(모두 표제어·표지 없음). 그래서 후보만 모아
             # check_compound_merge_candidate()가 확인 항목으로 낸다.
-            candidates.append((start, end, combined, original))
+            candidates.append((start, end, combined, original, alt_grouping))
 
     corrected = text
     applied = []
@@ -370,20 +379,30 @@ def check_compound_merge_candidate(index: int, text: str) -> FlagItem | None:
     못한다. 판정은 사람이 한다.
     """
     candidates = _MERGE_CANDIDATES.get(text) or []
-    for _start, _end, combined, original in candidates:
+    for _start, _end, combined, original, alt_grouping in candidates:
         suggested = text.replace(original, combined, 1)
         if suggested == text:
             continue
+        reason = (
+            f"'{combined}'{_josa(combined, '이')} 사전 표제어이므로 "
+            f"'{original}'{_josa(original, '을')} 붙여 쓸 수 있습니다. "
+            "다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 "
+            "바꾸지 않았습니다 — 문맥 확인이 필요합니다."
+        )
+        if alt_grouping:
+            # `docs/BACKLOG.md` 32번: 이 후보의 앞 글자가 그 앞말과도 붙어
+            # 다른 표제어를 이룬다 — 병합 방향이 하나로 정해지지 않으므로
+            # 두 가능성을 모두 사람에게 보여준다(예: '보물 선투자' — '보물선'
+            # +'투자'로도, 지금 형태 그대로도 읽힐 수 있음).
+            reason += (
+                f" 또한 앞말과 붙이면 '{alt_grouping}'도 "
+                "사전 표제어라, 이 글자가 어느 쪽에 붙어야 하는지부터 확인이 필요합니다."
+            )
         return FlagItem(
             line_index=index,
             original_text=text,
             suggested_fix=suggested,
-            reason=(
-                f"'{combined}'{_josa(combined, '이')} 사전 표제어이므로 "
-                f"'{original}'{_josa(original, '을')} 붙여 쓸 수 있습니다. "
-                "다만 붙이면 뜻이 달라지는 경우가 있어(예: '집 개'와 '집개') 자동으로 "
-                "바꾸지 않았습니다 — 문맥 확인이 필요합니다."
-            ),
+            reason=reason,
         )
     return None
 
