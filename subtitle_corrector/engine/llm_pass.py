@@ -190,39 +190,116 @@ _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 �
 - 문장부호 취향 (…와 ... 중 어느 쪽인지 등)
 - 고유명사 표기
 
-출력은 JSON 배열 하나뿐이다. 설명도 코드펜스도 붙이지 마라.
+출력은 JSON 객체 하나뿐이다. 설명도 코드펜스도 붙이지 마라.
 
-[{"id": 3, "before": "원문 그대로", "after": "고친 문장", "rule": "되/돼",
-  "declared": ["됬다 -> 됐다"]}]
+{"proposals": [{"id": 3, "before": "원문 그대로", "after": "고친 문장",
+  "rule": "되/돼", "declared": ["됬다 -> 됐다"]}]}
 
 규칙:
 - `before`는 받은 원문과 **한 글자도 다르지 않아야** 한다.
 - `declared`에는 바꾼 낱말을 `"틀린것 -> 맞는것"` 형식으로 **빠짐없이** 적는다.
   여기 적지 않은 변경이 `after`에 있으면 그 제안은 버려진다.
-- 고칠 것이 없으면 빈 배열 `[]`을 반환한다. 억지로 찾지 마라.
+- 고칠 것이 없으면 `{"proposals": []}`를 반환한다. 억지로 찾지 마라.
 """
 
 
+# 출력 형식을 **지시문이 아니라 서버**에 맡기는 자리(2026-09-01 추가).
+#
+# 지시문에 "JSON만 내라"고 적는 것은 부탁이지 강제가 아니다. 실제로 모델은 코드펜스를
+# 붙이고 설명 문장을 앞에 단다 — `_parse_proposals`의 방어 코드가 그 흔적이다. OpenAI
+# 호환 규격에는 스키마를 서버가 강제하게 만드는 자리(`response_format`)가 있으므로,
+# 부탁 대신 그것을 쓴다. 형식이 어긋난 응답 자체가 나올 수 없게 된다.
+#
+# 뿌리를 배열이 아니라 객체(`{"proposals": [...]}`)로 잡은 이유: 상용 API의 엄격
+# 모드가 최상위 배열을 받지 않는다. 로컬 서버는 양쪽 다 받으므로 좁은 쪽에 맞춘다.
+#
+# **지원은 백엔드마다 갈린다.** 상용 API·최신 Ollama·llama.cpp·vLLM이 각각 다르고,
+# `ollama run`을 직접 부르는 cli 경로에는 이 자리가 아예 없다. 그래서 스키마는 "걸리면
+# 좋은 것"으로 두고, 서버가 거절하면 한 번만 스키마 없이 다시 부른 뒤 그 사실을
+# 기억한다. 지원하지 않는 서버에서도 도구는 지금까지와 똑같이 동작한다.
+_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "subtitle_proposals",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "proposals": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "before": {"type": "string"},
+                            "after": {"type": "string"},
+                            "rule": {"type": "string"},
+                            "declared": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["id", "before", "after", "rule", "declared"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["proposals"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
+# 스키마를 모르는 서버는 이 상태코드들로 되돌려준다. 500대는 넣지 않는다 — 그건
+# 서버가 잠깐 아픈 것이지 자리를 모르는 것이 아니어서, 기능을 영구히 끄면 안 된다.
+_SCHEMA_REJECTED = (400, 404, 422)
+
+
+# (주소, 모델) -> 스키마 강제가 걸렸는가. 한 번 거절당한 조합은 다시 시도하지 않는다.
+# 자막 한 편이면 구간이 수십 개라 매번 두 번씩 부르면 그대로 두 배가 된다.
+_SCHEMA_SUPPORT: dict[tuple[str, str], bool] = {}
+
+
 def _chat(prompt: str, settings: LlmSettings) -> str:
-    """OpenAI 호환 서버에 한 번 물어본다. 실패는 예외로 올린다(호출부가 로그로 바꾼다)."""
+    """OpenAI 호환 서버에 한 번 물어본다. 실패는 예외로 올린다(호출부가 로그로 바꾼다).
+
+    출력 형식은 지시문으로 부탁하지 않고 `response_format`으로 서버에 맡긴다
+    (`_RESPONSE_FORMAT` 주석 참고). 서버가 그 자리를 모르면 스키마를 빼고 한 번만
+    다시 부른다 — 재시도는 딱 한 번이고, 같은 조합에는 두 번 다시 시도하지 않는다.
+    """
     headers = {"Content-Type": "application/json"}
     if settings.api_key:
         headers["Authorization"] = f"Bearer {settings.api_key}"
-    response = requests.post(
-        f"{settings.base_url}/chat/completions",
-        headers=headers,
-        json={
-            "model": settings.model,
-            "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            # 교정은 창작이 아니다. 같은 원고를 두 번 돌렸을 때 결과가 달라지면
-            # 사용자가 무엇을 신뢰해야 할지 알 수 없다.
-            "temperature": 0,
-        },
-        timeout=settings.timeout,
-    )
+    payload = {
+        "model": settings.model,
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        # 교정은 창작이 아니다. 같은 원고를 두 번 돌렸을 때 결과가 달라지면
+        # 사용자가 무엇을 신뢰해야 할지 알 수 없다.
+        "temperature": 0,
+    }
+
+    key = (settings.base_url, settings.model)
+    if _SCHEMA_SUPPORT.get(key, True):
+        payload["response_format"] = _RESPONSE_FORMAT
+
+    def _post():
+        return requests.post(
+            f"{settings.base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=settings.timeout,
+        )
+
+    response = _post()
+    if "response_format" in payload:
+        if response.status_code in _SCHEMA_REJECTED:
+            _SCHEMA_SUPPORT[key] = False
+            payload.pop("response_format")
+            response = _post()
+        else:
+            _SCHEMA_SUPPORT[key] = True
+
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"] or ""
 
@@ -327,25 +404,42 @@ def _chat_cli(prompt: str, settings: LlmSettings) -> str:
     return (result.stdout or "").strip()
 
 
-def _extract_json_array(raw: str) -> list:
-    """응답에서 JSON 배열을 꺼낸다. 못 꺼내면 빈 목록 — 여기서 터뜨리지 않는다.
+def _parse_proposals(raw: str) -> tuple[list, str | None]:
+    """응답에서 제안 목록을 꺼낸다. 반환값은 (목록, **못 꺼낸 이유** 또는 None).
 
-    지시에 코드펜스를 붙이지 말라고 적어도 모델은 종종 붙인다. 설명 문장을 앞에
-    다는 경우도 있다. 그런 응답 하나 때문에 교정 전체가 실패하면 안 되므로,
-    가장 바깥 대괄호 쌍만 잘라서 읽어 본다.
+    스키마를 강제하지 못한 서버에서는 모델이 여전히 코드펜스를 붙이고 설명 문장을
+    앞에 단다. 그런 응답 하나 때문에 교정 전체가 실패하면 안 되므로, 가장 바깥 괄호
+    쌍만 잘라서 읽어 보는 방어는 남겨 둔다. 형식은 두 가지를 다 받는다 — 스키마가
+    요구하는 `{"proposals": [...]}`와, 맨 배열 `[...]`(스키마 없이 부른 경로).
+
+    **못 꺼낸 것과 고칠 게 없는 것은 다르다.** 앞은 그 구간이 검토되지 않은 것이고
+    뒤는 검토된 것이다. 둘을 같은 빈 목록으로 뭉개면 사용자는 "모델이 괜찮다고 했다"로
+    읽는다 — `search_dialect()`가 장애와 매칭 없음을 구분하지 못해 겪은 일, 그리고
+    우리말샘 조회 실패가 '사전 불통'으로 과장돼 보이던 일과 같은 자리다(`AGENTS.md`).
+    그래서 이유를 돌려주고, 호출부가 로그로 남긴다.
 
     커서 제어 코드부터 실행한다(`_render_terminal`). 어느 경로로 받은 응답이든
     같은 방어가 걸려야 해서 백엔드가 아니라 여기에 둔다.
     """
     raw = _render_terminal(raw)
-    start, end = raw.find("["), raw.rfind("]")
-    if start < 0 or end <= start:
-        return []
-    try:
-        parsed = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return []
-    return parsed if isinstance(parsed, list) else []
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start, end = raw.find(opener), raw.rfind(closer)
+        if start < 0 or end <= start:
+            continue
+        try:
+            parsed = json.loads(raw[start : end + 1])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            items = parsed.get("proposals")
+            if isinstance(items, list):
+                return items, None
+            continue
+        if isinstance(parsed, list):
+            return parsed, None
+    # 사용자가 무엇을 받았는지 알아야 원인(모델 선택·주소·거절)을 짚을 수 있다.
+    excerpt = " ".join(raw.split())[:120]
+    return [], excerpt or "(빈 응답)"
 
 
 def _restore_padding(original: str, stripped_after: str) -> str:
@@ -523,7 +617,26 @@ def propose_corrections(
             )
             continue
 
-        for proposal in _extract_json_array(raw):
+        proposals, parse_failure = _parse_proposals(raw)
+        if parse_failure is not None:
+            # 응답은 왔지만 제안 목록이 없다. 이 구간은 검토되지 않은 것이므로
+            # 호출 실패와 같은 무게로 알린다 — 조용히 넘기면 "모델이 괜찮다고 했다"가 된다.
+            failed_batches += 1
+            hint = ""
+            if _SCHEMA_SUPPORT.get((settings.base_url, settings.model)) is False:
+                hint = " (이 서버는 출력 스키마 강제를 지원하지 않아 형식을 지시문에만 의존했습니다)"
+            notes.append(
+                AppliedNote(
+                    message=(
+                        f"[모델 응답 형식 오류] {batch[0][0]}~{batch[-1][0]}번 줄 구간의 응답에서 "
+                        f"제안 목록을 읽지 못했습니다{hint}. 이 구간은 검토되지 않은 것으로 "
+                        f"보셔야 합니다 — 받은 응답: {parse_failure}"
+                    )
+                )
+            )
+            continue
+
+        for proposal in proposals:
             flag, refusal = _accept(proposal, text_by_index)
             if flag:
                 flags.append(flag)

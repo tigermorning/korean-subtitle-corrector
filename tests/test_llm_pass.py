@@ -9,7 +9,10 @@
 
 import json
 
+import requests
+
 from subtitle_corrector.engine import LlmSettings, normalize_llm_settings, propose_corrections
+from subtitle_corrector.engine import llm_pass
 from subtitle_corrector.engine.options import normalize_subtitle_markers
 from subtitle_corrector.parsers import SubtitleEntry
 
@@ -34,6 +37,34 @@ def _raw_responder(raw):
     def _call(prompt, settings):
         return raw
     return _call
+
+
+class _FakeResponse:
+    """`requests.post`가 돌려주는 것 중 `_chat`이 만지는 부분만 흉내 낸다."""
+
+    def __init__(self, status_code=200, content='{"proposals": []}'):
+        self.status_code = status_code
+        self._content = content
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+    def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
+
+
+def _record_posts(monkeypatch, responder):
+    """`_chat`이 보낸 payload를 순서대로 모은다. 반환값이 그 목록이다."""
+    sent = []
+
+    def _post(url, headers=None, json=None, timeout=None):
+        sent.append(dict(json))
+        return responder(json)
+
+    monkeypatch.setattr(llm_pass.requests, "post", _post)
+    llm_pass._SCHEMA_SUPPORT.clear()
+    return sent
 
 
 class TestSettings:
@@ -267,11 +298,27 @@ class TestResilience:
         flags, _ = propose_corrections([_entry(1, "그렇게 됬다")], ON, complete=_raw_responder(raw))
         assert len(flags) == 1
 
-    def test_깨진_응답은_조용히_무시한다(self):
+    def test_형식이_깨진_응답은_검토되지_않았다고_알린다(self):
+        """조용히 넘기면 "모델이 괜찮다고 했다"로 읽힌다(2026-09-01 변경).
+
+        검토된 구간과 검토되지 않은 구간이 같은 빈 결과로 보이면 안 된다 —
+        `search_dialect()`가 장애와 매칭 없음을 구분 못 해 겪은 일과 같은 자리다.
+        교정 자체는 그대로 계속된다.
+        """
         flags, notes = propose_corrections(
             [_entry(1, "그렇게 됬다")], ON, complete=_raw_responder("죄송합니다, 못 하겠습니다"),
         )
-        assert flags == [] and notes == []
+        assert flags == []
+        assert any("모델 응답 형식 오류" in n.message for n in notes)
+        assert any("검토되지 않은 것으로" in n.message for n in notes)
+
+    def test_고칠_것이_없다는_응답은_알리지_않는다(self):
+        """빈 목록은 정상이다. 형식 오류와 뭉개지 않는지 확인한다."""
+        flags, notes = propose_corrections(
+            [_entry(1, "정상 문장입니다")], ON, complete=_raw_responder('{"proposals": []}'),
+        )
+        assert flags == []
+        assert not any("형식 오류" in n.message for n in notes)
 
     def test_호출이_실패해도_교정은_계속된다(self):
         def _fail(prompt, settings):
@@ -281,3 +328,75 @@ class TestResilience:
         assert flags == []
         assert any("모델 호출 실패" in n.message for n in notes)
         assert any("모델 제안이 하나도 반영되지 않았습니다" in n.message for n in notes)
+
+
+class TestOutputSchema:
+    """출력 형식을 지시문(부탁)이 아니라 서버(강제)에 맡기는지 고정한다.
+
+    지시문은 확률적으로만 지켜진다 — 모델은 코드펜스를 붙이고 설명을 앞에 단다.
+    `response_format`을 거는 서버에서는 그 응답 자체가 나올 수 없다.
+    """
+
+    def test_객체_형식_응답을_읽는다(self):
+        payload = {
+            "proposals": [{
+                "id": 1, "before": "그렇게 됬다", "after": "그렇게 됐다",
+                "rule": "되/돼", "declared": ["됬다 -> 됐다"],
+            }]
+        }
+        flags, _ = propose_corrections(
+            [_entry(1, "그렇게 됬다")], ON,
+            complete=_raw_responder(json.dumps(payload, ensure_ascii=False)),
+        )
+        assert len(flags) == 1
+
+    def test_맨_배열_응답도_계속_읽는다(self):
+        """스키마를 못 거는 서버는 예전 형식으로 답한다. 그 경로가 살아 있어야 한다."""
+        payload = [{
+            "id": 1, "before": "그렇게 됬다", "after": "그렇게 됐다",
+            "rule": "되/돼", "declared": ["됬다 -> 됐다"],
+        }]
+        flags, _ = propose_corrections(
+            [_entry(1, "그렇게 됬다")], ON,
+            complete=_raw_responder(json.dumps(payload, ensure_ascii=False)),
+        )
+        assert len(flags) == 1
+
+    def test_요청에_스키마를_실어_보낸다(self, monkeypatch):
+        sent = _record_posts(monkeypatch, lambda body: _FakeResponse())
+        llm_pass._chat("프롬프트", ON)
+        assert sent[0]["response_format"]["type"] == "json_schema"
+        assert sent[0]["response_format"]["json_schema"]["strict"] is True
+
+    def test_서버가_거절하면_스키마를_빼고_한_번만_다시_부른다(self, monkeypatch):
+        def _responder(body):
+            return _FakeResponse(status_code=400) if "response_format" in body else _FakeResponse()
+
+        sent = _record_posts(monkeypatch, _responder)
+        llm_pass._chat("프롬프트", ON)
+
+        assert len(sent) == 2
+        assert "response_format" in sent[0]
+        assert "response_format" not in sent[1]
+        assert llm_pass._SCHEMA_SUPPORT[(ON.base_url, ON.model)] is False
+
+    def test_거절당한_조합에는_두_번_다시_시도하지_않는다(self, monkeypatch):
+        """구간마다 두 번씩 부르면 호출 수가 그대로 두 배가 된다."""
+        sent = _record_posts(monkeypatch, lambda body: _FakeResponse())
+        llm_pass._SCHEMA_SUPPORT[(ON.base_url, ON.model)] = False
+
+        llm_pass._chat("프롬프트", ON)
+
+        assert len(sent) == 1
+        assert "response_format" not in sent[0]
+
+    def test_서버_장애는_기능을_끄지_않는다(self, monkeypatch):
+        """500은 서버가 잠깐 아픈 것이지 스키마 자리를 모르는 것이 아니다."""
+        sent = _record_posts(monkeypatch, lambda body: _FakeResponse(status_code=500))
+        try:
+            llm_pass._chat("프롬프트", ON)
+        except requests.HTTPError:
+            pass
+
+        assert len(sent) == 1
+        assert llm_pass._SCHEMA_SUPPORT[(ON.base_url, ON.model)] is True
