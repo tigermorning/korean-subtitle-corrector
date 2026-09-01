@@ -39,6 +39,22 @@ KRDICT_KEY = os.getenv("KRDICT_KEY")
 DIALECT_API_KEY = os.getenv("DIALECT_API_KEY")
 
 
+# 요청에 **이 프로그램이 무엇인지** 밝힌다(2026-09-01 추가, §79).
+#
+# 국립국어원 어문 규범 서버(`korean.go.kr/kornorms`)가 도구 기본 User-Agent를 막기
+# 시작했다. 실측: `python-requests/…` 403, `curl/…` 403, 이름을 밝힌 UA 200. 키를 빼고
+# 보내도 403이라 인증 문제가 아니라 요청 본문을 보기 전에 걸러 내는 차단이다.
+#
+# **브라우저를 흉내 내지 않는다.** `Mozilla/5.0`으로도 통과하지만 그건 우리가 사람인
+# 척하는 것이고, 공공 오픈 API를 정식 키로 부르는 클라이언트가 할 일이 아니다. 프로그램
+# 이름과 연락처를 밝히는 쪽이 맞고 그것으로 통과한다 — 서버 관리자가 트래픽을 보고
+# 누구인지 알 수 있어야 한다.
+#
+# 다른 사전 API(표준국어대사전·우리말샘·지역어)는 지금 이 차단이 없지만 같은 기관이
+# 운영하므로 한곳에 두고 전부 붙인다. 다음에 같은 일이 생겨도 여기만 고치면 된다.
+_HEADERS = {"User-Agent": "korean-subtitle-corrector/1.0 (+https://github.com/tigermorning)"}
+
+
 STDICT_URL = "https://stdict.korean.go.kr/api/search.do"
 
 
@@ -165,7 +181,7 @@ def _get_json(url: str, params: dict, api: str, timeout: int = 10) -> dict:
         waits = _RETRY_WAITS
     for attempt in range(len(waits) + 1):
         try:
-            response = requests.get(url, params=params, timeout=timeout)
+            response = requests.get(url, params=params, headers=_HEADERS, timeout=timeout)
             response.raise_for_status()
             body = response.text.strip()
             # 응답이 왔으면 차단기를 푼다(API가 복구된 것이다).
@@ -243,7 +259,7 @@ def _opendict_examples_for_target(target_code) -> list[str]:
     if not OPENDICT_API_KEY:
         raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
     params = {"key": OPENDICT_API_KEY, "method": "target_code", "q": target_code, "req_type": "json"}
-    response = requests.get(OPENDICT_VIEW_URL, params=params, timeout=10)
+    response = requests.get(OPENDICT_VIEW_URL, params=params, headers=_HEADERS, timeout=10)
     response.raise_for_status()
     if not response.text.strip():
         return []
@@ -266,7 +282,7 @@ def _fetch_stdict_view(target_code: str) -> str:
     note_lookup_attempt(api)
     for attempt in range(3):
         try:
-            response = requests.get(STDICT_VIEW_URL, params=params, timeout=10)
+            response = requests.get(STDICT_VIEW_URL, params=params, headers=_HEADERS, timeout=10)
             response.raise_for_status()
             return response.text
         except requests.RequestException:
@@ -380,7 +396,7 @@ def search_onyongeo(query: str, glossary_type: str = "다듬은 말") -> list[di
         "sort": "wt",
     }
     try:
-        response = requests.get(ONYONGEO_URL, params=params, timeout=10)
+        response = requests.get(ONYONGEO_URL, params=params, headers=_HEADERS, timeout=10)
         response.raise_for_status()
         data = response.json()
     except requests.RequestException:
@@ -424,7 +440,7 @@ def search_krdict(query: str) -> dict:
         "part": "word",
     }
     try:
-        response = requests.get(KRDICT_URL, params=params, timeout=10)
+        response = requests.get(KRDICT_URL, params=params, headers=_HEADERS, timeout=10)
         response.raise_for_status()
     except requests.RequestException:
         note_lookup_failure("한국어기초사전")
@@ -476,7 +492,7 @@ def search_dialect(query: str) -> list[dict]:
         "searchWord": query,
     }
     try:
-        response = requests.get(DIALECT_URL, params=params, timeout=10)
+        response = requests.get(DIALECT_URL, params=params, headers=_HEADERS, timeout=10)
         response.raise_for_status()
         data = response.json()
     except requests.RequestException:

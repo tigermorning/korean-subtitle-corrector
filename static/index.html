@@ -620,6 +620,13 @@ function flagRowHtml(f, i) {
 // 등급을 문구로 구분하고 반영 버튼도 정답 근거에만 준다 — 이 도구는 추측으로
 // 표기를 정하지 않는다.
 function renderSourceCandidates(box, data, flag) {
+  // 조회가 실패했으면 '없다'고 쓰지 않는다. 서버가 죽은 날 '등재된 용례가 없습니다'는
+  // 사실이 아닌 단정이고, 번역가는 그걸 근거로 판단하게 된다(2026-09-01, §79).
+  if (data.lookup_failed) {
+    box.innerHTML = '<span style="color:#b00">국립국어원 어문 규범 서버 조회에 실패했습니다.</span>' +
+      ' 등재 여부를 확인하지 못한 것이지 <b>용례가 없다는 뜻이 아닙니다</b> — 잠시 후 다시 시도해 주세요.';
+    return;
+  }
   if (!data.candidates.length) {
     box.innerHTML = `<span style="color:#b00">'${escapeHtml(data.source)}'로 등재된 외래어 용례가 없습니다.</span>` +
       ' 원어 철자를 확인하거나(성·이름 중 하나만 넣어 보세요), 실제 발음으로 판단해야 합니다.';

@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from . import feedback, store
 from .decoding import decode_bytes, verify_ingest_fidelity
 from .file_io import SUPPORTED_EXTENSIONS, output_suffix, parse_file, write_file
-from .dictionary import DIALECT_MARKERS, lookup_by_source
+from .dictionary import DIALECT_MARKERS, lookup_by_source, lookup_stats
 from .engine import (
     SubtitleEntry,
     correct_entries,
@@ -398,6 +398,15 @@ def get_dialect_regions():
     return {"regions": list(DIALECT_MARKERS.keys())}
 
 
+# `_get_json()`이 실패를 기록할 때 쓰는 이름. 이 문자열이 바뀌면 아래 판정이 조용히
+# 죽으므로 한곳에 모아 둔다.
+_KORNORMS_API = "어문 규범 용례(kornorms)"
+
+
+def _kornorms_failures() -> int:
+    return lookup_stats().get(_KORNORMS_API, {}).get("failures", 0)
+
+
 @app.get("/api/loanword-source")
 def get_loanword_by_source(source: str, token: str = ""):
     """원어(로마자) 표기로 국립국어원 확정 한글 표기를 찾는다.
@@ -411,21 +420,32 @@ def get_loanword_by_source(source: str, token: str = ""):
     `segment`로 돌려준다 — 인명 용례의 한글 표기는 `러더퍼드, 어니스트`처럼 전체
     이름이라, 그대로 넣으면 문장에 엉뚱한 이름이 삽입된다.
 
-    응답: `{source, token, candidates: [...], confirmed: bool}`.
-    `confirmed`가 거짓이면 등재된 용례가 없다는 뜻이고, `candidates`는 비슷한 원어를
-    참고로 보여 주는 목록일 뿐 정답 근거가 아니다.
+    응답: `{source, token, candidates: [...], confirmed: bool, lookup_failed: bool}`.
+    `candidates`는 비슷한 원어를 참고로 보여 주는 목록일 뿐 정답 근거가 아니다.
+
+    **`lookup_failed`를 먼저 봐야 한다**(2026-09-01 추가, §79). `lookup_by_source()`는
+    서버 장애와 미등재를 똑같이 빈 목록으로 돌려준다. 그 값만 보고 "등재된 용례가
+    없습니다"라고 화면에 쓰면, 서버가 죽은 날 번역가는 사실이 아닌 단정을 근거로
+    판단하게 된다 — 이 도구에서 가장 나쁜 종류의 오류다. 조회가 실패했으면
+    `confirmed`·`candidates`는 **아무 뜻도 없는 값**으로 봐야 한다.
     """
     query = (source or "").strip()
     if not query:
         raise HTTPException(400, "원어(로마자) 표기를 입력해 주세요.")
     if len(query) > 100:
         raise HTTPException(400, "원어 표기가 너무 깁니다(100자 이내).")
+    # 조회 전후의 실패 건수를 비교해서 이번 조회가 실패했는지 가린다. 전역 통계라
+    # 동시에 도는 교정 작업의 실패가 섞일 수 있는데, 그 경우 "실패했다"고 과하게
+    # 말하는 쪽으로 틀린다 — 반대(장애를 미등재로 단정)보다 훨씬 안전하다.
+    failures_before = _kornorms_failures()
     candidates = lookup_by_source(query, token.strip())
+    lookup_failed = _kornorms_failures() > failures_before
     return {
         "source": query,
         "token": token.strip(),
         "candidates": candidates,
         "confirmed": any(c["match"] in ("확정", "일치") for c in candidates),
+        "lookup_failed": lookup_failed,
     }
 
 

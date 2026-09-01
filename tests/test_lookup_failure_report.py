@@ -172,3 +172,83 @@ def test_breaker_reopens_when_the_api_recovers(monkeypatch):
         result = clients.search_opendict(f"복구{i}")
     assert result == _OK
     assert clients.lookup_stats()["우리말샘"]["streak"] == 0
+
+
+class TestUserAgent:
+    """요청에 프로그램 이름을 밝히는지 고정한다(2026-09-01, §79).
+
+    국립국어원 어문 규범 서버가 도구 기본 User-Agent(`python-requests/…`)를 403으로
+    막기 시작했다. 헤더가 빠지면 외래어 교정이 통째로 죽는데 겉으로는 "등재된 표기
+    없음"으로 보여서, 테스트가 없으면 다음에 또 조용히 지나간다.
+    """
+
+    def test_모든_조회에_프로그램_이름을_밝힌다(self, monkeypatch):
+        seen = []
+
+        def fake_get(_url, **kw):
+            seen.append((kw.get("headers") or {}).get("User-Agent"))
+            return _Response("", payload=_OK)
+
+        monkeypatch.setattr(clients.requests, "get", fake_get)
+        clients.search_stdict("사랑")
+
+        assert seen, "조회가 일어나지 않았다"
+        for ua in seen:
+            assert ua, "User-Agent 헤더가 빠졌다"
+            assert "korean-subtitle-corrector" in ua
+
+    def test_브라우저를_흉내_내지_않는다(self):
+        """사람인 척하는 대신 프로그램임을 밝힌다 — 공공 API를 정식 키로 부르는
+        클라이언트가 지킬 선이다."""
+        ua = clients._HEADERS["User-Agent"]
+        assert "Mozilla" not in ua and "Chrome" not in ua and "Safari" not in ua
+
+
+class TestLookupFailureIsNotAbsence:
+    """조회 실패를 '용례 없음'으로 단정하지 않는지 고정한다(2026-09-01, §79).
+
+    `lookup_by_source()`는 서버 장애와 미등재를 똑같이 빈 목록으로 돌려준다. 화면이
+    그 값만 보고 "등재된 외래어 용례가 없습니다"라고 빨간 글씨로 쓰면, 서버가 죽은 날
+    번역가는 **사실이 아닌 단정**을 근거로 판단하게 된다.
+    """
+
+    def test_조회가_실패하면_lookup_failed가_참이다(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from subtitle_corrector.api import app
+
+        def always_403(_url, **_kw):
+            return _Response("<html>403</html>", status=403)
+
+        monkeypatch.setattr(clients.requests, "get", always_403)
+        clients._fetch_kornorms.cache_clear()
+        clients._fetch_kornorms_partial.cache_clear()
+
+        body = TestClient(app).get(
+            "/api/loanword-source", params={"source": "Snow", "token": "스노우"}
+        ).json()
+
+        assert body["lookup_failed"] is True
+        assert body["candidates"] == []
+        assert body["confirmed"] is False  # 이 값은 아무 뜻도 없다 — lookup_failed를 먼저 본다
+
+    def test_정상_조회에서_미등재는_실패가_아니다(self, monkeypatch):
+        """서버가 잘 답했는데 등재된 표기가 없는 것은 실패가 아니다. 둘을 뭉개면
+        이 구분 자체가 사라진다."""
+        from fastapi.testclient import TestClient
+
+        from subtitle_corrector.api import app
+
+        def empty_ok(_url, **_kw):
+            return _Response("", payload={"response": {"resultList": []}})
+
+        monkeypatch.setattr(clients.requests, "get", empty_ok)
+        clients._fetch_kornorms.cache_clear()
+        clients._fetch_kornorms_partial.cache_clear()
+
+        body = TestClient(app).get(
+            "/api/loanword-source", params={"source": "Zzzzqx"}
+        ).json()
+
+        assert body["lookup_failed"] is False
+        assert body["candidates"] == []
