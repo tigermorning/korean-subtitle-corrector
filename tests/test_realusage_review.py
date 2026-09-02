@@ -400,13 +400,13 @@ def test_field_limited_former_term_not_flagged():
     # 사전이 근거를 주는 문맥에서는 그대로 묻는다.
     _out3, flags3 = _run("간질 발작을 일으켰다")
     assert any("전 용어" in f.reason for f in flags3)
-    # '원통'은 수학 분야 낱말과 함께 쓰여도 여전히 묻지 않는다 — 분야가 달린
-    # 옛 용어는 의도적으로 보수적으로 억제한다(2026-09-02, §90·BACKLOG 34번).
-    # `sense_fields()`가 표제어의 모든 뜻을 OR로 합쳐서, 문맥 낱말('감독'·'허가'
-    # 같은 흔한 말의 무관한 다른 뜻) 쪽에서도 같은 오염이 재발했기 때문이다 —
-    # 자세한 경위는 `correct_former_terms()`의 해당 분기 주석 참고.
+    # '원통'도 수학 분야 낱말과 함께 쓰이면 실제로 묻는다(2026-09-02,
+    # §92·BACKLOG 34번). '반지름'은 우리말샘 뜻이 수학 하나뿐이라
+    # `specialist_only_fields()`가 신호로 인정한다 — 흔한 다의어('감독' 등)의
+    # 무관한 뜻은 인정하지 않도록 문맥 쪽 분야 신호를 좁힌 뒤에는, 분야가 달린
+    # 옛 용어를 무조건 억제하던 이전의 보수적 처리가 필요 없어졌다.
     _out4, flags4 = _run("원통의 반지름을 구해 보자")
-    assert not any("전 용어" in f.reason for f in flags4)
+    assert any("전 용어" in f.reason for f in flags4)
 
 
 def test_determiner_not_treated_as_interjection():

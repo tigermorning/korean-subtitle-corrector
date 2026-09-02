@@ -5,7 +5,7 @@ import re
 from ..common_errors import ALWAYS_WRONG, DISCRIMINATORY_TERMS
 from ..dictionary import (
     headword_definitions,
-    sense_fields,
+    specialist_only_fields,
     former_term_field,
     former_term_lookup,
     standard_term_replacement,
@@ -260,7 +260,7 @@ _CONTEXT_STOP_LEMMAS = frozenset({
     "만들다", "넣다", "이르다", "나타내다", "위하다", "대하다", "따르다",
     "많다", "적다", "크다", "작다", "높다", "낮다", "좋다", "길다",
     "사람", "모양", "상태", "경우", "정도", "방법", "부분", "따위", "이것", "그것",
-    "들다", "올리다", "건강",
+    "들다", "올리다", "건강", "시작",
 })
 
 
@@ -284,8 +284,9 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
     판정에 쓰는 신호는 둘이고, 둘 다 사전이 준 것이다.
 
     ① **분야 계열**: `surface`(예: '건초')의 "전 용어" 뜻 그 자체에 분야가 달려
-       있으면(`former_term_field`), 문서의 다른 낱말이 같은 분야 계열로 표시돼
-       있는가(`힘줄집`=의학, `근육`=생명 -> 같은 계열).
+       있으면(`former_term_field`), 문서의 다른 낱말이 **오직 그 분야로만** 쓰이는
+       낱말인지(`specialist_only_fields`) 본다(`힘줄집`=의학, `반지름`=수학처럼
+       일반 뜻이 아예 없는 낱말만 근거로 인정).
     ② **뜻풀이 낱말 겹침**: 문서의 낱말이 그 표준 용어의 뜻풀이에 나오는가
        (`뇌전증`의 뜻풀이에 '발작'이 있고, '환자가 간질 발작을 일으켰다'에도 있다).
 
@@ -293,15 +294,15 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
     빠진다 — `환자`는 경제·역사, `치료`·`곤충`은 아예 표시가 없다(실측). ①만 쓰면
     정작 병명 문맥을 놓친다.
 
-    **①은 `target`(교체 목표어) 전체가 아니라 `surface`의 "전 용어" 뜻 하나만
-    본다**(2026-09-02 수정, §90·BACKLOG 34번). 전에는 `sense_fields(target)`으로
-    목표어의 모든 뜻을 다 봤는데, 목표어가 여러 뜻을 가진 동형이의어면 "전 용어"
-    관계와 무관한 뜻의 분야까지 섞여 들어온다 — '정수'(精髓, 흔한 뜻)가
-    '양수'의 옛 용어로 오탐지된 사고의 원인이 이것이었다: '양수'는 뜻이
-    12개이고 그중 '양수(讓受, 권리를 넘겨받음)'가 법률 분야라, 구청장·예산
-    같은 낱말이 흔한 행정 문서 태반이 "법률 계열"로 걸렸다. `former_term_field`
-    (§원통 예시 — '원통'의 "전 용어" 뜻만 수학 분야)는 이미 그 특정 뜻 하나의
-    분야만 보므로, 여기서도 같은 함수를 재사용해 근본적으로 막는다.
+    **①은 양쪽 다 "그 뜻 하나만" 보도록 좁혔다**(2026-09-02 수정, §90·§92·
+    BACKLOG 34번). 처음엔 `target`(교체 목표어) 쪽만 `sense_fields(target)`
+    (모든 뜻)에서 `former_term_field(surface)`(그 "전 용어" 뜻 하나)로 좁혀
+    '정수'→'양수' 오탐지(§90)를 고쳤는데, 검증하다 **문맥 낱말 쪽도 같은
+    문제**를 새로 발견했다 — '감독'·'허가'처럼 일반 뜻과 무관한 전문 뜻(가톨릭
+    성직 등)이 같이 있는 낱말이 그 무관한 뜻의 분야로 문맥 신호를 오염시켜
+    '방안'→'모눈'·'소재'→'금육재'가 오탐지됐다(§92). `sense_fields(lemma)`
+    (그 낱말의 모든 뜻)를 `specialist_only_fields(lemma)`(일반 뜻이 하나도
+    없는 낱말만 인정)로 바꿔 양쪽 다 정밀하게 막는다.
 
     **이 판정은 플래그를 줄이는 방향으로만 쓴다.** 근거가 없으면 조용히 넘어갈 뿐
     텍스트를 바꾸지 않으므로, 판정이 틀려도 잃는 것은 제안 하나다(자동 교정에는
@@ -314,7 +315,7 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
     if source_field:
         allowed = _field_group(source_field)
         for lemma in context_lemmas:
-            if sense_fields(lemma) & allowed:
+            if specialist_only_fields(lemma) & allowed:
                 return True
     definition_lemmas: set[str] = set()
     for definition in headword_definitions(target):
@@ -402,23 +403,13 @@ def correct_former_terms(
                     auto_replacements[surface] = target
                 elif not _specialist_reading_supported(target, context or text, surface):
                     # 문서 어디에도 그 전문 분야 뜻으로 읽을 근거가 없다 — 묻지 않는다
-                    # (`건초는 베어서 말린 풀이다`, 2026-08-05 사용자 보고).
-                    pass
-                elif former_term_field(surface):
-                    # 옛 용어 뜻에 분야가 달려 있으면(예: '원통'→cat='수학') 여기서는
-                    # 항상 묻지 않는다 — **의도적으로 보수적인 자리다.** 2026-09-02에
-                    # `_specialist_reading_supported`의 분야 신호①을 `sense_fields
-                    # (target)`(교체어의 모든 뜻)에서 `former_term_field(surface)`
-                    # (원본어의 그 뜻 하나)로 좁혀 '정수'→'양수' 오탐지(§90)를 고치려다,
-                    # **문맥 쪽(`sense_fields(lemma)`)의 다의어 오염**을 새로 발견했다 —
-                    # '방안'(→모눈, cat=수학)·'소재'(→금육재, cat=가톨릭)가 '감독'·
-                    # '허가' 같은 흔한 낱말의 무관한 다른 뜻(가톨릭 직함 등) 때문에
-                    # 오탐지됐다. `sense_fields()`가 표제어의 모든 뜻의 분야를 OR로
-                    # 합치는 한 구조적으로 재발한다(BACKLOG 34번 — 문맥 쪽까지 고치는
-                    # 더 큰 작업으로 남겨 둠). 그래서 분야가 달린 경우는 이 자리에서
-                    # 통째로 억제한다 — ②(뜻풀이 낱말 겹침)만으로 잡히는 경우는
-                    # 여전히 아래에서 플래그된다('정수'가 그 예: `former_term_field
-                    # ('정수')`가 None이라 이 분기 자체를 안 타고 ②로 정상 처리된다).
+                    # (`건초는 베어서 말린 풀이다`, 2026-08-05 사용자 보고). 신호①이
+                    # 이제 소스·문맥 양쪽 다 "일반 뜻이 없는 낱말"만 근거로 인정하므로
+                    # (`specialist_only_fields`, 2026-09-02, §92·BACKLOG 34번), 그
+                    # 결과를 여기서 다시 뒤집지 않는다 — 예전엔 여기 `elif
+                    # former_term_field(surface): pass`가 있어서 분야가 달린 옛
+                    # 용어는 문맥이 맞아도 항상 억제됐다(잠복 버그, '원통의 반지름을
+                    # 구해 보자'로도 한 번도 안 물었었다).
                     pass
                 elif surface not in flagged:
                     flagged.add(surface)

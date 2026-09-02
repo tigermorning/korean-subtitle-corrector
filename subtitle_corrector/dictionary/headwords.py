@@ -521,8 +521,35 @@ def sense_fields(word: str) -> frozenset:
     **비어 있다고 해서 전문어가 아니라는 뜻은 아니다** — `환자`·`치료`처럼 흔한
     의학 관련 낱말도 표시가 없거나 엉뚱한 분야만 달려 있다(`환자` -> 경제·역사).
     그래서 이 신호는 "있으면 근거", "없으면 모름"으로만 쓴다.
+
+    **다의어의 무관한 뜻까지 다 모은다 — "이 문서의 이 낱말이 실제로 그
+    분야로 쓰였다"는 신호로 그대로 쓰면 안 된다.** 문맥 판정에는 아래
+    `specialist_only_fields()`를 쓸 것(2026-09-02, BACKLOG 34번).
     """
     return frozenset(f for s in _exact_senses(word) if (f := (s.get("cat") or "").strip()))
+
+
+@lru_cache(maxsize=2048)
+def specialist_only_fields(word: str) -> frozenset:
+    """word의 뜻이 **전부** 전문 분야에만 있을 때만 그 분야 집합을 돌려준다.
+
+    `sense_fields()`는 낱말의 모든 뜻의 분야를 그냥 다 모은다 — `감독`처럼
+    일반 뜻(cat 없음, "지휘함"·"책임 맡은 사람")과 전문 뜻(가톨릭 "주교"·
+    법률 "감시함" 등)이 같이 있는 낱말은, 실제로는 일반 뜻으로 쓰였어도
+    전문 분야 신호로 오염된다 — 실사용에서 '감독'·'허가' 같은 흔한 행정
+    낱말 때문에 '방안'→'모눈'·'소재'→'금육재' 옛 용어가 오탐지됐다
+    (2026-09-02, `docs/BACKLOG.md` 34번).
+
+    표제어의 뜻은 대체로 흔한 뜻이 앞 sense에 온다(실측: `반지름`은
+    수학 뜻 하나뿐, `감독`은 일반 뜻 둘이 먼저 오고 그 뒤에 가톨릭·기독교·
+    법률·역사 뜻이 온다). **일반 뜻(cat 없음)이 하나라도 있으면 그 낱말은
+    분야 신호로 안 쓰고 빈 집합을 돌려준다** — 뜻이 전부 전문 분야뿐인
+    낱말(`반지름`·`힘줄집`·`원기둥`)만 신호로 인정한다.
+    """
+    senses = _exact_senses(word)
+    if any(not (s.get("cat") or "").strip() for s in senses):
+        return frozenset()
+    return frozenset(f for s in senses if (f := (s.get("cat") or "").strip()))
 
 
 @lru_cache(maxsize=2048)

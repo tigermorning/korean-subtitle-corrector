@@ -147,16 +147,28 @@ class TestFormerTermContextEvidence:
         )
         assert [f for f in flags if f.suggested_fix == "양수"] == []
 
-    def test_field_tagged_source_stays_conservatively_suppressed(self):
+    def test_polysemous_context_word_does_not_support_specialist_reading(self):
         """'정수' 수정을 검증하던 중 새 오탐지 둘을 더 찾았다(2026-09-02,
         같은 실사용 감수) — '방안'(→모눈, 옛 용어 뜻의 분야=수학)과 '소재'
         (→금육재, 분야=가톨릭)가 '감독'·'허가' 같은 흔한 낱말의 무관한 다른
-        뜻(가톨릭 직함 등) 때문에 오탐지됐다. `sense_fields()`가 표제어의
-        모든 뜻의 분야를 OR로 합치는 한 문맥 쪽에서도 같은 오염이 재발한다 —
-        BACKLOG 34번으로 남기고, 분야가 달린 옛 용어는 당분간 이 자리에서
-        보수적으로 계속 억제한다(과거 동작과 동일, 새 회귀 아님)."""
+        뜻(가톨릭 직함 등) 때문에 오탐지됐다. `sense_fields(lemma)`(그
+        낱말의 모든 뜻)를 `specialist_only_fields(lemma)`(일반 뜻이 하나도
+        없는 낱말만 인정)로 바꿔 근본적으로 막았다(§92) — '감독'·'허가'는
+        일반 뜻이 있어 더는 분야 신호로 안 쓰인다."""
         flags = self._former_flags(
             "구청장은 주민 체감형 상생 방안을 마련해 감독 기관의 허가를 받았다",
             "영화 감독은 다음 작품 소재를 찾고 있다고 밝혔다",
         )
         assert [f for f in flags if f.suggested_fix in ("모눈", "금육재")] == []
+
+    def test_generic_noun_overlap_does_not_support_specialist_reading(self):
+        """②(뜻풀이 낱말 겹침)에서도 같은 부류 오탐지가 재발했다 — '금육재'
+        (소재의 옛 용어)의 뜻풀이에 흔한 명사 '시작'이 들어 있어("사순절이
+        시작되는 수요일"), '시작'이 반복 등장하는 뉴스 기사 묶음 문서
+        전체에서 '소재'가 오탐지됐다(2026-09-02 실사용 감수). '있다' 하나
+        때문에 오탐지됐던 §73과 같은 부류라 같은 불용어 목록에 추가해 막았다."""
+        flags = self._former_flags(
+            "감독은 다음 작품 소재를 찾고 있다고 밝혔다",
+            "축제는 다음 달 3일 시작된다",
+        )
+        assert [f for f in flags if f.suggested_fix == "금육재"] == []
