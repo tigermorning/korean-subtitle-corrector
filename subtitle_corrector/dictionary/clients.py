@@ -479,11 +479,13 @@ def search_krdict(query: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=4096)
-def search_dialect(query: str) -> list[dict]:
-    """지역어 종합 정보 API에서 query를 검색한다.
+def _fetch_dialect(query: str) -> list[dict]:
+    """지역어 종합 정보 API에서 query를 검색한다(원시 조회, 실패는 예외로 올린다).
 
-    반환값: [{"word": "지역어", "std_word": "대응 표준어", "region": "시도 코드",
-             "city": "시군구", "source": "출처", "year": "조사 연도"}, ...]
+    `_LookupFailed`를 여기서 잡아 빈 리스트로 바꾸지 않는다 — lru_cache는
+    예외를 캐시하지 않으므로, 여기서 흡수하면 순간적인 장애 하나가 그
+    낱말의 판정을 프로세스가 사는 동안 계속 오염시킨다(§79 사고와 같은
+    자리, `_LookupFailed` 클래스 설명 참고).
     """
     if not DIALECT_API_KEY:
         return []
@@ -491,16 +493,8 @@ def search_dialect(query: str) -> list[dict]:
         "apiKey": DIALECT_API_KEY,
         "searchWord": query,
     }
-    try:
-        response = requests.get(DIALECT_URL, params=params, headers=_HEADERS, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except requests.RequestException:
-        note_lookup_failure("지역어 종합 정보")
-        return []
-    if not data:
-        return []
-    if data.get("returnCode") != 60000:
+    data = _get_json(DIALECT_URL, params, "지역어 종합 정보")
+    if not data or data.get("returnCode") != 60000:
         return []
     results = []
     for item in data.get("resultList", []):
@@ -513,3 +507,27 @@ def search_dialect(query: str) -> list[dict]:
             "year": item.get("basisYear", ""),
         })
     return results
+
+
+def search_dialect(query: str) -> list[dict]:
+    """지역어 종합 정보 API에서 query를 검색한다.
+
+    실패 처리 원칙은 `search_stdict()`/`search_opendict()`와 같다 — 조회
+    실패(5xx 등)는 "매칭 없음"과 똑같이 빈 리스트로 흡수한다. 이전에는 이
+    함수가 직접 `requests.get()`을 불러 재시도·차단기 없이 실패를 삼켰는데
+    (AGENTS.md가 지적한 사고 지점), 그 경로는 `note_lookup_attempt()`도
+    부르지 않아 리포트의 시도/실패 집계에서도 빠졌다. `_get_json()`을
+    쓰도록 고쳐 다른 사전 조회와 같은 재시도·차단기·집계 경로를 타게
+    했다. 실패 사실 자체는 `note_lookup_failure()`를 거쳐
+    `failed_lookups()`/`lookup_stats()`로 리포트에 실린다 — 반환값만
+    보고는 "장애"와 "매칭 없음"을 구분할 수 없다는 한계는 여전하지만
+    (이 프로젝트 전역의 의도된 흡수 설계, AGENTS.md 참고), 그 사실이
+    조용히 사라지지는 않는다.
+
+    반환값: [{"word": "지역어", "std_word": "대응 표준어", "region": "시도 코드",
+             "city": "시군구", "source": "출처", "year": "조사 연도"}, ...]
+    """
+    try:
+        return _fetch_dialect(query)
+    except _LookupFailed:
+        return []

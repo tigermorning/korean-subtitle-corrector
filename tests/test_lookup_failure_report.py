@@ -45,11 +45,13 @@ def _clean(monkeypatch):
     """조회 캐시와 집계를 비우고, 재시도 대기를 없애 테스트를 빠르게 한다."""
     clients._fetch_opendict.cache_clear()
     clients._fetch_stdict.cache_clear()
+    clients._fetch_dialect.cache_clear()
     clients.reset_failed_lookups()
     monkeypatch.setattr(clients.time, "sleep", lambda _s: None)
     yield
     clients._fetch_opendict.cache_clear()
     clients._fetch_stdict.cache_clear()
+    clients._fetch_dialect.cache_clear()
     clients.reset_failed_lookups()
 
 
@@ -217,6 +219,41 @@ class TestHeadwordAbsorptionStillCounts:
         _responses(monkeypatch, [requests.ConnectionError("boom")])
         assert headwords.standard_headword_example("실험흡수6") == ("", "")
         assert clients.failed_lookups() == ["우리말샘"]
+
+
+_DIALECT_OK = {"returnCode": 60000, "resultList": [
+    {"dltTp": "정구지", "stdTp": "부추", "sidoCd": "경북", "sigunguNm": "", "source": "", "basisYear": ""}
+]}
+_DIALECT_NO_MATCH = {"returnCode": 60000, "resultList": []}
+
+
+class TestDialectFailureNotConflatedWithNoMatch:
+    """`search_dialect()`가 다른 사전 조회와 같은 실패 처리 경로(`_get_json`)를
+    타는지 고정한다 — 예전에는 이 함수만 직접 `requests.get()`을 불러 재시도·
+    차단기·집계(`note_lookup_attempt`) 없이 실패를 삼켰다(AGENTS.md가 지적한
+    사고 지점, `docs/BACKLOG.md` 5번).
+    """
+
+    def test_실패는_재시도_뒤_리포트에_잡힌다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert clients.search_dialect("정구지") == []
+        assert clients.failed_lookups() == ["지역어 종합 정보"]
+        assert clients.lookup_stats()["지역어 종합 정보"]["queries"] == ["정구지"]
+
+    def test_실패는_캐시되지_않는다(self, monkeypatch):
+        """§79와 같은 자리 — 실패를 캐시하면 순간적인 장애 하나가 그 낱말의
+        판정을 프로세스가 사는 동안 계속 오염시킨다."""
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert clients.search_dialect("정구지") == []
+        _responses(monkeypatch, [_Response("{...}", payload=_DIALECT_OK)])
+        assert clients.search_dialect("정구지") == [
+            {"word": "정구지", "std_word": "부추", "region": "경북", "city": "", "source": "", "year": ""}
+        ]
+
+    def test_정상_조회에서_매칭_없음은_실패가_아니다(self, monkeypatch):
+        _responses(monkeypatch, [_Response("{...}", payload=_DIALECT_NO_MATCH)])
+        assert clients.search_dialect("존재안하는말") == []
+        assert clients.failed_lookups() == []
 
 
 class TestUserAgent:
