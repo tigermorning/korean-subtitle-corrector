@@ -685,13 +685,20 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
 
             stem_len = (cur.start + cur.len) - prev.start
             if stem_len >= 3 and compound_status(prev.lemma) == "합성어":
-                # 항상 띄움 예외. 원칙에서는 이미 붙어 있을 수 없어 그냥 넘기고,
-                # 허용에서는 붙이면 안 되는 구간이므로 사유를 남긴다.
-                if joining and gap.strip() == "" and gap != "":
-                    blocked.append(
-                        f"'{span}': 본용언이 3음절 이상 합성어라 제47항 붙임 허용 대상이 "
-                        "아님 -> 허용 기준에서도 띄어 씀"
-                    )
+                # 항상 띄움 예외 — 원칙이든 허용이든 이 구간은 붙일 수 없다.
+                # 허용 기준에서 붙어 있으면 사유를 남기고, 원칙 기준에서 이미
+                # 붙어 있으면(작업자자료 w11, 2026-09-02: '돌보아주다') 강제로
+                # 띄운다 — "원칙에서는 이미 붙어 있을 수 없다"는 예전 가정은
+                # 원문이 항상 올바르게 띄어져 있다고 전제했는데, 실제로는 이
+                # 예외 자체를 몰라 붙여 쓴 입력이 들어올 수 있다.
+                if joining:
+                    if gap.strip() == "" and gap != "":
+                        blocked.append(
+                            f"'{span}': 본용언이 3음절 이상 합성어라 제47항 붙임 허용 대상이 "
+                            "아님 -> 허용 기준에서도 띄어 씀"
+                        )
+                elif gap == "":
+                    edits.add((gap_start, gap_end, " "))
                 continue
             if joining:
                 if gap.strip() == "" and gap != "":

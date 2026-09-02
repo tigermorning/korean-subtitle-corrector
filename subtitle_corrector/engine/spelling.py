@@ -1,5 +1,7 @@
-"""맞춤법·순화어 검사. 자동 교정하지 않고 플래그만 남긴다 —
+"""맞춤법·순화어 검사. 대부분 자동 교정하지 않고 플래그만 남긴다 —
 사전에 없다는 사실만으로는 무엇이 맞는 표기인지 알 수 없기 때문이다.
+예외는 `correct_gumeon_ending()`처럼 사전 존재가 아니라 kiwi 구조
+태그로 문맥과 무관하게 근거가 확정되는 자리뿐이다.
 """
 
 from ..dictionary import (
@@ -11,7 +13,7 @@ from ..dictionary import (
     word_exists,
 )
 from ..report import FlagItem
-from .text_utils import _bracket_spans, _inside_any_span, _josa
+from .text_utils import _bracket_spans, _inside_any_span, _josa, _localized_change
 from .kiwi_adapter import _SPELLING_CHECK_TAGS, _kiwi
 from .lexicon import (
     _covered_by_larger_dictionary_unit,
@@ -86,6 +88,34 @@ def _unknown_content_words(text: str) -> list[str]:
             continue
         unknown.append(lemma)
     return unknown
+
+
+def correct_gumeon_ending(text: str) -> tuple[str, list[str]]:
+    """종결 어미 '-구먼'을 잘못 적은 '-구만'을 고친다('좋구만' -> '좋구먼').
+
+    표준국어대사전: '구먼'은 '-군'의 본말로 등재된 표제어다. '구만'에도
+    표제어가 있지만 뜻이 전혀 다르다(두려워하며 애를 태움의 어근, 지명
+    둘) — 어미 뜻은 없다. 그래서 사전 등재 여부가 아니라 **kiwi가 그
+    자리를 실제로 종결 어미(EF)로 태깅했는가**를 근거로 삼는다: 지명·
+    어근 뜻이면 kiwi가 NNG/NNP로 태깅하지 EF로 태깅하지 않는다(실측
+    확인, 2026-09-02 — '구만리'는 NNG, '구만면'은 NNP, 용언 어간 뒤
+    '좋구만'만 EF). EF로 태깅된 자리는 문맥과 무관하게 항상 오표기다.
+
+    '는구만'·'겠구만'처럼 다른 어미와 결합해 '구만'이 통째로 어미 뒤쪽에
+    붙어 있어도(kiwi가 결합형 전체를 한 토큰으로 묶어 돌려줌) 그 끝
+    두 글자만 '구먼'으로 바꾼다."""
+    tokens = _kiwi.tokenize(text)
+    edits = []  # (구만 시작, 구만 끝)
+    for t in tokens:
+        if t.tag == "EF" and t.form.endswith("구만"):
+            end = t.start + t.len
+            edits.append((end - 2, end))
+    if not edits:
+        return text, []
+    corrected = text
+    for start, end in sorted(edits, reverse=True):
+        corrected = corrected[:start] + "구먼" + corrected[end:]
+    return corrected, [_localized_change(text, corrected)]
 
 
 def check_spelling(index: int, text: str) -> FlagItem | None:

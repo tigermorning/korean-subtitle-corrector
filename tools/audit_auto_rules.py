@@ -38,9 +38,11 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_colon_spacing,
     correct_compound_spacing,
     correct_unit_case,
+    correct_unit_spacing,
     correct_discriminatory_terms,
     correct_former_terms,
     correct_honorific_dependent_noun_spacing,
+    correct_gumeon_ending,
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
     correct_loanwords,
@@ -150,6 +152,12 @@ RULES = [
         "common_errors.ALWAYS_WRONG — 문맥 무관 오용으로 검증된 정적 목록",
     ),
     (
+        "종결어미구먼",
+        _plain(correct_gumeon_ending),
+        "태그",
+        "'구먼'(표준, '-군'의 본말)을 잘못 적은 '구만'을 고친다. kiwi가 그 자리를 종결 어미(EF)로 태깅했는지만 본다 — 지명·어근 뜻이면 NNG/NNP로 갈린다(2026-09-02, 작업자자료3)",
+    ),
+    (
         "쌍점띄어쓰기",
         _plain(correct_colon_spacing),
         "규범",
@@ -160,6 +168,12 @@ RULES = [
         _plain(correct_unit_case),
         "규범",
         "SI 접두어 '킬로'는 소문자 k가 원칙. 숫자 바로 뒤(또는 한 칸 뒤) Km/KM/Kg/KG만 소문자로(2026-09-01, BACKLOG 작업자자료4)",
+    ),
+    (
+        "단위띄어쓰기",
+        _plain(correct_unit_spacing),
+        "규범",
+        "한글 맞춤법 제43항 — 단위 명사는 띄어 씀이 원칙, 아라비아 숫자가 바로 앞일 때만 붙임 허용. 온라인가나다 확인(qna_seq=8756, '100만 km')(2026-09-02, 작업자자료3)",
     ),
     (
         "규범표기재지정",

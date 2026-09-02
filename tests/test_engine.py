@@ -30,11 +30,13 @@ from subtitle_corrector.engine import (
     correct_entries,
     correct_compound_spacing,
     correct_discriminatory_terms,
+    correct_gumeon_ending,
     correct_loanwords,
     correct_nonstandard_terms,
     correct_ordinal_prefix_je,
     correct_particle_spacing,
     correct_unit_case,
+    correct_unit_spacing,
     normalize_spacing_mode,
 )
 
@@ -55,6 +57,21 @@ class TestAuxVerbSpacingPattern1:
         assert correct_aux_verb_spacing(text) == (
             "안트베르펜 공격을 이어 가도록",
             [f"{text} -> 안트베르펜 공격을 이어 가도록"],
+        )
+
+    def test_three_syllable_compound_stem_is_split_even_when_joined(self):
+        """본용언이 3음절 이상 합성어(예: '돌보다')면 보조 용언 붙임 자체가
+        허용 대상이 아니다 — 원칙이든 허용이든 항상 띄운다. 예전에는 원칙
+        모드에서 "이미 붙어 있을 수 없다"고 가정하고 이미 붙어 있는 입력은
+        그냥 지나쳤다(작업자자료 w11, 2026-09-02 발견) — 실제로는 붙여 쓴
+        입력이 들어올 수 있어 강제로 띄워야 했다."""
+        assert correct_aux_verb_spacing("아이를 돌보아주다") == (
+            "아이를 돌보아 주다",
+            ["아이를 돌보아주다 -> 아이를 돌보아 주다"],
+        )
+        assert correct_aux_verb_spacing("아이를 돌보아 주다") == (
+            "아이를 돌보아 주다",
+            [],
         )
 
 
@@ -1141,6 +1158,53 @@ class TestUnitCase:
     def test_no_preceding_digit_untouched(self):
         """숫자가 바로 앞에 없으면 이니셜·다른 약어일 수 있어 건드리지 않는다."""
         assert correct_unit_case("KM요원이 왔다") == ("KM요원이 왔다", [])
+
+
+class TestUnitSpacing:
+    """한글 맞춤법 제43항 — 단위 명사는 띄어 씀이 원칙, 아라비아 숫자가
+    단위 바로 앞일 때만 붙임이 허용된다(온라인가나다 qna_seq=8756, '100만
+    km'). 작업자자료 w13(2026-09-02)."""
+
+    def test_hangul_scale_word_before_unit_gets_spaced(self):
+        assert correct_unit_spacing("그건 3만km쯤 된다") == (
+            "그건 3만 km쯤 된다",
+            ["3만km -> 3만 km"],
+        )
+
+    def test_digit_immediately_before_unit_is_allowed_and_untouched(self):
+        assert correct_unit_spacing("10km 정도 걸었다") == ("10km 정도 걸었다", [])
+        assert correct_unit_spacing("몸무게가 3kg 늘었다") == ("몸무게가 3kg 늘었다", [])
+
+    def test_already_spaced_is_untouched(self):
+        assert correct_unit_spacing("3만 km 갔다") == ("3만 km 갔다", [])
+
+
+class TestGumeonEnding:
+    """종결 어미 '-구먼'을 잘못 적은 '-구만'을 고친다(작업자자료 w17,
+    2026-09-02). kiwi가 종결 어미(EF)로 태깅한 자리만 다룬다 — 지명·
+    어근 뜻의 '구만'(구만리·구만면 등)은 NNG/NNP로 태깅돼 대상이 아니다."""
+
+    def test_predicate_ending_is_corrected(self):
+        assert correct_gumeon_ending("날씨가 좋구만") == (
+            "날씨가 좋구먼",
+            ["날씨가 좋구만 -> 날씨가 좋구먼"],
+        )
+
+    def test_fused_longer_ending_only_replaces_the_suffix(self):
+        assert correct_gumeon_ending("벌써 왔구만") == (
+            "벌써 왔구먼",
+            ["벌써 왔구만 -> 벌써 왔구먼"],
+        )
+
+    def test_already_correct_untouched(self):
+        assert correct_gumeon_ending("날씨가 좋구먼") == ("날씨가 좋구먼", [])
+
+    def test_place_name_is_not_touched(self):
+        assert correct_gumeon_ending("구만리 밖에서 왔다") == ("구만리 밖에서 왔다", [])
+        assert correct_gumeon_ending("경상남도 구만면에 갔다") == (
+            "경상남도 구만면에 갔다",
+            [],
+        )
 
 
 class TestOrdinalPrefixJe:

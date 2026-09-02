@@ -46,6 +46,7 @@ from .punctuation import (
     correct_colon_spacing,
     correct_interjection_vocative_comma,
     correct_unit_case,
+    correct_unit_spacing,
 )
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -64,7 +65,7 @@ from .replacements import (
     correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
-from .spelling import check_purified_terms, check_spelling
+from .spelling import check_purified_terms, check_spelling, correct_gumeon_ending
 from .dialect import check_dialect
 from .consistency import (
     check_aux_verb_consistency,
@@ -253,6 +254,9 @@ def _correct_line(
     corrected_text, unit_case_fixes = correct_unit_case(corrected_text)
     corrected_text = _guard("단위 대소문자", before, corrected_text, unit_case_fixes)
     before = corrected_text
+    corrected_text, unit_spacing_fixes = correct_unit_spacing(corrected_text)
+    corrected_text = _guard("단위 띄어쓰기", before, corrected_text, unit_spacing_fixes)
+    before = corrected_text
     # 제50항 허용 기준을 고른 문서에서만 — 사전이 전문 용어(명사구)로 확인해 준
     # 구간을 붙인다. 원칙 기준에서는 띄어 쓴 원문이 이미 정답이라 부르지 않는다.
     term_join_fixes: list[str] = []
@@ -279,6 +283,9 @@ def _correct_line(
     before = corrected_text
     corrected_text, always_wrong_fixes = correct_always_wrong(corrected_text)
     corrected_text = _guard("확정 오류 표현", before, corrected_text, always_wrong_fixes)
+    before = corrected_text
+    corrected_text, gumeon_fixes = correct_gumeon_ending(corrected_text)
+    corrected_text = _guard("종결 어미 -구먼", before, corrected_text, gumeon_fixes)
     before = corrected_text
     corrected_text, mot_hada_fixes = correct_mot_hada_compound(corrected_text)
     corrected_text = _guard("부사+못하다 활용", before, corrected_text, mot_hada_fixes)
@@ -309,6 +316,7 @@ def _correct_line(
             + compound_fixes
             + aux_verb_fixes
             + always_wrong_fixes
+            + gumeon_fixes
             + mot_hada_fixes
             + nonstandard_fixes
             + discriminatory_fixes

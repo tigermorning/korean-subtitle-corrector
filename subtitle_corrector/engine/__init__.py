@@ -105,6 +105,7 @@ from .punctuation import (
     correct_colon_spacing,
     correct_interjection_vocative_comma,
     correct_unit_case,
+    correct_unit_spacing,
 )
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -123,7 +124,7 @@ from .replacements import (
     correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
-from .spelling import check_purified_terms, check_spelling
+from .spelling import check_purified_terms, check_spelling, correct_gumeon_ending
 from .dialect import check_dialect
 from .consistency import (
     check_aux_verb_consistency,
@@ -181,6 +182,8 @@ __all__ = [
     "correct_interjection_vocative_comma",
     "correct_colon_spacing",
     "correct_unit_case",
+    "correct_unit_spacing",
+    "correct_gumeon_ending",
     "check_ampersand_usage",
     "correct_always_wrong",
     "correct_nonstandard_terms",

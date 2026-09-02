@@ -359,3 +359,37 @@ def correct_unit_case(text: str) -> tuple[str, list[str]]:
     if fixed == text:
         return text, []
     return fixed, [f"단위 대소문자: {_localized_change(text, fixed)}"]
+
+
+# 한글 맞춤법 제43항: 단위 명사는 띄어 씀이 원칙이나 "순서를 나타내거나
+# 아라비아 숫자와 어울리어 쓰이는 경우"는 붙여 쓸 수 있다 — 그 허용은
+# 숫자가 **바로** 단위 앞에 있을 때만이다. 온라인가나다 확인(2026-09-02,
+# qna_seq=8756, "100만 km"): 단위 바로 앞이 아라비아 숫자가 아니라
+# 한글 자릿수 글자('만')면 그 예외가 성립하지 않아 띄어 써야 한다 —
+# "3만km"(x)/"3만 km"(o), "10km"(o, 숫자가 바로 앞이라 허용).
+# 로마자 기호 단위 중 자막에 흔한 거리·무게·부피만 좁혀서 다룬다(작업자
+# 자료 56행 예시 및 `_UNIT_CASE_FIX`와 같은 계열) — g·m·l처럼 한 글자뿐인
+# 단위는 다른 로마자 약어와 겹칠 위험이 있어 뺐다.
+_UNIT_SPACING_UNITS = ("km", "kg", "cm", "mm", "ml", "mg")
+_UNIT_SPACING_RE = re.compile(
+    r"(\d[\d,\.만억조천백십]*)(" + "|".join(_UNIT_SPACING_UNITS) + r")(?![A-Za-z])"
+)
+
+
+def correct_unit_spacing(text: str) -> tuple[str, list[str]]:
+    """단위 바로 앞이 아라비아 숫자가 아니면(자릿수 한글 글자가 끼면) 띄운다
+    (예: '3만km' -> '3만 km'). 숫자가 바로 단위 앞이면(예: '10km') 붙여 쓴
+    표기도 맞으므로 건드리지 않는다(한글 맞춤법 제43항 붙임)."""
+    edits = []
+
+    def _fix(m: re.Match) -> str:
+        number, unit = m.group(1), m.group(2)
+        if number[-1].isdigit():
+            return m.group(0)
+        edits.append(f"{number}{unit} -> {number} {unit}")
+        return f"{number} {unit}"
+
+    fixed = _UNIT_SPACING_RE.sub(_fix, text)
+    if not edits:
+        return text, []
+    return fixed, edits
