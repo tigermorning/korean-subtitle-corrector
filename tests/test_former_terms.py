@@ -133,3 +133,16 @@ class TestFormerTermContextEvidence:
         entries = [self._entry(1, "그는 정신분열증 진단을 받았다")]
         corrected, _flags, _log = correct_entries(entries)
         assert corrected[0].text == "그는 조현병 진단을 받았다"
+
+    def test_generic_verb_overlap_does_not_support_specialist_reading(self):
+        """'정수'(精髓, 흔한 뜻 — 진안중평농악의 정수)가 '양수'의 옛 용어로
+        오탐지됐다(2026-09-02 실사용 감수, 뉴스 기사 묶음 텍스트). 원인은
+        문서 전체 문맥에 '건강 관리를 잘하여'(양수의 다른 뜻풀이)와 우연히
+        겹치는 흔한 낱말('건강'·'들다'·'올리다')이 있었던 것 — '있다' 하나
+        때문에 오탐지됐던 §73 건초 사고와 같은 부류라 같은 불용어 목록에
+        추가해 막았다."""
+        flags = self._former_flags(
+            "그 공연에서 전통 예술의 정수를 느낄 수 있었다",
+            "건강을 위해 매일 아침 물을 마시고 손을 들어 스트레칭을 한다",
+        )
+        assert [f for f in flags if f.suggested_fix == "양수"] == []
