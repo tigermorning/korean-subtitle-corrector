@@ -98,8 +98,11 @@ from .affix import (
 )
 from .punctuation import (
     check_ambiguous_interjection_comma,
+    check_ampersand_usage,
     check_joined_interjection_spacing,
+    correct_colon_spacing,
     correct_interjection_vocative_comma,
+    correct_unit_case,
 )
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -171,6 +174,9 @@ __all__ = [
     "check_ambiguous_interjection_comma",
     "check_joined_interjection_spacing",
     "correct_interjection_vocative_comma",
+    "correct_colon_spacing",
+    "correct_unit_case",
+    "check_ampersand_usage",
     "correct_always_wrong",
     "correct_nonstandard_terms",
     "correct_discriminatory_terms",

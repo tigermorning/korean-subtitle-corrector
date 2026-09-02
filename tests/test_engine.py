@@ -17,6 +17,7 @@
 from subtitle_corrector.engine import (
     SubtitleEntry,
     _aux_verb_spacing,
+    check_ampersand_usage,
     check_spacing,
     check_spelling,
     check_compound_merge_candidate,
@@ -24,12 +25,14 @@ from subtitle_corrector.engine import (
     check_term_spacing_consistency,
     correct_always_wrong,
     correct_aux_verb_spacing,
+    correct_colon_spacing,
     correct_entries,
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_loanwords,
     correct_nonstandard_terms,
     correct_particle_spacing,
+    correct_unit_case,
     normalize_spacing_mode,
 )
 
@@ -989,3 +992,84 @@ class TestParticlePlusAuxVerbSplit:
         """예외는 조사+보조용언 경계에만 준다 — '한짓골'을 막던 보호는 그대로다."""
         flag = check_spacing(0, "한짓골에서 만나자")
         assert flag is None or "한 짓골" not in (flag.suggested_fix or "")
+
+
+class TestColonSpacing:
+    """한글 맞춤법 문장부호 규정, 쌍점(:) — 숫자:숫자(시각·대비)는 양옆 붙임,
+    그 외(표제: 설명)는 앞만 붙이고 뒤 한 칸(BACKLOG 작업자자료 4번, NOTA-019)."""
+
+    def test_digit_colon_digit_tightened(self):
+        assert correct_colon_spacing("일시 : 2030년 4월 9일 12 : 30") == (
+            "일시: 2030년 4월 9일 12:30",
+            ["쌍점 띄어쓰기: 일시 : 2030년 4월 9일 12 : 30 -> 일시: 2030년 4월 9일 12:30"],
+        )
+
+    def test_ratio_tightened(self):
+        assert correct_colon_spacing("방식 : 3 : 3 교차 발표")[0] == "방식: 3:3 교차 발표"
+
+    def test_label_gets_space_after(self):
+        assert correct_colon_spacing("주제:맞춤법 실력 이대로 좋은가")[0] == (
+            "주제: 맞춤법 실력 이대로 좋은가"
+        )
+
+    def test_emoticon_untouched(self):
+        """이모티콘(':)' , ':D')은 라틴 문자·기호와 붙어 있어 대상이 아니다."""
+        assert correct_colon_spacing("나 웃는거 봐 :)") == ("나 웃는거 봐 :)", [])
+        assert correct_colon_spacing("나 웃는거 봐 :D") == ("나 웃는거 봐 :D", [])
+
+    def test_already_correct_untouched(self):
+        assert correct_colon_spacing("일시: 2030년 4월 9일 12:30") == (
+            "일시: 2030년 4월 9일 12:30",
+            [],
+        )
+
+
+class TestAmpersandUsage:
+    """'&'는 한국어 문장부호가 아니다 — 로마자 상표명 약칭이 아니면 확인
+    플래그(BACKLOG 작업자자료 4번, NOTA-020)."""
+
+    def test_korean_context_flagged(self):
+        assert check_ampersand_usage(1, "감독 & 작가") is not None
+
+    def test_no_space_korean_flagged(self):
+        assert check_ampersand_usage(1, "기획& 연출") is not None
+
+    def test_brand_name_untouched(self):
+        for text in ("P&G 제품이야", "AT&T에 다닌다", "H&M에서 샀어"):
+            assert check_ampersand_usage(1, text) is None
+
+    def test_english_title_untouched(self):
+        assert check_ampersand_usage(1, "이건 Fast & Furious 영화야") is None
+
+    def test_no_ampersand_returns_none(self):
+        assert check_ampersand_usage(1, "감독 및 작가") is None
+
+
+class TestUnitCase:
+    """SI 접두어 '킬로'는 소문자 k가 원칙 — 거리·무게 단위(km/kg)의 대문자
+    오표기만 좁혀서 고친다(BACKLOG 작업자자료 4번, NOTA-053)."""
+
+    def test_km_case_fixed_no_space(self):
+        assert correct_unit_case("3Km를 걸었다") == (
+            "3km를 걸었다",
+            ["단위 대소문자: 3Km를 걸었다 -> 3km를 걸었다"],
+        )
+
+    def test_km_case_fixed_with_space(self):
+        assert correct_unit_case("3 Km를 걸었다") == (
+            "3 km를 걸었다",
+            ["단위 대소문자: 3 Km를 걸었다 -> 3 km를 걸었다"],
+        )
+
+    def test_kg_case_fixed(self):
+        assert correct_unit_case("5Kg이었다") == (
+            "5kg이었다",
+            ["단위 대소문자: 5Kg이었다 -> 5kg이었다"],
+        )
+
+    def test_already_correct_untouched(self):
+        assert correct_unit_case("3km는 이미 맞다") == ("3km는 이미 맞다", [])
+
+    def test_no_preceding_digit_untouched(self):
+        """숫자가 바로 앞에 없으면 이니셜·다른 약어일 수 있어 건드리지 않는다."""
+        assert correct_unit_case("KM요원이 왔다") == ("KM요원이 왔다", [])

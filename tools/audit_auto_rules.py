@@ -35,7 +35,9 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_adnominal_noun_verb_split,
     correct_always_wrong,
     correct_aux_verb_spacing,
+    correct_colon_spacing,
     correct_compound_spacing,
+    correct_unit_case,
     correct_discriminatory_terms,
     correct_former_terms,
     correct_honorific_dependent_noun_spacing,
@@ -139,6 +141,18 @@ RULES = [
         _plain(correct_always_wrong),
         "목록",
         "common_errors.ALWAYS_WRONG — 문맥 무관 오용으로 검증된 정적 목록",
+    ),
+    (
+        "쌍점띄어쓰기",
+        _plain(correct_colon_spacing),
+        "규범",
+        "문장부호 규정. 숫자:숫자(시각·대비)는 양옆 붙임, 그 외(표제: 설명)는 앞만 붙이고 뒤 한 칸(2026-09-01, BACKLOG 작업자자료4)",
+    ),
+    (
+        "단위대소문자",
+        _plain(correct_unit_case),
+        "규범",
+        "SI 접두어 '킬로'는 소문자 k가 원칙. 숫자 바로 뒤(또는 한 칸 뒤) Km/KM/Kg/KG만 소문자로(2026-09-01, BACKLOG 작업자자료4)",
     ),
     (
         "규범표기재지정",

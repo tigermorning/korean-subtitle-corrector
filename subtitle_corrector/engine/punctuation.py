@@ -1,5 +1,8 @@
-"""문서 종류와 무관하게 적용하는 구두점 규칙 — 감탄사·호격 뒤 쉼표.
+"""문서 종류와 무관하게 적용하는 구두점·표기 규칙 — 감탄사·호격 뒤 쉼표, 쌍점
+띄어쓰기, '&' 기호, 단위 대소문자.
 """
+
+import re
 
 from ..dictionary import word_exists
 from ..report import FlagItem
@@ -264,3 +267,95 @@ def check_ambiguous_interjection_comma(index: int, text: str) -> FlagItem | None
             " 필요합니다."
         ),
     )
+
+
+# 한글 맞춤법 문장부호 규정, 쌍점(:): (1) 표제 다음에 자세한 설명·보기를 들 때는
+# 앞은 붙이고 뒤는 띄어 쓴다("주제: 맞춤법"). (2) 시와 분, 대비되는 두 대상 등을
+# 나타낼 때는 앞뒤를 다 붙여 쓴다("12:30", "3:3"). 두 규정을 가르는 신호는 콜론
+# 양옆이 전부 숫자인지 여부다 — 숫자 대 숫자가 아니면 (1), 맞으면 (2)로 본다.
+_COLON_DIGIT_GAP = re.compile(r"(?<=\d)[ \t]*:[ \t]*(?=\d)")
+# 이 뒤에 (공백을 사이에 두고서라도) 숫자나 한글이 와야 "표제:" 자리로 본다 —
+# 그렇지 않으면 이모티콘(':)' , ':D')이나 URL·포트 표기까지 건드리게 된다.
+_COLON_SPACE_BEFORE = re.compile(r"[ \t]+:(?=[ \t]*[\d가-힣])")
+# 콜론 뒤에 공백을 강제로 넣는 자리는 한글(단어 내용)이 바로 뒤따를 때로 한정한다.
+# (?!\d)는 위 숫자:숫자 자리(이미 붙어 있어야 함)를 다시 벌리지 않기 위함이다.
+_COLON_NEEDS_SPACE_AFTER = re.compile(r":(?!\d)[ \t]*(?=[가-힣])")
+
+
+def correct_colon_spacing(text: str) -> tuple[str, list[str]]:
+    """쌍점(:) 앞뒤 공백을 문장부호 규정대로 맞춘다.
+
+    - 숫자:숫자(시각 '12:30', 대비 '3:3')는 양옆을 붙인다.
+    - 그 외(표제: 설명)는 앞을 붙이고 뒤에 한 칸을 둔다 — 단, 뒤따르는 것이
+      한글이 아니면(이모티콘·URL 등) 건드리지 않는다.
+    """
+    fixed = _COLON_DIGIT_GAP.sub(":", text)
+    fixed = _COLON_SPACE_BEFORE.sub(":", fixed)
+    fixed = _COLON_NEEDS_SPACE_AFTER.sub(": ", fixed)
+    if fixed == text:
+        return text, []
+    return fixed, [f"쌍점 띄어쓰기: {_localized_change(text, fixed)}"]
+
+
+# '&'는 한국어 문장부호가 아니다 — 문맥에 따라 '및'(나열)·'겸'(겸직)·쉼표로
+# 바꿔 쓴다. 다만 'P&G'·'AT&T'·'H&M'처럼 로마자에 바로 붙어 있으면 그 자체가
+# 고유명사(상표명)의 일부이므로 건드리지 않는다 — 어느 쪽으로 바꿀지는 뜻에
+# 달려 있어 자동으로 정하지 않고 사람에게 확인만 받는다.
+_AMPERSAND = re.compile(r"&")
+_LATIN_LETTER = re.compile(r"[A-Za-z]")
+_HANGUL = re.compile(r"[가-힣]")
+
+
+def check_ampersand_usage(index: int, text: str) -> FlagItem | None:
+    """'&'가 로마자 약칭(상표명 등)이 아니라 한글 문맥에서 접속 기호로
+    쓰였으면 확인 플래그를 낸다(예: '감독 & 작가' -> '감독 및 작가')."""
+    for m in _AMPERSAND.finditer(text):
+        left = text[: m.start()].rstrip(" ")
+        right = text[m.end() :].lstrip(" ")
+        left_char = left[-1:] or None
+        right_char = right[:1] or None
+        # 양옆이 전부 로마자에 바로 붙어 있으면(공백 없이) 상표명 약칭으로 본다.
+        if (
+            left_char and _LATIN_LETTER.match(left_char)
+            and right_char and _LATIN_LETTER.match(right_char)
+            and text[m.start() - 1] != " "
+            and text[m.end() : m.end() + 1] != " "
+        ):
+            continue
+        # 어느 한쪽이라도 한글이면 번역 과정에서 '&'가 그대로 남은 것으로 본다.
+        if (left_char and _HANGUL.match(left_char)) or (right_char and _HANGUL.match(right_char)):
+            return FlagItem(
+                line_index=index,
+                original_text=text,
+                reason=(
+                    "'&'는 한국어 문장부호가 아닙니다 — 뜻에 따라 '및'(나열)·'겸'(겸직)·"
+                    "쉼표 중 하나로 바꿔 쓰세요. 로마자 상표명(예: 'P&G')의 일부라면 "
+                    "그대로 두세요."
+                ),
+            )
+    return None
+
+
+# 「국제단위계(SI)」접두어 '킬로'는 10³을 뜻하며 항상 소문자 k다(대문자 K는
+# 273.15가 기준인 절대온도 단위 켈빈이다). 자막 번역에서 거리·무게 단위 앞에
+# 실수로 대문자를 쓰는 경우(마일→km, 파운드→kg 환산)만 좁혀서 고친다 — 단위
+# 표기 전체(바이트 계열의 K/k처럼 관행상 대문자를 쓰는 예외가 있는 자리, §31
+# `docs/LOANWORD_TRANSCRIPTION_RULES.md`와 별개 사안)까지 넓히지 않는다.
+_UNIT_CASE_FIX = {"Km": "km", "KM": "km", "Kg": "kg", "KG": "kg"}
+# 숫자 바로 뒤, 또는 숫자+공백 한 칸 뒤만 대상으로 한다 — 공백 자체는 매치에
+# 넣지 않고 유지한다(가변폭 lookbehind를 못 쓰는 대신 두 폭을 나란히 둔다).
+_UNIT_CASE_RE = re.compile(r"(?:(?<=\d)|(?<=\d ))(Km|KM|Kg|KG)(?![A-Za-z])")
+
+
+def correct_unit_case(text: str) -> tuple[str, list[str]]:
+    """숫자 뒤에 오는 거리·무게 단위의 '킬로' 대소문자를 소문자로 통일한다
+    (Km/KM -> km, Kg/KG -> kg). 숫자 바로 뒤가 아니면(고유명사·이니셜일 수
+    있음) 건드리지 않는다."""
+
+    def _fix(m: re.Match) -> str:
+        return _UNIT_CASE_FIX[m.group(1)]
+
+    fixed = _UNIT_CASE_RE.sub(_fix, text)
+    if fixed == text:
+        return text, []
+    return fixed, [f"단위 대소문자: {_localized_change(text, fixed)}"]

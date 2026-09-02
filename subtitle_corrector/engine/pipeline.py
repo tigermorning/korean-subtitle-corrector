@@ -40,8 +40,11 @@ from .affix import (
 )
 from .punctuation import (
     check_ambiguous_interjection_comma,
+    check_ampersand_usage,
     check_joined_interjection_spacing,
+    correct_colon_spacing,
     correct_interjection_vocative_comma,
+    correct_unit_case,
 )
 from .subtitle_rules import (
     correct_subtitle_bracket_spacing,
@@ -237,6 +240,12 @@ def _correct_line(
     before = corrected_text
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
     corrected_text = _guard("감탄사·호격 쉼표", before, corrected_text, comma_fixes)
+    before = corrected_text
+    corrected_text, colon_fixes = correct_colon_spacing(corrected_text)
+    corrected_text = _guard("쌍점 띄어쓰기", before, corrected_text, colon_fixes)
+    before = corrected_text
+    corrected_text, unit_case_fixes = correct_unit_case(corrected_text)
+    corrected_text = _guard("단위 대소문자", before, corrected_text, unit_case_fixes)
     before = corrected_text
     # 제50항 허용 기준을 고른 문서에서만 — 사전이 전문 용어(명사구)로 확인해 준
     # 구간을 붙인다. 원칙 기준에서는 띄어 쓴 원문이 이미 정답이라 부르지 않는다.
@@ -442,6 +451,7 @@ def _correct_line(
         check_contracted_form(index, corrected_text),
         check_joined_interjection_spacing(index, corrected_text),
         check_ambiguous_interjection_comma(index, corrected_text),
+        check_ampersand_usage(index, corrected_text),
         check_honorific_dependent_noun(index, corrected_text),
         check_adnominal_noun_verb_split(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
