@@ -1470,3 +1470,41 @@ rules/sources/작업자-자료/표기_맞춤법_번역.docx`)에서 이미지 64
 - `tools/check_names.py`·`tools/check_public_api.py` 0건.
 - 남은 52장(띄어쓰기 판별·의존명사·순화어·합성어·구어체·번역투·외래어
   세칙·고유명사·맞춤법 등)은 미착수 — `docs/BACKLOG.md`에 남겨 둔다.
+
+## 84. 사전 조회 실패 흡수 경로 재검증 + 색인 문서 고아화 정정 (2026-09-02)
+
+27번 문단("실패를 성공처럼 보이게 만들지 마라")이 짚는 네 번의 사고(§62·
+`search_dialect()`·§78·§79)가 전부 저수준 조회 함수에서 났었는데, 그 위
+계층인 `dictionary/headwords.py`의 판정 함수 6개(`is_contemporary_general_word`·
+`appears_in_standard_headword`·`definition_markers`·`only_sino_korean_headword`·
+`sino_korean_origin`·`standard_headword_example`)도 각자 `except Exception:`으로
+조회 실패를 삼켜 안전한 기본값으로 흡수한다는 걸 확인했다. 이 6개가 §62의 전역
+실패 집계(`clients.failed_lookups()`)까지 지워 버리는지는 지금까지 시험한 적이
+없었다 — `tests/test_lookup_failure_report.py`는 `search_opendict`/`search_stdict`를
+직접 부르는 경로만 확인했다.
+
+실측 결과: **안전했다.** `clients.search_opendict()`/`search_stdict()`는
+`_LookupFailed`를 자기 안에서 이미 잡아 `_empty_channel()`을 돌려준다
+(`note_lookup_failure()`는 그보다 더 아래, `_get_json()` 안에서 먼저 찍힌다) —
+그래서 headwords.py의 `except Exception:`은 네트워크 실패 경로에서는 애초에
+발동하지 않는 죽은 코드다(다른 종류의 예외를 막는 방어 코드로만 남아 있다).
+집계는 흡수 계층과 무관하게 항상 찍힌다.
+
+### 검증
+
+- `tests/test_lookup_failure_report.py::TestHeadwordAbsorptionStillCounts`
+  6건 신규 — 6개 함수 각각 네트워크 실패를 주입한 뒤 `failed_lookups()`에
+  잡히는지 확인, 전부 통과(19/19, 회귀 없음).
+- `tools/check_names.py` 0건.
+
+### 색인 문서 고아화
+
+같은 검토 과정에서 만든 `ISSUES_SUMMARY.md`(해결된 버그·인프라 문제·외부
+리뷰 지적을 훑는 색인)가 커밋되지 않은 채 어디에서도 참조되지 않고 있었다 —
+`AGENTS.md`의 세션 시작 지시는 `PRD.md` 상단과 `docs/BACKLOG.md`만 가리켰다.
+`docs/RETROSPECTIVE.md`가 이미 경고한 "여러 문서에 흩어지면 존재를 모르게
+된다"는 패턴이 그 경고를 담은 색인 자신에게 재현된 것이었다. `AGENTS.md` 맨
+위에 진입점 한 문단을 추가했고, `ISSUES_SUMMARY.md`의 "아직 열려 있는 문제"
+절은 항목을 다시 나열하는 대신 `docs/BACKLOG.md`를 가리키기만 하도록
+줄였다(우선순위·진행 상태를 두 곳에 적으면 어긋난다는 게 이미 한 번 실제로
+있었던 사고라 — `AGENTS.md` 31번 문단).

@@ -8,7 +8,7 @@
 import pytest
 import requests
 
-from subtitle_corrector.dictionary import clients
+from subtitle_corrector.dictionary import clients, headwords
 from subtitle_corrector.engine import correct_entries
 from subtitle_corrector.parsers import SubtitleEntry
 
@@ -172,6 +172,51 @@ def test_breaker_reopens_when_the_api_recovers(monkeypatch):
         result = clients.search_opendict(f"복구{i}")
     assert result == _OK
     assert clients.lookup_stats()["우리말샘"]["streak"] == 0
+
+
+class TestHeadwordAbsorptionStillCounts:
+    """headwords.py의 판정 함수는 근거가 없으면(조회 실패 포함) 안전한 기본값으로
+    조용히 흡수한다(각 함수 docstring 참고) — 그 자체는 의도된 설계다. 실험 가설은
+    이것이다: 그 흡수가 §62의 전역 실패 집계(`failed_lookups()`)까지 지워 버리지는
+    않는가? 지워 버리면, 리포트의 '[사전 조회 일부 실패]' 문구가 안 뜨는 채로
+    판정만 기본값으로 굳는 진짜 사고가 된다. 이 파일의 기존 테스트는
+    `search_opendict`/`search_stdict`를 직접 부르는 경로만 확인했고, headwords.py를
+    거치는 경로는 지금까지 확인한 적이 없었다.
+
+    사전 판정식: 6개 함수 전부 흡수 후에도 `failed_lookups()`에 잡히면 가설 지지
+    (설계가 실제로 안전함 — 이 테스트로 고정). 하나라도 안 잡히면 가설 기각 = 그
+    함수가 새로 찾은 사고 지점.
+    """
+
+    def test_is_contemporary_general_word_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.is_contemporary_general_word("실험흡수1") is True  # 흡수된 기본값
+        assert clients.failed_lookups() == ["우리말샘"]
+
+    def test_appears_in_standard_headword_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.appears_in_standard_headword("실험흡수2") is False
+        assert clients.failed_lookups() == ["우리말샘"]
+
+    def test_definition_markers_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.definition_markers("실험흡수3") == frozenset()
+        assert clients.failed_lookups() == ["표준국어대사전"]
+
+    def test_only_sino_korean_headword_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.only_sino_korean_headword("실험흡수4") is False
+        assert clients.failed_lookups() == ["표준국어대사전"]
+
+    def test_sino_korean_origin_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.sino_korean_origin("실험흡수5") == ""
+        assert clients.failed_lookups() == ["표준국어대사전"]
+
+    def test_standard_headword_example_흡수해도_집계된다(self, monkeypatch):
+        _responses(monkeypatch, [requests.ConnectionError("boom")])
+        assert headwords.standard_headword_example("실험흡수6") == ("", "")
+        assert clients.failed_lookups() == ["우리말샘"]
 
 
 class TestUserAgent:

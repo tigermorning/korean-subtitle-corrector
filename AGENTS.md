@@ -2,6 +2,8 @@
 
 이 프로젝트에서 작업을 시작하기 전에 반드시 `PRD.md`의 최상단 "문서 구성"과 "세션 인계 노트" 섹션을 먼저 읽어라. 핵심 원칙, 구현 현황, 남은 작업, 지켜야 할 작업 방식이 요약되어 있고, 상세 로그/한계 목록이 있는 `docs/` 하위 파일 경로도 거기서 안내한다.
 
+문서가 몇 개인지, 뭐가 어디 있는지 전체 지도가 필요하면(예: "이 버그 전에도 있었나?") `ISSUES_SUMMARY.md`를 봐라 — 해결된 버그 분류·인프라 문제·외부 리뷰 지적까지 훑는 색인이다. **열려 있는 작업의 우선순위·진행 상태는 여전히 `docs/BACKLOG.md`가 유일한 기준**이다(아래 참고) — `ISSUES_SUMMARY.md`는 그걸 다시 베끼지 않고 가리키기만 해야 한다.
+
 핵심 한 줄: 이 프로젝트는 "확률적 추측이 아닌 권위 있는 규범 근거 기반, 애매하면 반드시 사람에게 확인"을 최우선 원칙으로 삼는다. 이 원칙과 충돌하는 자동화는 제안하지 마라.
 
 **코드 구조(2026-08-02 분할):** 교정 엔진은 `subtitle_corrector/engine/` 패키지다(구 `engine.py` 3,172줄을 나눈 것, `docs/log-archive/2026-h2.md` §46). 의존 방향은 단방향이다 — `text_utils` → `kiwi_adapter`/`options` → `lexicon`/`markers` → 규칙 모듈(`spacing`·`replacements`·`spelling`·`loanwords`·`affix`·`punctuation`·`subtitle_rules`·`dialect`·`consistency`) → `spacing_guards` → `pipeline`. **규칙은 규칙 모듈에 넣고 `pipeline.py`에는 호출 순서만 둔다.** `_kiwi` 인스턴스는 `kiwi_adapter.py`에만 있어야 한다(모듈마다 `Kiwi()`를 만들면 메모리가 배로 늘고 등록한 고유명사가 전달되지 않는다). 새 공개 함수는 `engine/__init__.py`의 `__all__`에도 추가해야 `from subtitle_corrector.engine import ...`로 보인다.
