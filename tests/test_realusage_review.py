@@ -961,3 +961,16 @@ def test_brand_compound_is_not_partially_corrected():
     assert [f for f in flags if "외래어" in f.reason]
     # 조사가 붙은 것은 복합어가 아니므로 정상 교정은 그대로다.
     assert _run("초코렛이라도 좀 먹어")[0] == "초콜릿이라도 좀 먹어"
+
+
+def test_quantity_expression_not_merged_with_hada_via_particle_spacing():
+    """수량 표현 뒤 '하다'는 조사·어미 규칙(제41항) 경로로도 붙이면 안 된다.
+
+    2026-09-02 실사용 감수(인터뷰 전사)에서 '20번 했어'가 '20번했어'로 붙었다.
+    kiwi가 '하'를 XSV(파생접미사)로 태깅해 `correct_particle_spacing`이 무조건
+    붙였는데, '번하다'가 우연히 표준국어대사전 표제어라서다("어두운 가운데 밝은
+    빛이 비치어 조금 훤하다" — 원문의 '20번 하다'와 무관한 동형이의어, 원리3).
+    `correct_action_noun_affix`(affix.py)에는 같은 수량 가드가 이미 있었지만,
+    실제로 이 사고를 낸 건 별개 경로인 이 함수였다(§60 부류)."""
+    assert _run("20번 했어")[0] == "20번 했어"
+    assert _run("3세트 해라")[0] == "3세트 해라"

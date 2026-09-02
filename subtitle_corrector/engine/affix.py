@@ -4,7 +4,7 @@
 from ..dictionary import only_sino_korean_headword, sino_korean_origin, word_exists
 from ..report import FlagItem
 from .text_utils import _josa, _localized_change
-from .kiwi_adapter import _kiwi
+from .kiwi_adapter import _QUANTITY_LEAD_TAGS, _kiwi
 from .lexicon import _is_action_noun
 
 # 동작성 신호로 쓰는 word_exists(N+"하다")가 동형이의어로 오탐지하는 명사들.
@@ -36,11 +36,6 @@ def is_honorific_drida_affix(noun_form: str) -> bool:
     '상'·'돈'은 이 자리에서 바로 사물 명사 쪽('상 드리다'·'돈 드리다')이다.
     """
     return noun_form not in _AFFIX_ACTION_EXCLUDE and _is_action_noun(noun_form)
-
-
-# 수량 표현을 이루는 태그. 숫자(SN)·단위 약물(SL, 'cc')·한자 수(SH)·수사(NR)·
-# 의존명사(NNB, '개'·'년'·'번')가 앞에 오면 그 뒤 명사는 명사구의 머리다.
-_QUANTITY_LEAD_TAGS = {"SN", "SL", "SH", "NR", "NNB"}
 
 
 # 동작성 명사 뒤에 붙는 접사 중 **자동으로 붙이지 않고 확인 플래그로 남기는** 것들.

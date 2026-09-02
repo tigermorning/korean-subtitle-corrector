@@ -16,6 +16,7 @@ from .kiwi_adapter import (
     _ATTACH_TAGS,
     _MANDATORY_BOUNDARY_TAGS,
     _PUNCT_TAG_PREFIX,
+    _QUANTITY_LEAD_TAGS,
     _kiwi,
     _merged_particle_reading_exists,
 )
@@ -128,6 +129,29 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
                 t1.tag in ("NNG", "NNP")
                 and gap_start != gap_end
                 and _modified_by_adnominal(text, tokens, i)
+            ):
+                continue
+            # **수량 표현 뒤에 띄어 쓴 '하'도 붙이지 않는다.** 숫자·단위·의존명사
+            # (`_QUANTITY_LEAD_TAGS`)가 이끄는 명사구 뒤의 '하다'는 그 명사에 붙는
+            # 접사가 아니라 별개 동사다('20번 했어', '3세트 해라'). 이 함수는 태그만
+            # 보고 XSV를 무조건 붙이는데, 의존명사(NNB) '번'은 그 자체가 붙임 대상이
+            # 될 때 특히 위험하다 — '번하다'가 우연히 표준국어대사전 표제어라서다
+            # ("어두운 가운데 밝은 빛이 비치어 조금 훤하다", 원문 '20번 하다'와
+            # 무관한 동형이의어, 원리3). `correct_action_noun_affix`(affix.py)에는
+            # 같은 수량 가드가 있었지만 실제로 이 사고를 낸 건 이 함수였다(§60 부류,
+            # 실사용 감수로 확인, 2026-09-02).
+            if (
+                t2.tag == "XSV"
+                and t2.form == "하"
+                and gap_start != gap_end
+                and (
+                    t1.tag == "NNB"
+                    or (
+                        i >= 1
+                        and tokens[i - 1].tag in _QUANTITY_LEAD_TAGS
+                        and text[tokens[i - 1].start + tokens[i - 1].len : t1.start] in (" ", "")
+                    )
+                )
             ):
                 continue
             # 행 끝에 띄어 쓴 '나'는 조사('백 배 나'→'백 배나')인지 '낫다'의 활용
