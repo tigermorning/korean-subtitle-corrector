@@ -63,6 +63,56 @@ def _matching_particle_allomorph(replacement: str, tail: str) -> tuple[str | Non
     return desired, 1
 
 
+# '이다'가 받침 없는 명사 뒤에서 '이'를 생략하고 붙는 어미들(표준국어대사전
+# 어미 표제어) — kiwi로 실측 확인(2026-09-02): '친구'+이 어미들을 붙이면 전부
+# 겉으로 드러나지 않는 길이 0의 VCP('이다') 토큰이 잡혀 실제로 '이다'의 활용임을
+# 구조로 확인했다. 받침 있는 명사 뒤에서는 이 생략이 성립하지 않는다 —
+# '학생라서'는 없고 '학생이라서'만 있다. kiwi는 받침 있는 명사 뒤에 이 생략형이
+# 오면(예: 오탈자로 쓰인 원문, 또는 이 치환처럼 받침 있는 낱말로 갈아 끼운 뒤)
+# VCP를 아예 잡지 못하고 어미를 명사에 직접 붙여 읽는다(실측 확인) — 그래서
+# 구조 신호가 아니라 이 표를 직접 대조해서 잡는다.
+_COPULA_ELISION_ENDINGS = (
+    "라서", "라도", "라고", "라며", "라면", "라니", "라나", "랍니다", "란", "래", "다",
+)
+
+
+def _matching_copula_ending(replacement: str, tail: str) -> tuple[str, str, int, str] | None:
+    """치환된 낱말이 받침으로 끝나는데 바로 뒤에 '이' 생략형 어미가 왔으면
+    (로그용 원래 조각, 로그용 정답 조각, 실제로 지울 글자 수, 실제로 넣을 글자)를
+    돌려준다. 아니면 None.
+
+    두 갈래를 구분한다:
+    - `_COPULA_ELISION_ENDINGS`(라서/다 등)는 '이'가 통째로 사라진 자리라 그
+      앞에 '이'만 끼워 넣으면 된다('벙어리다'->'언어장애인다'는 틀림,
+      '언어장애인이다'가 맞음). **바로 뒤에 한글이 더 이어지면 매치하지
+      않는다** — '다'는 뒤에 오는 글자에 따라 전혀 다른 어미가 될 수 있다
+      (예: '-ㄴ다면'·'-다고'는 동사 어간에 붙는 별개 어미이지 '다'의 연장이
+      아니다. 실측: kiwi가 '언어장애인다면'을 '언어장애+이(VCP)+ㄴ다면'으로
+      재분석해 명사 경계 자체를 옮겨 버렸다 — 확신 없는 자리라 건드리지
+      않는다). 어미 뒤가 문장부호·공백·끝이면(한글이 이어지지 않으면)만
+      다룬다.
+    - '였'으로 시작하면(였다/였고/였지만 등, '이'+'었'이 한 음절로 줄어든 자리)
+      '이'만 끼워 넣으면 '이였다'가 되는데 이건 표준이 아니다(널리 쓰이는
+      틀린 표기) — '였'을 '이었'으로 통째로 펴야 한다('벙어리였다'->
+      '언어장애인였다'는 틀림, '언어장애인이었다'가 맞음, '언어장애인이였다'도
+      틀림). kiwi 실측(2026-09-02): '친구였고'에서 '였'이 VCP('이다')+EP('었')를
+      한 글자에 얹어 돌려준다 — 명사 바로 뒤에 공백 없이 오는 '였'은 이
+      결합 말고 다른 형태소로 읽힐 수 없어(뒤에 무엇이 와도) 경계 확인 없이
+      다룬다."""
+    if not _has_batchim(replacement):
+        return None
+    if tail.startswith("였"):
+        return "였", "이었", 1, "이었"
+    for ending in _COPULA_ELISION_ENDINGS:
+        if not tail.startswith(ending):
+            continue
+        after = tail[len(ending) :]
+        if after and after[0].isalpha():
+            continue  # 더 긴 별개 어미일 수 있어 확신할 수 없다
+        return ending, "이" + ending, 0, "이"
+    return None
+
+
 def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
     """mapping의 각 (원문, 정답) 쌍을 text에 적용한다. 긴 표현부터 먼저
     치환해서, 짧은 표현이 긴 표현의 일부일 때 잘못 겹쳐 치환되는 사고를
@@ -93,15 +143,30 @@ def _apply_replacements(text: str, mapping: dict) -> tuple[str, list[str]]:
             search_from = idx + 1
         if not matches:
             continue
+        plain_occurrence = False
         for idx in sorted(matches, reverse=True):
             end = idx + len(wrong)
             tail = corrected[end:]
             new_particle, old_len = _matching_particle_allomorph(right, tail)
+            copula = None if new_particle is not None else _matching_copula_ending(right, tail)
             if new_particle is not None:
                 corrected = corrected[:idx] + right + new_particle + corrected[end + old_len :]
+                plain_occurrence = True  # edit_guard의 조사 이형태 정규화가 커버한다
+            elif copula is not None:
+                note_wrong, note_right, real_consumed, real_insert = copula
+                # edit_guard._reconstruct()는 로그를 문자 그대로 재현해 결과와 대조한다
+                # (`docs/DESIGN_PRINCIPLES.md` 무결성 관문) — '이' 삽입·'였'->'이었'
+                # 교체는 그 정규화에 없는 변화라 "{wrong} -> {right}"만으로는 재구성이
+                # 어긋나 거부된다. 그래서 어미까지 포함한 실제 표면형을 로그에 남긴다
+                # (같은 wrong이 다른 자리에서 다른 방식으로 바뀔 수 있어, 로그의
+                # 원래-조각을 서로 다르게 남겨야 재구성이 뒤섞이지 않는다).
+                corrected = corrected[:idx] + right + real_insert + tail[real_consumed:]
+                applied.append(f"{wrong}{note_wrong} -> {right}{note_right}")
             else:
                 corrected = corrected[:idx] + right + tail
-        applied.append(f"{wrong} -> {right}")
+                plain_occurrence = True
+        if plain_occurrence:
+            applied.append(f"{wrong} -> {right}")
     return corrected, applied
 
 

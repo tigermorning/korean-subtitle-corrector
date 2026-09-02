@@ -555,6 +555,72 @@ class TestApplyReplacementsParticleAllomorph:
         )
 
 
+class TestApplyReplacementsCopulaElision:
+    """치환된 낱말이 받침으로 끝나는데 바로 뒤에 '이다'의 '이' 생략형 어미가
+    왔으면(-라서/-라도/-다 등, '벙어리라서'처럼 받침 없는 원래 낱말 뒤에서만
+    성립하는 축약) '이'를 다시 넣는다 — 위 조사 이형태 버그와 같은 부류의
+    실사용 버그(2026-09-02, 작업자자료 2번 검증 중 발견). '였다'류('이'+'었'이
+    한 음절로 준 자리)는 '이'만 끼워 넣으면 안 되고('이였다'는 비표준)
+    '였'을 '이었'으로 펴야 한다."""
+
+    def test_elision_ending_gets_i_inserted(self):
+        assert correct_discriminatory_terms("벙어리라서 힘들었다") == (
+            "언어장애인이라서 힘들었다",
+            ["벙어리라서 -> 언어장애인이라서"],
+        )
+        assert correct_discriminatory_terms("벙어리다") == (
+            "언어장애인이다",
+            ["벙어리다 -> 언어장애인이다"],
+        )
+        assert correct_discriminatory_terms("불구자래") == (
+            "장애인이래",
+            ["불구자래 -> 장애인이래"],
+        )
+
+    def test_yeot_contraction_expands_to_ieot(self):
+        """'였다'를 '이였다'(비표준)로 만들지 않고 '이었다'로 편다."""
+        assert correct_discriminatory_terms("벙어리였다") == (
+            "언어장애인이었다",
+            ["벙어리였 -> 언어장애인이었"],
+        )
+
+    def test_batchim_already_present_is_untouched(self):
+        """이미 받침이 있던 원래 낱말(장님)은 애초에 이 생략이 성립하지
+        않는 자리라 원문에 '이'가 이미 있다 — 손댈 것이 없다."""
+        assert correct_discriminatory_terms("장님이라서 힘들다") == (
+            "시각장애인이라서 힘들다",
+            ["장님 -> 시각장애인"],
+        )
+
+    def test_ambiguous_longer_ending_is_left_alone(self):
+        """'다면'·'다고'는 '다'만의 연장인지 동사에 붙는 별개 어미('-ㄴ다면'
+        등)인지 확신할 수 없다(kiwi가 명사 경계 자체를 다시 갈랐다) — 안전하게
+        건드리지 않는다."""
+        assert correct_discriminatory_terms("벙어리다면 좋겠다") == (
+            "언어장애인다면 좋겠다",
+            ["벙어리 -> 언어장애인"],
+        )
+
+    def test_mixed_occurrences_in_one_text_do_not_collide(self):
+        """같은 낱말이 한 텍스트 안에서 서로 다른 방식으로(조사 이형태 vs
+        '이' 삽입 vs 그대로) 바뀌어도 서로 덮어쓰지 않는다."""
+        assert correct_discriminatory_terms("벙어리와 대화했다. 그는 벙어리다.") == (
+            "언어장애인과 대화했다. 그는 언어장애인이다.",
+            ["벙어리다 -> 언어장애인이다", "벙어리 -> 언어장애인"],
+        )
+
+    def test_pipeline_edit_guard_accepts_the_edit(self):
+        """edit_guard가 '이' 삽입·'였'->'이었' 교체를 근거 없는 변경으로
+        보고 되돌리지 않는지 파이프라인 전체로 확인한다(§95 계속, 작업자자료
+        2번) — 처음 구현했을 때는 로그가 삽입을 설명하지 못해 edit_guard가
+        전체를 막았다."""
+        entries, _flags, applied_log = correct_entries(
+            [SubtitleEntry(index=1, start="00:00:00,000", end="00:00:01,000", text="벙어리라서 힘들었다")]
+        )
+        assert entries[0].text == "언어장애인이라서 힘들었다"
+        assert not any("[자동 교정 차단]" in n.message for n in applied_log)
+
+
 class TestCheckSpacingJoiningProtection:
     """kiwi.space()가 원문에 있던 공백을 근거 없이 지워버리는(단어를 붙여
     버리는) 것을 막는 _protect_unfounded_joining() 회귀 테스트.
