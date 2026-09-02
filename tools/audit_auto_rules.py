@@ -48,6 +48,7 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_duration_cha_spacing,
     correct_mot_hada_compound,
     correct_nonstandard_terms,
+    correct_ordinal_prefix_je,
     correct_particle_spacing,
 )
 
@@ -117,6 +118,12 @@ RULES = [
         _plain(correct_intensive_prefix_cheo),
         "부정",
         "'처X'가 표제어이고 '쳐X'는 아닐 때만 바꾼다. 둘 다 미등재인 붙여 쓴 '쳐+본용언'도 바꾼다(규범 근거)",
+    ),
+    (
+        "접두사제",
+        _plain(correct_ordinal_prefix_je),
+        "태그",
+        "kiwi가 순번 '제'를 접두사(XPN)로 태깅한 자리만 뒤 말에 붙인다. 사전 확인 없음(2026-09-02, BACKLOG 작업자자료4, NOTA-007)",
     ),
     (
         "감탄사호격쉼표",

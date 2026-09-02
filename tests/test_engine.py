@@ -23,6 +23,7 @@ from subtitle_corrector.engine import (
     check_compound_merge_candidate,
     check_palatal_glide_loanword,
     check_term_spacing_consistency,
+    check_dependent_noun_sentence_start,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_colon_spacing,
@@ -31,6 +32,7 @@ from subtitle_corrector.engine import (
     correct_discriminatory_terms,
     correct_loanwords,
     correct_nonstandard_terms,
+    correct_ordinal_prefix_je,
     correct_particle_spacing,
     correct_unit_case,
     normalize_spacing_mode,
@@ -1073,3 +1075,49 @@ class TestUnitCase:
     def test_no_preceding_digit_untouched(self):
         """숫자가 바로 앞에 없으면 이니셜·다른 약어일 수 있어 건드리지 않는다."""
         assert correct_unit_case("KM요원이 왔다") == ("KM요원이 왔다", [])
+
+
+class TestOrdinalPrefixJe:
+    """접두사 '제-'는 뒤 말에 붙인다(BACKLOG 작업자자료 4번, NOTA-007).
+    '차'는 붙여도 띄워도 맞으므로 건드리지 않는다."""
+
+    def test_digit_ordinal_attached(self):
+        assert correct_ordinal_prefix_je("제 1차 회의였다") == (
+            "제1차 회의였다",
+            ["제 1차 회의였다 -> 제1차 회의였다"],
+        )
+
+    def test_native_ordinal_attached(self):
+        assert correct_ordinal_prefix_je("제 일차 세계대전")[0] == "제일차 세계대전"
+
+    def test_cha_spacing_untouched(self):
+        """'제1 차'처럼 '차'만 띄운 표기는 이미 맞으므로 그대로 둔다."""
+        assert correct_ordinal_prefix_je("제1 차 회의였다") == ("제1 차 회의였다", [])
+
+    def test_pronoun_je_untouched(self):
+        """'제 생각'의 '제'는 1인칭 대명사(NP)라 대상이 아니다."""
+        assert correct_ordinal_prefix_je("제 생각에는 그래요") == ("제 생각에는 그래요", [])
+
+    def test_already_attached_untouched(self):
+        assert correct_ordinal_prefix_je("제3자 입장에서") == ("제3자 입장에서", [])
+
+
+class TestDependentNounSentenceStart:
+    """의존명사 '나름'·'때문'이 앞말 없이 줄 첫머리에 오면 확인 플래그
+    (BACKLOG 작업자자료 4번, NOTA-004). 자동 교정은 하지 않는다 — 자막은
+    문장이 여러 줄로 쪼개져 앞 줄의 꾸밈말을 이어받는 경우가 흔하다."""
+
+    def test_narum_alone_flagged(self):
+        assert check_dependent_noun_sentence_start(1, "나름대로 했는데 잘 안되네요") is not None
+
+    def test_ttaemun_alone_flagged(self):
+        assert check_dependent_noun_sentence_start(1, "때문에 우리는 열심히 공부해야 한다") is not None
+
+    def test_narum_with_modifier_untouched(self):
+        assert check_dependent_noun_sentence_start(1, "저 나름대로 했는데 잘 안되네요") is None
+
+    def test_ttaemun_with_modifier_untouched(self):
+        assert check_dependent_noun_sentence_start(1, "그렇기 때문에 우리는 열심히 공부해야 한다") is None
+
+    def test_unrelated_text_untouched(self):
+        assert check_dependent_noun_sentence_start(1, "오늘 날씨가 참 좋네요") is None

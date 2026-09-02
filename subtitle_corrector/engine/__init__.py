@@ -95,6 +95,7 @@ from .affix import (
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
     correct_intensive_prefix_cheo,
+    correct_ordinal_prefix_je,
 )
 from .punctuation import (
     check_ambiguous_interjection_comma,
@@ -129,6 +130,7 @@ from .consistency import (
     check_term_spacing_consistency,
 )
 from .dependent_nouns import (
+    check_dependent_noun_sentence_start,
     check_hanpan_spacing,
     check_purpose_cha_spacing,
     correct_bun_spacing,
@@ -170,6 +172,7 @@ __all__ = [
     "correct_action_noun_affix",
     "correct_honorific_dependent_noun_spacing",
     "correct_intensive_prefix_cheo",
+    "correct_ordinal_prefix_je",
     "correct_adnominal_noun_verb_split",
     "check_ambiguous_interjection_comma",
     "check_joined_interjection_spacing",
@@ -204,4 +207,5 @@ __all__ = [
     "correct_duration_cha_spacing",
     "check_purpose_cha_spacing",
     "check_hanpan_spacing",
+    "check_dependent_noun_sentence_start",
 ]

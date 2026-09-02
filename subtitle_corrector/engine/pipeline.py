@@ -37,6 +37,7 @@ from .affix import (
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
     correct_intensive_prefix_cheo,
+    correct_ordinal_prefix_je,
 )
 from .punctuation import (
     check_ambiguous_interjection_comma,
@@ -72,6 +73,7 @@ from .consistency import (
     unify_term_spacing,
 )
 from .dependent_nouns import (
+    check_dependent_noun_sentence_start,
     check_hanpan_spacing,
     check_purpose_cha_spacing,
     correct_bun_spacing,
@@ -237,6 +239,9 @@ def _correct_line(
     before = corrected_text
     corrected_text, cheo_fixes = correct_intensive_prefix_cheo(corrected_text)
     corrected_text = _guard("접두사 처-", before, corrected_text, cheo_fixes)
+    before = corrected_text
+    corrected_text, je_fixes = correct_ordinal_prefix_je(corrected_text)
+    corrected_text = _guard("접두사 제-", before, corrected_text, je_fixes)
     before = corrected_text
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
     corrected_text = _guard("감탄사·호격 쉼표", before, corrected_text, comma_fixes)
@@ -460,6 +465,7 @@ def _correct_line(
         check_action_noun_affix(index, corrected_text),
         check_purpose_cha_spacing(index, corrected_text),
         check_hanpan_spacing(index, corrected_text),
+        check_dependent_noun_sentence_start(index, corrected_text),
         check_spacing(index, corrected_text),
     ]
     for f in checks:

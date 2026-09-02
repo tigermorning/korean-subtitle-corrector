@@ -13,7 +13,7 @@ kiwi와 기존 규칙이 이미 처리하므로(2026-08-05 실측: 맞게 쓴 �
 from ..dictionary import word_exists
 from ..report import FlagItem
 from .kiwi_adapter import _kiwi
-from .text_utils import _localized_change
+from .text_utils import _josa, _localized_change
 
 # '뿐' 앞에서 조사 읽기를 만드는 체언 태그. 명사(NNG/NNP/NNB)·대명사(NP)·수사(NR)·
 # 숫자(SN)·로마자(SL)·명사 파생 접미사(XSN)가 여기 든다.
@@ -144,6 +144,42 @@ def check_purpose_cha_spacing(index: int, text: str) -> FlagItem | None:
             ),
         )
     return None
+
+
+# 문장 맨 앞에 홀로 올 수 없는 의존명사 — 반드시 앞말의 꾸밈을 받아야 한다
+# ('나름대로 했다'(x) / '제 나름대로 했다'(o), '때문에'(x) / '그렇기 때문에'(o)).
+# 작업자자료 이미지-판정 NOTA-004. 이 둘만 다룬다 — 다른 의존명사까지 넓히려면
+# 같은 x/o 대조 근거를 먼저 확인할 것.
+_SENTENCE_INITIAL_DEPENDENT_NOUNS = ("나름", "때문")
+
+
+def check_dependent_noun_sentence_start(index: int, text: str) -> FlagItem | None:
+    """줄이 의존명사 '나름'·'때문'으로 단독 시작하면 확인 플래그한다.
+
+    의존명사는 의존할 대상(앞말의 꾸밈)이 있어야 하며 문장 맨 앞에 홀로 나올 수
+    없다 — 작업자자료 이미지-판정 NOTA-004의 대조 예시가 그 근거다.
+
+    **자동 교정하지 않는다.** 자막은 한 문장이 여러 줄로 쪼개지고, 앞 줄에서 이미
+    꾸밈말이 나온 뒤 이 줄이 '나름대로 노력했어요'처럼 이어지는 경우가 흔하다 —
+    그때는 원문이 맞다. 이 도구는 앞 줄의 문맥까지 보지 않으므로 사람이 확인해야
+    한다. 실측(자막 4개 파일, 1,926줄)으로는 이 자리가 1건뿐이었고 그나마 다른
+    낱말('척')이 감탄사 자리에서 의존명사로 오태깅된 것이었다 — 흔한 오탐지는
+    아니지만, 나오면 반드시 맥락을 봐야 한다."""
+    tokens = _kiwi.tokenize(text)
+    if not tokens:
+        return None
+    first = tokens[0]
+    if first.form not in _SENTENCE_INITIAL_DEPENDENT_NOUNS or first.tag != "NNB":
+        return None
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=(
+            f"'{first.form}'{_josa(first.form, '은')} 의존명사라 앞에서 꾸며 주는 말이 "
+            "있어야 합니다. 이 줄이 앞 자막에서 이어지는 문장이면 원문이 맞을 수 "
+            f"있습니다 — 독립된 문장이라면 '{first.form}' 앞에 꾸미는 말을 채워 주세요."
+        ),
+    )
 
 
 def check_hanpan_spacing(index: int, text: str) -> FlagItem | None:

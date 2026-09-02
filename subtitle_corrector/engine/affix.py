@@ -458,6 +458,34 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
     return None
 
 
+def correct_ordinal_prefix_je(text: str) -> tuple[str, list[str]]:
+    """접두사 '제-'를 뒤 말과 붙여 쓴다('제 1차' -> '제1차', '제 3자' -> '제3자').
+
+    접두사는 반드시 뒤따르는 말에 붙여 쓴다(한글 맞춤법 접두사 규정). kiwi는 순번을
+    뜻하는 '제'를 접두사(XPN)로, 1인칭 소유격 대명사 '제'('제 생각')는 대명사(NP)로
+    갈라 태깅한다 — 실측: '제1차'의 '제'는 XPN, '제 생각'의 '제'는 NP. 이 태그 하나로
+    동형이의어가 갈리므로 자동 교정한다(작업자자료 이미지-판정 NOTA-007, '제1차'(o)/
+    '제 1차'(x), '제일차'(o)/'제 일차'(x) — '차'는 앞말에 붙여도 띄워도 맞으므로
+    건드리지 않는다).
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    cuts = []
+    for i in range(1, len(tokens)):
+        nxt, je = tokens[i], tokens[i - 1]
+        if je.form != "제" or je.tag != "XPN":
+            continue
+        if text[je.start + je.len : nxt.start] != " ":
+            continue
+        cuts.append((je.start + je.len, nxt.start))
+    if not cuts:
+        return text, []
+    corrected = text
+    for gap_start, gap_end in sorted(cuts, reverse=True):
+        corrected = corrected[:gap_start] + corrected[gap_end:]
+    return corrected, [_localized_change(text, corrected)]
+
+
 def check_action_noun_affix(index: int, text: str) -> FlagItem | None:
     """동작성 명사 뒤에 띄어 쓴 `시키다`·`받다`·`당하다`를 붙일지 확인 플래그한다.
 
