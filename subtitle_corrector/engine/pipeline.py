@@ -80,6 +80,7 @@ from .dependent_nouns import (
     correct_duration_cha_spacing,
 )
 from .spacing_guards import check_spacing
+from .translationese import check_double_passive_voice
 from .text_utils import _josa
 from .edit_guard import verify_edit
 from .llm_pass import LlmSettings, propose_corrections
@@ -467,6 +468,7 @@ def _correct_line(
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
         check_spacing(index, corrected_text),
+        check_double_passive_voice(index, corrected_text),
     ]
     for f in checks:
         if not f:

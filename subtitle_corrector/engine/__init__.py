@@ -52,6 +52,7 @@
     spelling        맞춤법·순화어 검사 (플래그만)
     dialect         사투리 처리
     consistency     문서 전체 일관성 (제49항·제50항 혼용)
+    translationese  번역투 (이중 피동 등, 플래그만)
     ── 그 위 ──
     spacing_guards  띄어쓰기 제안에서 근거 없는 부분을 되돌리는 가드 + check_spacing
     llm_pass        규칙이 못 잡는 문맥 판단을 언어 모델에 묻는 선택 패스 (기본 꺼짐,
@@ -137,6 +138,7 @@ from .dependent_nouns import (
     correct_duration_cha_spacing,
 )
 from .spacing_guards import check_spacing
+from .translationese import check_double_passive_voice
 from .llm_pass import LlmSettings, normalize_llm_settings, propose_corrections
 from .pipeline import apply_report_fixes, correct_entries
 
@@ -208,4 +210,5 @@ __all__ = [
     "check_purpose_cha_spacing",
     "check_hanpan_spacing",
     "check_dependent_noun_sentence_start",
+    "check_double_passive_voice",
 ]
