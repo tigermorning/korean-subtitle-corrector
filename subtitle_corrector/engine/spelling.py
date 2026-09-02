@@ -118,6 +118,61 @@ def correct_gumeon_ending(text: str) -> tuple[str, list[str]]:
     return corrected, [_localized_change(text, corrected)]
 
 
+def check_negation_reply_spelling(index: int, text: str) -> FlagItem | None:
+    """줄 맨 앞 '아니오'가 대답(감탄사)이면 '아니요'로 확인 플래그한다.
+
+    표준국어대사전: '아니요'는 감탄사 표제어("윗사람이 묻는 말에 부정하여 대답할
+    때 쓰는 말")다. '아니오'도 감탄사로 등재돼 있지만 뜻풀이가 "→ 아니요"(비표준,
+    규범 표기로 넘겨줌)다. 반면 '아니오'는 형용사 '아니다'의 어간 '아니'+하오체
+    종결 어미 '-오'가 결합한 서술어로도 쓰인다("이건 사과가 아니오") — 이 자리는
+    활용형이라 표제어가 아니지만 표기는 그대로 맞다.
+
+    kiwi 자체의 형태소 분석은 둘을 안정적으로 갈라내지 못한다(`docs/BACKLOG.md`
+    w16 — 겉보기엔 같은 "아니오 + 뒷문장" 구조인데 "아니오 그건 아니야"는 '아니오'
+    통짜를 IC로, "아니오 저는 모릅니다"는 VCN('아니')+EC('오')로 실측에서 다르게
+    갈랐다). 그 대신 **위치**로 가른다: 서술어라면 반드시 앞에 주어(체언+조사)가
+    있어야 하므로, 줄 맨 앞(문장부호·인용부호·대사 기호 제외) '아니오'는 주어가
+    붙을 자리가 없어 대답(감탄사)일 수밖에 없다 — 이 신호는 위 두 예문 모두에서
+    일관되게 성립한다(둘 다 문장 맨 앞).
+
+    **자동 교정하지 않는다.** 자막은 한 문장이 여러 줄로 쪼개진다 — 앞 줄이
+    "그건 사과가"로 끝나고 이 줄이 "아니오"로 이어받으면, 이 줄만 보고는 주어가
+    없어 보여도 실제로는 서술어다. 이 도구는 앞 줄의 문맥까지 보지 않으므로 사람이
+    확인해야 한다(`check_dependent_noun_sentence_start`와 같은 이유·같은 처리)."""
+    tokens = _kiwi.tokenize(text)
+    content = [t for t in tokens if not t.tag.startswith("S")]
+    if not content:
+        return None
+
+    first = content[0]
+    if first.tag == "IC" and first.form in ("아니오", "아니요"):
+        surface = first.form
+    elif (
+        first.tag == "VCN"
+        and first.form == "아니"
+        and len(content) > 1
+        and content[1].tag in ("EC", "EF")
+        and content[1].form in ("오", "요")
+    ):
+        surface = first.form + content[1].form
+    else:
+        return None
+
+    if surface != "아니오":
+        return None
+
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=(
+            "줄 맨 앞 '아니오'는 대답(감탄사)이면 '아니요'가 맞습니다(표준국어대사전 "
+            "'아니오' 표제어 뜻풀이 '→ 아니요'). 다만 이 줄이 앞 자막에서 이어지는 "
+            "서술어('~가 아니오')라면 원문이 맞을 수 있습니다 — 앞뒤 문맥을 확인해 주세요."
+        ),
+        suggested_fix=text.replace("아니오", "아니요", 1),
+    )
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
     있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,

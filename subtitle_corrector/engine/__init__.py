@@ -131,7 +131,12 @@ from .replacements import (
     correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
-from .spelling import check_purified_terms, check_spelling, correct_gumeon_ending
+from .spelling import (
+    check_negation_reply_spelling,
+    check_purified_terms,
+    check_spelling,
+    correct_gumeon_ending,
+)
 from .dialect import check_dialect
 from .consistency import (
     check_aux_verb_consistency,
@@ -204,6 +209,7 @@ __all__ = [
     "correct_subtitle_quotes",
     "correct_subtitle_ellipsis",
     "check_spelling",
+    "check_negation_reply_spelling",
     "check_purified_terms",
     "check_spacing",
     "check_ambiguous_compound",

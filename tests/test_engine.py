@@ -25,6 +25,7 @@ from subtitle_corrector.engine import (
     check_palatal_glide_loanword,
     check_term_spacing_consistency,
     check_dependent_noun_sentence_start,
+    check_negation_reply_spelling,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_colon_spacing,
@@ -1313,3 +1314,46 @@ class TestDependentNounSentenceStart:
 
     def test_unrelated_text_untouched(self):
         assert check_dependent_noun_sentence_start(1, "오늘 날씨가 참 좋네요") is None
+
+
+class TestNegationReplySpelling:
+    """줄 맨 앞 '아니오'(대답)는 '아니요'로 확인 플래그(BACKLOG w16). 서술어
+    자리('~가 아니오')는 앞에 주어가 붙으므로 줄 맨 앞에 오지 않는다 — 자동
+    교정은 하지 않는다(자막이 여러 줄로 쪼개져 앞 줄의 주어를 이어받을 수 있음)."""
+
+    def test_line_initial_with_comma_flagged(self):
+        flag = check_negation_reply_spelling(1, "아니오, 그런 적 없어요")
+        assert flag is not None
+        assert flag.suggested_fix == "아니요, 그런 적 없어요"
+
+    def test_line_initial_no_comma_ic_parse_flagged(self):
+        flag = check_negation_reply_spelling(1, "아니오 그건 아니야")
+        assert flag is not None
+        assert flag.suggested_fix == "아니요 그건 아니야"
+
+    def test_line_initial_no_comma_vcn_parse_flagged(self):
+        flag = check_negation_reply_spelling(1, "아니오 저는 모릅니다")
+        assert flag is not None
+        assert flag.suggested_fix == "아니요 저는 모릅니다"
+
+    def test_bare_line_with_period_flagged(self):
+        flag = check_negation_reply_spelling(1, "아니오.")
+        assert flag is not None
+        assert flag.suggested_fix == "아니요."
+
+    def test_leading_dash_marker_flagged(self):
+        flag = check_negation_reply_spelling(1, "- 아니오, 그런 적 없어요")
+        assert flag is not None
+        assert flag.suggested_fix == "- 아니요, 그런 적 없어요"
+
+    def test_predicate_usage_with_subject_untouched(self):
+        assert check_negation_reply_spelling(1, "이건 사과가 아니오") is None
+
+    def test_predicate_usage_with_subject_untouched_2(self):
+        assert check_negation_reply_spelling(1, "그것은 제 잘못이 아니오") is None
+
+    def test_already_correct_untouched(self):
+        assert check_negation_reply_spelling(1, "아니요 저는 몰라요") is None
+
+    def test_unrelated_text_untouched(self):
+        assert check_negation_reply_spelling(1, "오늘 날씨가 참 좋네요") is None

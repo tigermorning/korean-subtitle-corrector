@@ -72,7 +72,12 @@ from .replacements import (
     correct_mot_hada_compound,
     correct_nonstandard_terms,
 )
-from .spelling import check_purified_terms, check_spelling, correct_gumeon_ending
+from .spelling import (
+    check_negation_reply_spelling,
+    check_purified_terms,
+    check_spelling,
+    correct_gumeon_ending,
+)
 from .dialect import check_dialect
 from .consistency import (
     check_aux_verb_consistency,
@@ -491,6 +496,7 @@ def _correct_line(
         check_purpose_cha_spacing(index, corrected_text),
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
+        check_negation_reply_spelling(index, corrected_text),
         check_spacing(index, corrected_text),
         check_double_passive_voice(index, corrected_text),
     ]
