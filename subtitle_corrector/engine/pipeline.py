@@ -100,7 +100,7 @@ from .edit_guard import verify_edit
 from .llm_pass import LlmSettings, propose_corrections
 
 def _headword_evidence(token: str) -> str:
-    """사전이 그 표기를 쓰는 표제어를 근거 문구로 만든다(§66).
+    """사전이 그 표기를 쓰는 표제어를 근거 문구로 만든다(docs/log-archive/2026-h2.md §66).
 
     `쉴러` -> "'쉴러 검사'(원어 Schiller檢査)처럼 '쉴러'를 쓰는 표제어가 등재돼 있습니다".
     같은 원어를 사전이 어떻게 적는지 눈으로 보여 주는 것이 목적이다 — 어문 규범 인명
@@ -721,7 +721,7 @@ def correct_entries(
 
     # 실패를 **건수로** 알린다. 전에는 이름만 모아 "이 사전이 담당하는 교정은 이번
     # 결과에 반영되지 않았습니다"라고 했는데, 수천 건 중 한 건이 순간적으로 실패해도
-    # 같은 문구가 떠서 사용자가 사전 연결이 끊긴 줄 알았다(2026-08-04 사용자 보고, §62).
+    # 같은 문구가 떠서 사용자가 사전 연결이 끊긴 줄 알았다(2026-08-04 사용자 보고, docs/log-archive/2026-h2.md §62).
     for api, stats in sorted(lookup_stats().items()):
         failures, attempts = stats["failures"], stats["attempts"]
         samples = ", ".join(stats["queries"])

@@ -14,7 +14,7 @@ def _attach(text):
 # --- 붙여야(동작성 명사 + 접사) ---
 
 def test_attach_action_noun_affixes():
-    """**'하다'와 '되다'만 자동으로 붙인다**(2026-08-05, §75).
+    """**'하다'와 '되다'만 자동으로 붙인다**(2026-08-05, docs/log-archive/2026-h2.md §75).
 
     `시키다`·`받다`·`당하다`는 붙임 근거가 간접적이라 자동 교정에서 내리고 제안으로
     남겼다 — `술하다`(述하다)가 표제어인 탓에 `술 시켜요`가 `술시켜요`로 붙은 것이
@@ -111,7 +111,7 @@ def test_quantity_lead_keeps_noun_phrase_spaced():
 # --- 관할 겹침: 붙임 규칙과 분리 규칙이 같은 경계를 서로 반대로 만진다 ---
 #
 # '명사 + 하'(XSV) 경계 하나를 세 규칙이 건드린다(`docs/BACKLOG.md` 29번,
-# `docs/IMPLEMENTATION_LOG.md` §60).
+# `docs/log-archive/2026-h2.md` §60).
 #
 #   correct_particle_spacing          '생각 해' -> '생각해'  (제41항, XSV는 앞말에 붙임)
 #   correct_adnominal_noun_verb_split '생각해' -> '생각 해'  (관형어가 명사를 꾸미면 가름)
@@ -176,7 +176,7 @@ def test_vv_reading_is_flagged_not_auto_split():
 
     자동 교정은 XSV 자리만 가른다(`docs/BACKLOG.md` 30번). VV까지 자동으로 가르면
     붙임형이 표제어인 고정 표현이 깨진다 — 실측에서 `두말하다`·`한잔하다`·
-    `딴말하다`·`딴짓하다`가 전부 갈릴 후보로 잡혔다(§60).
+    `딴말하다`·`딴짓하다`가 전부 갈릴 후보로 잡혔다(docs/log-archive/2026-h2.md §60).
     """
     from subtitle_corrector.engine import correct_adnominal_noun_verb_split
 

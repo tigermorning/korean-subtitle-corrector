@@ -423,7 +423,7 @@ def get_loanword_by_source(source: str, token: str = ""):
     응답: `{source, token, candidates: [...], confirmed: bool, lookup_failed: bool}`.
     `candidates`는 비슷한 원어를 참고로 보여 주는 목록일 뿐 정답 근거가 아니다.
 
-    **`lookup_failed`를 먼저 봐야 한다**(2026-09-01 추가, §79). `lookup_by_source()`는
+    **`lookup_failed`를 먼저 봐야 한다**(2026-09-01 추가, docs/log-archive/2026-h2.md §79). `lookup_by_source()`는
     서버 장애와 미등재를 똑같이 빈 목록으로 돌려준다. 그 값만 보고 "등재된 용례가
     없습니다"라고 화면에 쓰면, 서버가 죽은 날 번역가는 사실이 아닌 단정을 근거로
     판단하게 된다 — 이 도구에서 가장 나쁜 종류의 오류다. 조회가 실패했으면

@@ -124,7 +124,7 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
             # 사용자 보고). `correct_action_noun_affix`에는 같은 가드가 있었지만
             # 실제로 붙이는 것은 제41항 접사 규칙인 이 함수였다. MM·ETM 자리는
             # `correct_adnominal_noun_verb_split`이 붙은 것을 다시 갈라 결과만
-            # 맞았을 뿐, 두 규칙이 같은 경계를 반대로 만지고 있었다(§60 부류).
+            # 맞았을 뿐, 두 규칙이 같은 경계를 반대로 만지고 있었다(docs/log-archive/2026-h2.md §60 부류).
             if (
                 t1.tag in ("NNG", "NNP")
                 and gap_start != gap_end
@@ -138,7 +138,7 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
             # 될 때 특히 위험하다 — '번하다'가 우연히 표준국어대사전 표제어라서다
             # ("어두운 가운데 밝은 빛이 비치어 조금 훤하다", 원문 '20번 하다'와
             # 무관한 동형이의어, 원리3). `correct_action_noun_affix`(affix.py)에는
-            # 같은 수량 가드가 있었지만 실제로 이 사고를 낸 건 이 함수였다(§60 부류,
+            # 같은 수량 가드가 있었지만 실제로 이 사고를 낸 건 이 함수였다(docs/log-archive/2026-h2.md §60 부류,
             # 실사용 감수로 확인, 2026-09-02).
             if (
                 t2.tag == "XSV"
@@ -581,7 +581,7 @@ def _honorific_of_registered_aux(candidate: str) -> str | None:
 
     `봐주다`가 한 낱말이면 그 높임 표현도 한 낱말이다. 높임형이 사전에 없다는
     사실만으로 갈라 쓰면, 등재가 우연히 들쭉날쭉한 대로 `도와드릴게요`는 살고
-    `봐드릴게요`는 깨진다(§67 '-드리다' 접미사에서 확인한 것과 같은 사정).
+    `봐드릴게요`는 깨진다(docs/log-archive/2026-h2.md §67 '-드리다' 접미사에서 확인한 것과 같은 사정).
 
     근거는 이미 규정 해설에 있다 — 제47항 해설의 "'도와드리다'는 '도와주다'가
     사전 표제어인 것에 맞춰 항상 붙임"(`docs/KNOWN_LIMITATIONS.md`)을 특정 낱말이

@@ -1,6 +1,6 @@
 """한글 맞춤법 제42항 의존명사(들/뿐/만/지/차/판)의 정답표 회귀 테스트.
 
-판정 규칙과 근거는 `docs/GRAMMAR_PRECEDENTS_TABLE.md`, 구현 경위는 §69.
+판정 규칙과 근거는 `docs/GRAMMAR_PRECEDENTS_TABLE.md`, 구현 경위는 docs/log-archive/2026-h2.md §69.
 인용한 온라인가나다 답변은 2026-08-05에 다시 열어 살아 있는지 확인했다.
 
 **맞게 쓴 문장을 건드리지 않는 것이 이 표의 절반**이다 — 이 여섯 낱말은 같은 글자가
@@ -78,7 +78,7 @@ class TestPan:
 
 class TestAlreadyCoveredByExistingRules:
     """'만'·'지'·'들'은 기존 규칙과 kiwi가 이미 처리한다 — 새로 만들지 않았다는
-    사실을 고정한다(2026-08-05 실측). 여기가 깨지면 §69의 "구현하지 않음" 판단
+    사실을 고정한다(2026-08-05 실측). 여기가 깨지면 docs/log-archive/2026-h2.md §69의 "구현하지 않음" 판단
     자체를 다시 봐야 한다."""
 
     def test_man_duration_is_suggested(self):

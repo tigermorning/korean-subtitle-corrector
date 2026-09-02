@@ -287,7 +287,7 @@ class TestTermSpacingConsistency:
         assert self._reasons(flags) == []
 
     def test_wired_into_correct_entries(self):
-        """기본값('원칙')에서는 **묻지 않고 통일한다**(2026-08-05 사용자 지적, §73).
+        """기본값('원칙')에서는 **묻지 않고 통일한다**(2026-08-05 사용자 지적, docs/log-archive/2026-h2.md §73).
 
         띄어쓰기 기준을 이미 골라 둔 문서에 "어느 쪽으로 통일할까요"를 다시 묻는 것은
         선택을 두 번 받는 것이다. 목표 표기가 문서에 이미 있는 띄어 쓴 변이형이라
@@ -730,7 +730,7 @@ class TestApplyReplacementsCopulaElision:
 
     def test_pipeline_edit_guard_accepts_the_edit(self):
         """edit_guard가 '이' 삽입·'였'->'이었' 교체를 근거 없는 변경으로
-        보고 되돌리지 않는지 파이프라인 전체로 확인한다(§95 계속, 작업자자료
+        보고 되돌리지 않는지 파이프라인 전체로 확인한다(docs/log-archive/2026-h2.md §95 계속, 작업자자료
         2번) — 처음 구현했을 때는 로그가 삽입을 설명하지 못해 edit_guard가
         전체를 막았다."""
         entries, _flags, applied_log = correct_entries(
@@ -1160,7 +1160,7 @@ class TestParticlePlusAuxVerbSplit:
     이 자리는 규정이 정답을 정하므로 조각 사전 확인(`_protect_unresolvable_splits`)이
     개입하지 않는다. 개입하던 동안에는 결과가 우연에 좌우됐다 — `보고`(報告)·`알고`가
     표제어라 `보고는싶다`·`알고는있다`만 제안이 나가고 `먹고는싶다`는 아무 말이
-    없었다(`docs/BACKLOG.md` 23번, §70)."""
+    없었다(`docs/BACKLOG.md` 23번, docs/log-archive/2026-h2.md §70)."""
 
     def test_split_is_suggested_regardless_of_fragment_lookup(self):
         for joined, spaced in (

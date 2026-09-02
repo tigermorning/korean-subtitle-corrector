@@ -397,7 +397,7 @@ def correct_intensive_prefix_cheo(text: str) -> tuple[str, list[str]]:
             start, verb_start, joined, verb_tag = found
             # 붙임형이 **한자어뿐**이면 접두사 '처-' 파생어가 아니다('처하다'=處하다).
             # 그 표기로 바꾸면 뜻이 다른 낱말이 된다 — check_intensive_prefix_cheo()가
-            # "둘 다 비표준"으로 알린다(2026-08-04 사용자 지적, §64).
+            # "둘 다 비표준"으로 알린다(2026-08-04 사용자 지적, docs/log-archive/2026-h2.md §64).
             if verb_tag == "VV" and not only_sino_korean_headword(joined):
                 edits.append((start, verb_start))
             continue
@@ -454,7 +454,7 @@ def check_intensive_prefix_cheo(index: int, text: str) -> FlagItem | None:
 
     **붙임형이 한자어뿐인 자리는 대안을 제시하지 않는다**(2026-08-04 사용자 지적):
     `쳐 하다`·`쳐하다`는 둘 다 비표준인데, 전에는 `처하다`를 제안했다 — 그 표제어는
-    한자어 處하다여서 이 자리의 대안이 못 된다(§64). 정답은 문맥에 맞는 다른 표현이라
+    한자어 處하다여서 이 자리의 대안이 못 된다(docs/log-archive/2026-h2.md §64). 정답은 문맥에 맞는 다른 표현이라
     도구가 만들 수 없으므로, 무엇이 문제인지만 알린다(제안 없음)."""
     tokens = _kiwi.tokenize(text)
     for i in range(len(tokens) - 2):

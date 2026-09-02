@@ -13,7 +13,7 @@ class FlagItem:
     suggested_fix: str = ""
     # 외래어 음차로 의심되는 토막. 값이 있으면 화면이 이 플래그에 **원어 입력칸**을
     # 띄운다 — 음차의 정답은 원어가 무엇이냐로 갈리므로(`러스`는 Ruth면 `루스`,
-    # Russ면 `러스`), 텍스트만 보고는 정할 수 없다(§57·§61). 사용자가 원어를 넣으면
+    # Russ면 `러스`), 텍스트만 보고는 정할 수 없다(§57·docs/log-archive/2026-h2.md §61). 사용자가 원어를 넣으면
     # `/api/loanword-source`가 국립국어원 용례로 확정 표기를 돌려준다.
     source_lookup_token: str = ""
 

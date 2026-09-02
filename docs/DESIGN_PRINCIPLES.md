@@ -36,14 +36,14 @@
    없더라"(정상 응답, 미등재)를 같이 돌려주는 함수는 언젠가 반드시 둘을 뭉갠다.
    그러면 장애가 정상 판정으로 둔갑해 **근거 없는 결론이 근거처럼** 사용자에게
    간다 — 앞의 네 원리가 "가진 정보를 잘못 판정"하는 것과 달리, 이건 **정보가
-   없다는 사실 자체를 지워 버리는** 별개 부류다. 지금까지 네 번: §62(우리말샘
+   없다는 사실 자체를 지워 버리는** 별개 부류다. 지금까지 네 번: `docs/log-archive/2026-h2.md` §62(우리말샘
    조회 실패가 '사전 불통'으로 과장 표시), `search_dialect()`(지역어 API 장애와
-   매칭 없음이 구분 안 됨, `engine/dialect.py`), §78(모델 응답 형식 오류가 '고칠
-   것 없음'으로), §79(어문 규범 API 403이 '등재된 표기 없음'으로 — 화면에 빨간
+   매칭 없음이 구분 안 됨, `engine/dialect.py`), `docs/log-archive/2026-h2.md` §78(모델 응답 형식 오류가 '고칠
+   것 없음'으로), `docs/log-archive/2026-h2.md` §79(어문 규범 API 403이 '등재된 표기 없음'으로 — 화면에 빨간
    글씨 단정까지 나갔다). **흡수해서 계속 진행하는 것 자체는 옳다**(크래시보다
    낫다) — 원칙은 **흡수했다는 사실을 반드시 위로 올리는 것**이다:
    `note_lookup_failure()`(집계) → `AppliedNote`/응답의 `lookup_failed`(표시)가
-   그 통로다. §84에서 이 통로가 상위 계층(`dictionary/headwords.py`의 판정
+   그 통로다. `docs/log-archive/2026-h2.md` §84에서 이 통로가 상위 계층(`dictionary/headwords.py`의 판정
    함수 6개, 각자 `except Exception:`으로 자체 흡수함)을 거쳐도 새지 않는지
    확인했다 — `clients.search_opendict()`/`search_stdict()`가 `_LookupFailed`를
    더 아래에서 이미 잡아 반환하므로(`note_lookup_failure()`가 그보다 먼저

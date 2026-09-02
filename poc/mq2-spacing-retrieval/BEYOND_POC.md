@@ -171,7 +171,7 @@ MQ2의 결론은 **"맞춤법·띄어쓰기에는 AI를 쓰지 말고, 정답이
 | [`CASES.md`](CASES.md) | **50건** | 오늘 정리. 유형 A~H, 로그 절 번호 포함 |
 | [`comparison_realusage.md`](comparison_realusage.md) · [`comparison.md`](comparison.md) | 76건 | 오늘. arm별 정오 + 오답이 어떤 근거를 골라 틀렸는지 |
 | `docs/log-archive/2026-h2.md` | 795줄 | 2026-07~08 실사용 감수 기록 §11~§57 |
-| `docs/IMPLEMENTATION_LOG.md` | 1,117줄 | §58~§76 |
+| `docs/log-archive/2026-h2.md`(당시는 `docs/IMPLEMENTATION_LOG.md`) | 1,117줄 | §58~§76 |
 | `docs/KNOWN_LIMITATIONS.md` | — | 알려진 한계와 그 판단 근거 |
 | `tests/` | **444건** | 실패 사례를 회귀 테스트로 고정한 것 |
 

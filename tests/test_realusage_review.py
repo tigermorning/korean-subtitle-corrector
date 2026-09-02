@@ -388,7 +388,7 @@ def test_field_limited_former_term_not_flagged():
     """'원통'의 옛 용어 안내는 우리말샘에서 수학 분야 뜻에만 달려 있고 일상적인
     뜻('분하고 억울함')과는 무관하다.
 
-    2026-08-05(§73)부터는 분야 표시가 없는 옛 용어도 같은 원칙을 따른다 — 문서에
+    2026-08-05(docs/log-archive/2026-h2.md §73)부터는 분야 표시가 없는 옛 용어도 같은 원칙을 따른다 — 문서에
     그 전문 분야 뜻으로 읽을 근거가 없으면 묻지 않는다. **`간질 환자가 늘었다`처럼
     사람이 보기에 분명한 병명 문맥도 놓친다**(`환자`는 우리말샘 분야가 경제·역사이고
     `뇌전증` 뜻풀이에도 나오지 않는다). 근거가 없을 때 묻지 않는 쪽을 택한 대가이며,
@@ -401,7 +401,7 @@ def test_field_limited_former_term_not_flagged():
     _out3, flags3 = _run("간질 발작을 일으켰다")
     assert any("전 용어" in f.reason for f in flags3)
     # '원통'도 수학 분야 낱말과 함께 쓰이면 실제로 묻는다(2026-09-02,
-    # §92·BACKLOG 34번). '반지름'은 우리말샘 뜻이 수학 하나뿐이라
+    # docs/log-archive/2026-h2.md §92·BACKLOG 34번). '반지름'은 우리말샘 뜻이 수학 하나뿐이라
     # `specialist_only_fields()`가 신호로 인정한다 — 흔한 다의어('감독' 등)의
     # 무관한 뜻은 인정하지 않도록 문맥 쪽 분야 신호를 좁힌 뒤에는, 분야가 달린
     # 옛 용어를 무조건 억제하던 이전의 보수적 처리가 필요 없어졌다.
@@ -438,7 +438,7 @@ def test_historical_headword_is_not_join_evidence():
     assert out == "미림이도 오고 했는데 얼른 오라고 혀라"
     assert not any("오고했는데" in (f.suggested_fix or "") for f in flags)
     # 정당한 붙임은 그대로 유지된다('하다'는 붙임형이 표제어라 자동 교정을 유지한다.
-    # '선물 받았어'류는 2026-08-05에 제안으로 내렸다 — §75)
+    # '선물 받았어'류는 2026-08-05에 제안으로 내렸다 — docs/log-archive/2026-h2.md §75)
     assert _run("청소 했다")[0] == "청소했다"
 
 
@@ -528,7 +528,7 @@ def test_intensive_prefix_cheo():
     # 보조 용언 자리는 '치다'의 활용일 수 있어 자동 교정하지 않는다
     assert _run("박수를 쳐 줘")[0] == "박수를 쳐 줘"
     # '하다' 자리는 **제안도 하지 않는다** — 붙임형 '처하다'는 한자어 處하다뿐이라
-    # 대안이 못 된다(2026-08-04 사용자 지적, §64). 아래 전용 테스트 참고.
+    # 대안이 못 된다(2026-08-04 사용자 지적, docs/log-archive/2026-h2.md §64). 아래 전용 테스트 참고.
     text, flags = _run("이딴 거 너나 실컷 쳐 하든가")
     assert text == "이딴 거 너나 실컷 쳐 하든가"
     assert [f.suggested_fix for f in flags] == [""]
@@ -727,7 +727,7 @@ def test_adnominal_reading_interjection_is_flagged_not_auto_comma():
 
 
 def test_loanword_flag_carries_source_lookup_token():
-    """외래어 음차 플래그는 **원어 입력칸**을 띄울 토막을 함께 실어야 한다(§61).
+    """외래어 음차 플래그는 **원어 입력칸**을 띄울 토막을 함께 실어야 한다(docs/log-archive/2026-h2.md §61).
 
     음차의 정답은 원어가 무엇이냐로 갈린다 — '러스'는 원어가 Ruth면 '루스',
     Russ면 '러스'가 맞다(7강 123번). 화면이 그 자리에서 원어를 받아
@@ -742,11 +742,11 @@ def test_loanword_flag_carries_source_lookup_token():
 
 
 def test_cheo_hada_has_no_valid_joined_form():
-    """'쳐 하다'·'쳐하다'는 **둘 다 비표준**이고 대안도 없다(2026-08-04 사용자 지적, §64).
+    """'쳐 하다'·'쳐하다'는 **둘 다 비표준**이고 대안도 없다(2026-08-04 사용자 지적, docs/log-archive/2026-h2.md §64).
 
     전에는 `쳐 하든가`에 `처하든가`를 제안했다. 그 표제어는 한자어 處하다(어떤 형편에
     놓이다)여서 접두사 '처-'(마구/속되게) 용법이 아니다 — 붙임형이 표제어라는 사실만
-    근거로 삼은 긍정 근거 사고다(§58). 이제 제안 없이 사유만 알린다.
+    근거로 삼은 긍정 근거 사고다(docs/log-archive/2026-h2.md §58). 이제 제안 없이 사유만 알린다.
     """
     from subtitle_corrector.engine import check_intensive_prefix_cheo
 
@@ -768,7 +768,7 @@ def test_cheo_hada_has_no_valid_joined_form():
 
 
 def test_term_usage_headword_blocks_person_name_suggestion():
-    """`쉴러병`을 `실러병`으로 바꾸자고 제안하던 오류(2026-08-05 사용자 보고, §66).
+    """`쉴러병`을 `실러병`으로 바꾸자고 제안하던 오류(2026-08-05 사용자 보고, docs/log-archive/2026-h2.md §66).
 
     kornorms에 인명 Schiller의 오표기로 `쉴러(X)`가 등재돼 있어 `실러`를 제안했다.
     그런데 우리말샘에는 `쉴러^검사`·`쉴러^플랜`·`한트·쉴러·크리스찬-병`이 표준
@@ -796,7 +796,7 @@ def test_term_usage_headword_blocks_person_name_suggestion():
     assert _run("저는 초코렛을 좋아해요")[0] == "저는 초콜릿을 좋아해요"
 
 
-# --- 2026-08-05 원어 입력칸 실사용 감수(§68) ---
+# --- 2026-08-05 원어 입력칸 실사용 감수(docs/log-archive/2026-h2.md §68) ---
 
 def test_no_flag_when_another_rule_already_fixed_the_spelling():
     """제안이 원문과 똑같은 플래그를 내보내지 않는다.
@@ -820,7 +820,7 @@ def test_flag_wording_picks_the_right_particle_allomorph():
     assert "'루스'이" not in reason and "'러스'이" not in reason
 
 
-# --- 2026-08-05 사용자 보고 3건(§73) ---
+# --- 2026-08-05 사용자 보고 3건(docs/log-archive/2026-h2.md §73) ---
 
 def test_adnominal_modified_noun_is_not_joined_to_hada():
     """관형어가 꾸미는 명사 뒤의 '하'는 접미사가 아니라 동사라 띄어 쓴다.
@@ -978,6 +978,6 @@ def test_quantity_expression_not_merged_with_hada_via_particle_spacing():
     붙였는데, '번하다'가 우연히 표준국어대사전 표제어라서다("어두운 가운데 밝은
     빛이 비치어 조금 훤하다" — 원문의 '20번 하다'와 무관한 동형이의어, 원리3).
     `correct_action_noun_affix`(affix.py)에는 같은 수량 가드가 이미 있었지만,
-    실제로 이 사고를 낸 건 별개 경로인 이 함수였다(§60 부류)."""
+    실제로 이 사고를 낸 건 별개 경로인 이 함수였다(docs/log-archive/2026-h2.md §60 부류)."""
     assert _run("20번 했어")[0] == "20번 했어"
     assert _run("3세트 해라")[0] == "3세트 해라"

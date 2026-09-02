@@ -1,4 +1,4 @@
-"""사전 조회 실패를 어떻게 세고 어떻게 알리는가(§62).
+"""사전 조회 실패를 어떻게 세고 어떻게 알리는가(docs/log-archive/2026-h2.md §62).
 
 2026-08-04 사용자 보고: 우리말샘은 정상 접속되는데 "이 사전이 담당하는 교정은 이번
 결과에 반영되지 않았습니다"가 계속 떴다. 원인은 두 가지였다 — ① 순간적인 실패 한 건도
@@ -179,7 +179,7 @@ def test_breaker_reopens_when_the_api_recovers(monkeypatch):
 class TestHeadwordAbsorptionStillCounts:
     """headwords.py의 판정 함수는 근거가 없으면(조회 실패 포함) 안전한 기본값으로
     조용히 흡수한다(각 함수 docstring 참고) — 그 자체는 의도된 설계다. 실험 가설은
-    이것이다: 그 흡수가 §62의 전역 실패 집계(`failed_lookups()`)까지 지워 버리지는
+    이것이다: 그 흡수가 docs/log-archive/2026-h2.md §62의 전역 실패 집계(`failed_lookups()`)까지 지워 버리지는
     않는가? 지워 버리면, 리포트의 '[사전 조회 일부 실패]' 문구가 안 뜨는 채로
     판정만 기본값으로 굳는 진짜 사고가 된다. 이 파일의 기존 테스트는
     `search_opendict`/`search_stdict`를 직접 부르는 경로만 확인했고, headwords.py를
@@ -241,7 +241,7 @@ class TestDialectFailureNotConflatedWithNoMatch:
         assert clients.lookup_stats()["지역어 종합 정보"]["queries"] == ["정구지"]
 
     def test_실패는_캐시되지_않는다(self, monkeypatch):
-        """§79와 같은 자리 — 실패를 캐시하면 순간적인 장애 하나가 그 낱말의
+        """docs/log-archive/2026-h2.md §79와 같은 자리 — 실패를 캐시하면 순간적인 장애 하나가 그 낱말의
         판정을 프로세스가 사는 동안 계속 오염시킨다."""
         _responses(monkeypatch, [requests.ConnectionError("boom")])
         assert clients.search_dialect("정구지") == []
@@ -257,7 +257,7 @@ class TestDialectFailureNotConflatedWithNoMatch:
 
 
 class TestUserAgent:
-    """요청에 프로그램 이름을 밝히는지 고정한다(2026-09-01, §79).
+    """요청에 프로그램 이름을 밝히는지 고정한다(2026-09-01, docs/log-archive/2026-h2.md §79).
 
     국립국어원 어문 규범 서버가 도구 기본 User-Agent(`python-requests/…`)를 403으로
     막기 시작했다. 헤더가 빠지면 외래어 교정이 통째로 죽는데 겉으로는 "등재된 표기
@@ -287,7 +287,7 @@ class TestUserAgent:
 
 
 class TestLookupFailureIsNotAbsence:
-    """조회 실패를 '용례 없음'으로 단정하지 않는지 고정한다(2026-09-01, §79).
+    """조회 실패를 '용례 없음'으로 단정하지 않는지 고정한다(2026-09-01, docs/log-archive/2026-h2.md §79).
 
     `lookup_by_source()`는 서버 장애와 미등재를 똑같이 빈 목록으로 돌려준다. 화면이
     그 값만 보고 "등재된 외래어 용례가 없습니다"라고 빨간 글씨로 쓰면, 서버가 죽은 날

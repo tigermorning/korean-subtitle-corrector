@@ -225,7 +225,7 @@ class TestToStandardMode:
 
 
 class TestDialectTableEvidence:
-    """사투리 표 재구성(2026-08-05, `docs/BACKLOG.md` 25번, §71).
+    """사투리 표 재구성(2026-08-05, `docs/BACKLOG.md` 25번, docs/log-archive/2026-h2.md §71).
 
     §52 감사에서 표가 통째로 지워진 이유는 근거 없는 항목이 텍스트를 바꿨기
     때문이다. 다시 채운 표의 불변 조건 둘을 고정한다.

@@ -39,7 +39,7 @@ KRDICT_KEY = os.getenv("KRDICT_KEY")
 DIALECT_API_KEY = os.getenv("DIALECT_API_KEY")
 
 
-# 요청에 **이 프로그램이 무엇인지** 밝힌다(2026-09-01 추가, §79).
+# 요청에 **이 프로그램이 무엇인지** 밝힌다(2026-09-01 추가, docs/log-archive/2026-h2.md §79).
 #
 # 국립국어원 어문 규범 서버(`korean.go.kr/kornorms`)가 도구 기본 User-Agent를 막기
 # 시작했다. 실측: `python-requests/…` 403, `curl/…` 403, 이름을 밝힌 UA 200. 키를 빼고
@@ -98,7 +98,7 @@ def _empty_channel() -> dict:
 # 이름만 모으지 않고 건수를 세는 이유(2026-08-04 사용자 보고): 우리말샘은 정상인데
 # "이 사전이 담당하는 교정은 이번 결과에 반영되지 않았습니다"가 계속 떠서 연결이 끊긴
 # 줄 알았다. 실제로는 수천 건 중 한두 건이 순간적으로 실패한 것이었다 — **한 건 실패와
-# 전부 불통을 구분하지 못하는 집계**가 문구를 과장하게 만들었다(§62).
+# 전부 불통을 구분하지 못하는 집계**가 문구를 과장하게 만들었다(docs/log-archive/2026-h2.md §62).
 _LOOKUP_STATS: dict[str, dict] = {}
 
 
@@ -147,7 +147,7 @@ class _LookupFailed(Exception):
 
 
 # 재시도 대기(초). 국립국어원 API는 수천 건을 연속 조회하는 동안 한두 건이 순간적으로
-# 실패한다 — 재시도 없이 실패로 확정하면 리포트가 "사전 불통"을 알린다(§62).
+# 실패한다 — 재시도 없이 실패로 확정하면 리포트가 "사전 불통"을 알린다(docs/log-archive/2026-h2.md §62).
 _RETRY_WAITS = (0.4, 1.2)
 
 
@@ -350,7 +350,7 @@ def _fetch_kornorms_partial(keyword: str, rows: int = 30) -> list[dict]:
     `search_kornorms()`는 `searchEquals=equal`로 완전 일치만 찾는다. 원어(로마자)로
     찾을 때는 그것만으로는 부족하다 — 인명 용례의 원어 표기가 `Ruth, Babe`,
     `Rutherford, Ernest`처럼 성·이름을 함께 담고 있어 `Ruth` 완전 일치로는 0건이
-    나온다(2026-08-04 실측). 사용자가 원어를 입력해 확인하는 기능(§61)이 이걸 쓴다.
+    나온다(2026-08-04 실측). 사용자가 원어를 입력해 확인하는 기능(docs/log-archive/2026-h2.md §61)이 이걸 쓴다.
 
     부분 일치는 무관한 항목까지 함께 걸리므로(`Russ` -> `truss교`) **순위 판정은
     호출부가 한다** — `terms.lookup_by_source()` 참고.
@@ -484,7 +484,7 @@ def _fetch_dialect(query: str) -> list[dict]:
 
     `_LookupFailed`를 여기서 잡아 빈 리스트로 바꾸지 않는다 — lru_cache는
     예외를 캐시하지 않으므로, 여기서 흡수하면 순간적인 장애 하나가 그
-    낱말의 판정을 프로세스가 사는 동안 계속 오염시킨다(§79 사고와 같은
+    낱말의 판정을 프로세스가 사는 동안 계속 오염시킨다(docs/log-archive/2026-h2.md §79 사고와 같은
     자리, `_LookupFailed` 클래스 설명 참고).
     """
     if not DIALECT_API_KEY:
