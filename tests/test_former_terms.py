@@ -146,3 +146,17 @@ class TestFormerTermContextEvidence:
             "건강을 위해 매일 아침 물을 마시고 손을 들어 스트레칭을 한다",
         )
         assert [f for f in flags if f.suggested_fix == "양수"] == []
+
+    def test_field_tagged_source_stays_conservatively_suppressed(self):
+        """'정수' 수정을 검증하던 중 새 오탐지 둘을 더 찾았다(2026-09-02,
+        같은 실사용 감수) — '방안'(→모눈, 옛 용어 뜻의 분야=수학)과 '소재'
+        (→금육재, 분야=가톨릭)가 '감독'·'허가' 같은 흔한 낱말의 무관한 다른
+        뜻(가톨릭 직함 등) 때문에 오탐지됐다. `sense_fields()`가 표제어의
+        모든 뜻의 분야를 OR로 합치는 한 문맥 쪽에서도 같은 오염이 재발한다 —
+        BACKLOG 34번으로 남기고, 분야가 달린 옛 용어는 당분간 이 자리에서
+        보수적으로 계속 억제한다(과거 동작과 동일, 새 회귀 아님)."""
+        flags = self._former_flags(
+            "구청장은 주민 체감형 상생 방안을 마련해 감독 기관의 허가를 받았다",
+            "영화 감독은 다음 작품 소재를 찾고 있다고 밝혔다",
+        )
+        assert [f for f in flags if f.suggested_fix in ("모눈", "금육재")] == []

@@ -283,14 +283,25 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
 
     판정에 쓰는 신호는 둘이고, 둘 다 사전이 준 것이다.
 
-    ① **분야 계열**: 문서의 다른 낱말이 그 표준 용어와 같은 분야 계열로 표시돼 있는가
-       (`힘줄집`=의학, `근육`=생명 -> 같은 계열).
+    ① **분야 계열**: `surface`(예: '건초')의 "전 용어" 뜻 그 자체에 분야가 달려
+       있으면(`former_term_field`), 문서의 다른 낱말이 같은 분야 계열로 표시돼
+       있는가(`힘줄집`=의학, `근육`=생명 -> 같은 계열).
     ② **뜻풀이 낱말 겹침**: 문서의 낱말이 그 표준 용어의 뜻풀이에 나오는가
        (`뇌전증`의 뜻풀이에 '발작'이 있고, '환자가 간질 발작을 일으켰다'에도 있다).
 
     ②가 필요한 이유: `cat` 표시는 **전문어 뜻에만** 달려 있어 흔한 의학 낱말이
     빠진다 — `환자`는 경제·역사, `치료`·`곤충`은 아예 표시가 없다(실측). ①만 쓰면
     정작 병명 문맥을 놓친다.
+
+    **①은 `target`(교체 목표어) 전체가 아니라 `surface`의 "전 용어" 뜻 하나만
+    본다**(2026-09-02 수정, §90·BACKLOG 34번). 전에는 `sense_fields(target)`으로
+    목표어의 모든 뜻을 다 봤는데, 목표어가 여러 뜻을 가진 동형이의어면 "전 용어"
+    관계와 무관한 뜻의 분야까지 섞여 들어온다 — '정수'(精髓, 흔한 뜻)가
+    '양수'의 옛 용어로 오탐지된 사고의 원인이 이것이었다: '양수'는 뜻이
+    12개이고 그중 '양수(讓受, 권리를 넘겨받음)'가 법률 분야라, 구청장·예산
+    같은 낱말이 흔한 행정 문서 태반이 "법률 계열"로 걸렸다. `former_term_field`
+    (§원통 예시 — '원통'의 "전 용어" 뜻만 수학 분야)는 이미 그 특정 뜻 하나의
+    분야만 보므로, 여기서도 같은 함수를 재사용해 근본적으로 막는다.
 
     **이 판정은 플래그를 줄이는 방향으로만 쓴다.** 근거가 없으면 조용히 넘어갈 뿐
     텍스트를 바꾸지 않으므로, 판정이 틀려도 잃는 것은 제안 하나다(자동 교정에는
@@ -299,9 +310,9 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
     context_lemmas = _content_lemmas(context) - {surface}
     if not context_lemmas:
         return False
-    fields = sense_fields(target)
-    if fields:
-        allowed = set().union(*(_field_group(f) for f in fields))
+    source_field = former_term_field(surface)
+    if source_field:
+        allowed = _field_group(source_field)
         for lemma in context_lemmas:
             if sense_fields(lemma) & allowed:
                 return True
@@ -394,14 +405,20 @@ def correct_former_terms(
                     # (`건초는 베어서 말린 풀이다`, 2026-08-05 사용자 보고).
                     pass
                 elif former_term_field(surface):
-                    # 옛 용어 안내가 **특정 전문 분야 뜻**에만 달려 있고 그 밖의 일반
-                    # 뜻도 있는 경우다(2026-08-02 실사용: '원통'의 안내는 우리말샘에서
-                    # cat='수학'인 뜻, 즉 '원기둥'의 옛 용어에만 달려 있고 '분하고
-                    # 억울함'이라는 일상적인 뜻과는 무관하다). 일반 문장에서 그 분야
-                    # 용어로 쓰였다는 근거가 없으므로 플래그하지 않는다.
-                    #
-                    # 분야 표시가 없는 옛 용어(예: '간질' — 우리말샘 cat 없음)는
-                    # 지금까지처럼 플래그한다. 실측으로 두 사례가 이 신호로 갈렸다.
+                    # 옛 용어 뜻에 분야가 달려 있으면(예: '원통'→cat='수학') 여기서는
+                    # 항상 묻지 않는다 — **의도적으로 보수적인 자리다.** 2026-09-02에
+                    # `_specialist_reading_supported`의 분야 신호①을 `sense_fields
+                    # (target)`(교체어의 모든 뜻)에서 `former_term_field(surface)`
+                    # (원본어의 그 뜻 하나)로 좁혀 '정수'→'양수' 오탐지(§90)를 고치려다,
+                    # **문맥 쪽(`sense_fields(lemma)`)의 다의어 오염**을 새로 발견했다 —
+                    # '방안'(→모눈, cat=수학)·'소재'(→금육재, cat=가톨릭)가 '감독'·
+                    # '허가' 같은 흔한 낱말의 무관한 다른 뜻(가톨릭 직함 등) 때문에
+                    # 오탐지됐다. `sense_fields()`가 표제어의 모든 뜻의 분야를 OR로
+                    # 합치는 한 구조적으로 재발한다(BACKLOG 34번 — 문맥 쪽까지 고치는
+                    # 더 큰 작업으로 남겨 둠). 그래서 분야가 달린 경우는 이 자리에서
+                    # 통째로 억제한다 — ②(뜻풀이 낱말 겹침)만으로 잡히는 경우는
+                    # 여전히 아래에서 플래그된다('정수'가 그 예: `former_term_field
+                    # ('정수')`가 None이라 이 분기 자체를 안 타고 ②로 정상 처리된다).
                     pass
                 elif surface not in flagged:
                     flagged.add(surface)
