@@ -2052,3 +2052,39 @@ former_term_field(surface): pass`(신호①이 True여도 항상 뒤집던 방�
 - 원본 뉴스 코퍼스 재실행 5회차: "정수"·"소재" 오탐지 사라짐, "방안"만
   남음(위에서 진단, BACKLOG 34번에 기록).
 - `tools/check_names.py` 0건(검사 함수 277개).
+
+## 94. BACKLOG 34번 마무리 — `_FIELD_GROUPS` 계열 묶음 제거 (2026-09-02)
+
+사용자 지시로 §93이 진단만 하고 남겨 둔 세 번째 잔불에 착수했다.
+
+### 검증 — 계열 묶음이 실제로 필요한 테스트가 있는가
+
+착수 전에 `_field_group()`의 원래 동기부터 확인했다. 주석은 "`힘줄집`=의학,
+`근육`=생명이 같은 계열"을 예로 들었는데, 실제 회귀 테스트
+(`test_medical_context_is_flagged`)는 '근육'이 아니라 **'힘줄'**을 쓰고
+있었다 — `_exact_senses()`로 실측하니 `힘줄`의 분야가 이미 정확히 '의학'
+이었다(힘줄집과 동일, 클러스터 확장이 필요 없음). '원통'↔'반지름'
+(둘 다 수학)도 마찬가지로 정확히 일치했다. **기존 테스트 중 계열 확장이
+실제로 있어야 통과하는 경우는 하나도 없었다** — `_field_group()`은 한
+번도 검증된 적 없는 가정이었다.
+
+### 수정
+
+`_FIELD_GROUPS`·`_field_group()`을 지우고, 신호①의 문맥 검사를
+`specialist_only_fields(lemma) & _field_group(source_field)`(계열 겹침)
+에서 `source_field in specialist_only_fields(lemma)`(정확히 같은 분야)로
+바꿨다. '방안'(→모눈, 분야=수학)이 '플라스틱'·'활성'(둘 다 화학 전용
+낱말)이라는 **다른** 분야 때문에 오탐지되던 것이 사라졌다.
+
+### 검증
+
+- `tests/test_former_terms.py` 19/19(새 회귀 테스트
+  `test_field_cluster_does_not_admit_unrelated_science_fields` 추가) +
+  `tests/test_realusage_review.py` 79/79('힘줄'·'반지름' 두 정답 사례가
+  계열 없이도 그대로 통과함을 재확인) = 98/98.
+- held-out 41/41(회귀 없음).
+- 원본 뉴스 코퍼스 6회차 재실행: "전 용어" 오탐지 0건 — "정수"·"소재"·
+  "방안" 전부 사라짐.
+- `tools/check_names.py`·`tools/check_public_api.py` 0건.
+
+BACKLOG 34번 **완료로 종결**.

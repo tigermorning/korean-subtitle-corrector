@@ -172,3 +172,16 @@ class TestFormerTermContextEvidence:
             "축제는 다음 달 3일 시작된다",
         )
         assert [f for f in flags if f.suggested_fix == "금육재"] == []
+
+    def test_field_cluster_does_not_admit_unrelated_science_fields(self):
+        """세 번째 잔불 — '방안'(→모눈, 분야=수학)이 무관한 '플라스틱'·'활성'
+        (둘 다 화학 전용 낱말, 일반 뜻 없음) 때문에 오탐지됐다(2026-09-02
+        실사용 감수). `_field_group()`이 {수학·물리·화학·천문·지구}를 한
+        계열로 묶어 근거로 인정한 탓이었다 — 이 계열 묶음이 실제로 필요한
+        기존 테스트는 하나도 없어서(§93·§94 확인) 안전하게 지우고 정확히
+        같은 분야만 근거로 인정하게 좁혔다(§94)."""
+        flags = self._former_flags(
+            "구청장은 주민 체감형 상생 방안을 마련했다",
+            "일회용 플라스틱 사용을 줄이고 활성 물질을 연구한다",
+        )
+        assert [f for f in flags if f.suggested_fix == "모눈"] == []

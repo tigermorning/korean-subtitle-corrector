@@ -223,24 +223,6 @@ def correct_discriminatory_terms(text: str) -> tuple[str, list[str]]:
     return _apply_replacements(text, DISCRIMINATORY_TERMS)
 
 
-# 전문 분야 표시(우리말샘 `cat`)를 계열로 묶은 것. 같은 계열의 낱말이 문서에 있으면
-# 그 분야 뜻으로 읽을 근거가 된다. 라벨이 세분돼 있어 정확히 같은 이름만 찾으면
-# 놓친다 — `힘줄집`은 '의학'인데 `근육`은 '생명'이다(실측).
-_FIELD_GROUPS = (
-    frozenset({"의학", "생명", "약학", "한의", "수의", "보건 일반", "심리"}),
-    frozenset({"식물", "동물", "농업", "임업", "수산업"}),
-    frozenset({"수학", "물리", "화학", "천문", "지구"}),
-    frozenset({"법률", "경제", "정치", "행정"}),
-)
-
-
-def _field_group(field: str) -> frozenset:
-    for group in _FIELD_GROUPS:
-        if field in group:
-            return group
-    return frozenset({field})
-
-
 # 뜻풀이에서 문맥 대조에 쓸 내용어 태그. 조사·어미는 어느 문장에나 있어 근거가 안 된다.
 _DEFINITION_CONTENT_TAGS = ("NNG", "NNP", "VV", "VA")
 
@@ -283,10 +265,17 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
 
     판정에 쓰는 신호는 둘이고, 둘 다 사전이 준 것이다.
 
-    ① **분야 계열**: `surface`(예: '건초')의 "전 용어" 뜻 그 자체에 분야가 달려
-       있으면(`former_term_field`), 문서의 다른 낱말이 **오직 그 분야로만** 쓰이는
-       낱말인지(`specialist_only_fields`) 본다(`힘줄집`=의학, `반지름`=수학처럼
-       일반 뜻이 아예 없는 낱말만 근거로 인정).
+    ① **분야 일치**: `surface`(예: '건초')의 "전 용어" 뜻 그 자체에 분야가 달려
+       있으면(`former_term_field`), 문서의 다른 낱말이 **정확히 같은 분야로만**
+       쓰이는 낱말인지(`specialist_only_fields`) 본다(`힘줄집`=의학, `반지름`=
+       수학처럼 일반 뜻이 아예 없는 낱말만 근거로 인정). **계열(비슷한 분야를
+       묶은 그룹)로 넓혀 보지 않는다**(2026-09-02, §94·BACKLOG 34번) — 예전엔
+       {수학·물리·화학·천문·지구}를 한 계열로 묶어 근거로 인정했는데, 그 폭이
+       근거 없이 넓어서 '방안'(→모눈, 수학)이 무관한 '플라스틱'·'활성'(둘 다
+       화학 전용 낱말) 때문에 오탐지됐다. 이 계열 묶음이 실제로 필요한
+       회귀 테스트는 하나도 없었다(기존 테스트는 전부 `힘줄`=의학·`반지름`=
+       수학처럼 정확히 같은 분야로 이미 통과하고 있었다) — 그래서 안전하게
+       지웠다.
     ② **뜻풀이 낱말 겹침**: 문서의 낱말이 그 표준 용어의 뜻풀이에 나오는가
        (`뇌전증`의 뜻풀이에 '발작'이 있고, '환자가 간질 발작을 일으켰다'에도 있다).
 
@@ -313,9 +302,8 @@ def _specialist_reading_supported(target: str, context: str, surface: str) -> bo
         return False
     source_field = former_term_field(surface)
     if source_field:
-        allowed = _field_group(source_field)
         for lemma in context_lemmas:
-            if specialist_only_fields(lemma) & allowed:
+            if source_field in specialist_only_fields(lemma):
                 return True
     definition_lemmas: set[str] = set()
     for definition in headword_definitions(target):
