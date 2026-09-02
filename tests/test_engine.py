@@ -17,6 +17,7 @@
 from subtitle_corrector.engine import (
     SubtitleEntry,
     _aux_verb_spacing,
+    check_adjectival_demonym,
     check_ampersand_usage,
     check_spacing,
     check_spelling,
@@ -31,6 +32,7 @@ from subtitle_corrector.engine import (
     correct_compound_spacing,
     correct_discriminatory_terms,
     correct_gumeon_ending,
+    correct_loanword_forbidden_batchim,
     correct_loanwords,
     correct_nonstandard_terms,
     correct_ordinal_prefix_je,
@@ -482,6 +484,40 @@ class TestLoanwordFix:
         assert correct_loanwords("나는 집에 간다") == ("나는 집에 간다", [], [], [])
 
 
+class TestForbiddenLoanwordBatchim:
+    """외래어 표기법 제3항(받침은 ㄱㄴㄹㅁㅂㅅㅇ만)에 어긋나는 음절('숖'·
+    '켙')을 고친다(작업자자료 w18·w19, 2026-09-02). kiwi가 미등록 낱말을
+    엉뚱하게 쪼개(실측: '디스켙'->'디스'+'하게'+'ᇀ') 토큰 기반 조회가 못
+    닿는 자리라 문자 단위로 접근한다 — word_exists()로 이 음절이 어떤
+    표제어에도 안 쓰임을 확인해 안전을 확보했다."""
+
+    def test_coffee_shop_batchim_fixed(self):
+        assert correct_loanword_forbidden_batchim("커피숖에서 만나자") == (
+            "커피숍에서 만나자",
+            ["숖 -> 숍"],
+        )
+
+    def test_diskette_batchim_fixed(self):
+        assert correct_loanword_forbidden_batchim("디스켙 좀 줘") == (
+            "디스켓 좀 줘",
+            ["켙 -> 켓"],
+        )
+
+    def test_already_correct_untouched(self):
+        assert correct_loanword_forbidden_batchim("커피숍에서 만나자") == (
+            "커피숍에서 만나자",
+            [],
+        )
+
+    def test_pipeline_produces_correct_downstream_tokenization(self):
+        """받침을 먼저 고쳐야 그 뒤 규칙들이 정상적인 낱말로 kiwi를
+        태울 수 있다 — 파이프라인 맨 앞에 놓은 이유."""
+        entries, _flags, _log = correct_entries(
+            [SubtitleEntry(index=1, start="00:00:00,000", end="00:00:01,000", text="디스켙 좀 줘")]
+        )
+        assert entries[0].text == "디스켓 좀 줘"
+
+
 class TestPalatalGlideLoanword:
     """「외래어 표기법」 제3장 제7절(중국어의 표기) 제2항 — ㅈ·ㅉ·ㅊ 뒤에는
     반모음(ㅑㅖㅛㅠ)을 적지 않는다. kornorms에 등재된 영어·독일어·프랑스어·
@@ -517,6 +553,32 @@ class TestPalatalGlideLoanword:
         correct_loanwords()가 자동/확인 플래그로 먼저 처리한다 — 이 규칙은
         관여하지 않는다(중복 플래그 방지)."""
         assert check_palatal_glide_loanword(1, "메이쟈 리그를 봤다") is None
+
+
+class TestAdjectivalDemonym:
+    """영어식 형용사형 국명(-an/-ian)을 국명으로 옮길지 확인 플래그한다
+    (작업자자료 w24·w25, 2026-09-02) — Persian Architecture 페르시안
+    건축(x)/페르시아 건축(o). word_exists()로 확인: '페르시안'·'멕시칸'은
+    표제어 없음, 국명은 있음. 고유명사라 자동 반영하지 않는다."""
+
+    def test_persian_is_flagged(self):
+        flag = check_adjectival_demonym(1, "페르시안 건축이 아름답다")
+        assert flag is not None
+        assert flag.suggested_fix == "페르시아 건축이 아름답다"
+
+    def test_mexican_is_flagged(self):
+        flag = check_adjectival_demonym(1, "멕시칸 음식을 좋아해")
+        assert flag is not None
+        assert flag.suggested_fix == "멕시코 음식을 좋아해"
+
+    def test_country_noun_form_untouched(self):
+        assert check_adjectival_demonym(1, "페르시아 건축이 아름답다") is None
+
+    def test_established_proper_noun_compound_untouched(self):
+        """'아시안'은 목록에서 아예 뺐다 — '아시안게임'·'아시안컵'이 그
+        자체로 사전 표제어(대회 이름)라 예외가 실재하기 때문이다."""
+        assert check_adjectival_demonym(1, "아시안게임이 열렸다") is None
+        assert check_adjectival_demonym(1, "아시안 게임이 열렸다") is None
 
 
 class TestNonstandardTermReplacement:

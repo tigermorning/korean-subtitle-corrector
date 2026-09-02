@@ -1,7 +1,7 @@
 """외래어 표기(kornorms 확정 표기). 일반 용어는 자동 반영, 고유명사는 플래그만 남긴다.
 """
 
-from ..dictionary import is_standard_word, loanword_fix
+from ..dictionary import is_standard_word, loanword_fix, word_exists
 from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
 from .kiwi_adapter import _has_reading
@@ -92,6 +92,41 @@ def correct_loanwords(
     )
 
 
+# 외래어 표기법 기본 원칙 제3항(받침은 ㄱㄴㄹㅁㅂㅅㅇ만)에 어긋나는 음절 —
+# kiwi가 미등록 낱말('디스켙' 등)을 엉뚱한 형태소로 쪼개 버려(실측: '디스'+
+# '하게'+'ᇀ') 토큰 기반 조회(loanword_fix)가 그 자리에 아예 닿지 못한다
+# (작업자자료 w18·w19, 2026-09-02). kornorms에도 '커피숖'·'숖'·'켙' 항목이
+# 없어(단어 자체가 아니라 원칙 위반이라 개별 오표기로 심의되지 않음) 동적
+# 조회로 잡을 방법이 없다 — `docs/BACKLOG.md` 31번이 이미 정리한 "외래어
+# 판별기가 없다" 장벽과 같은 부류다.
+#
+# **다만 이 음절들은 word_exists()로 확인(2026-09-02)해 보니 어떤 표제어에도
+# 전혀 쓰이지 않는다** — ㅍ 받침은 '잎'·'높다'처럼 고유어에 실재하지만,
+# '소'+ㅍ('숖')·'케'+ㅌ('켙') 조합 자체는 국립국어원 사전 어디에도 없다.
+# 그래서 "이 낱말이 외래어인가"를 가릴 필요 없이(BACKLOG 31의 장벽을
+# 비켜 간다) 이 음절이 등장하면 항상 오표기로 보고 토큰 경계와 무관하게
+# 문자 그대로 바꾼다 — kiwi 토큰화가 망가지는 자리라 토큰 기반 규칙으로는
+# 애초에 닿을 수 없기 때문이기도 하다. 새 음절을 추가하려면 반드시
+# word_exists()로 "어떤 표제어에도 안 쓰인다"를 먼저 확인할 것.
+_FORBIDDEN_LOANWORD_BATCHIM = {"숖": "숍", "켙": "켓"}
+
+
+def correct_loanword_forbidden_batchim(text: str) -> tuple[str, list[str]]:
+    """외래어 표기에 쓸 수 없는 받침 음절을 고친다('커피숖' -> '커피숍',
+    '디스켙' -> '디스켓'). `_FORBIDDEN_LOANWORD_BATCHIM`의 음절은 국립국어원
+    사전 어디에도 쓰이지 않아(word_exists 확인) 등장하면 항상 오표기다 —
+    토큰 경계를 보지 않고 문자 그대로 치환한다(kiwi가 이런 미등록 낱말을
+    엉뚱하게 쪼개 토큰 기반 조회가 닿지 못하는 자리라 문자 단위로 접근)."""
+    corrected = text
+    edits = []
+    for wrong, right in _FORBIDDEN_LOANWORD_BATCHIM.items():
+        if wrong not in corrected:
+            continue
+        edits.append(f"{wrong} -> {right}")
+        corrected = corrected.replace(wrong, right)
+    return corrected, edits
+
+
 def check_colloquial_loanword(index: int, text: str) -> FlagItem | None:
     """'빤스'처럼 외래어 표기 교정 대상이지만 된소리 구어형('빤쓰')이 사전
     표제어로 있어 화자의 말투일 수 있는 경우, 자동 교정하지 않고 구어형과
@@ -168,6 +203,48 @@ def check_palatal_glide_loanword(index: int, text: str) -> FlagItem | None:
                 f"'{suggested_word}'가 맞는 표기인지 확인하세요."
             ),
             suggested_fix=text[: t.start] + suggested_word + text[t.start + t.len :],
+        )
+    return None
+
+
+# 영어식 형용사형 국명·주명(-an/-ian)을 발음 그대로 옮기지 않고 국명(명사)으로
+# 옮긴다(작업자 자료 표기_맞춤법_번역.txt 303~305행): Persian Architecture
+# 페르시안 건축(x)/페르시아 건축(o), Mexican Food 멕시칸 음식(x)/멕시코
+# 음식(o). word_exists()로 확인(2026-09-02): '페르시안'·'멕시칸' 둘 다
+# 표제어 없음, '페르시아'·'멕시코'는 표제어 있음 — 형용사형 자체가 사전에
+# 없다는 사실이 근거다. **'아시안'은 이 목록에서 뺐다** — 같은 방식으로
+# 확인해 보니 '아시안'도 단독으로는 표제어가 없지만, '아시안게임'·
+# '아시안컵'은 그 자체로 표제어(고유명사, 대회 이름)라 예외가 실재한다.
+# 다음 낱말과 결합해 이미 사전 표제어를 이루면(대회 이름 등 고정된 고유
+# 명사) 건드리지 않는다 — 아래서 그 결합 여부를 매번 확인한다.
+_ADJECTIVAL_DEMONYM_TO_COUNTRY = {"페르시안": "페르시아", "멕시칸": "멕시코"}
+
+
+def check_adjectival_demonym(index: int, text: str) -> FlagItem | None:
+    """영어식 형용사형 국명(페르시안·멕시칸 등)을 국명으로 바꿀지 확인
+    플래그한다. 고유명사(국명)로 자동 반영하지 않는 기존 정책과 같은
+    이유로 텍스트는 바꾸지 않는다 — 뒷말과 결합해 이미 고정된 고유명사를
+    이루는 예외가 있을 수 있어서다(예: '아시안게임')."""
+    tokens = _kiwi.tokenize(text)
+    for i, t in enumerate(tokens):
+        country = _ADJECTIVAL_DEMONYM_TO_COUNTRY.get(t.form)
+        if not country or t.tag not in _LOANWORD_TAGS:
+            continue
+        if i + 1 < len(tokens):
+            nxt = tokens[i + 1]
+            if nxt.tag in ("NNG", "NNP") and word_exists(t.form + nxt.form):
+                continue  # 이미 사전에 오른 고정 고유명사 결합 — 건드리지 않는다
+        suggested = text[: t.start] + country + text[t.start + t.len :]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{t.form}'{_josa(t.form, '은')} 영어 형용사형을 발음 그대로 옮긴 표기입니다 — "
+                f"외래어 표기 관행상 국명은 형용사형이 아니라 나라 이름 '{country}'로 옮깁니다"
+                f"(예: Persian Architecture → 페르시아 건축). 다만 뒷말과 결합해 이미 굳어진 "
+                "고유명사(대회 이름 등)일 수 있어 자동 반영하지 않습니다 — 확인해 주세요."
+            ),
+            suggested_fix=suggested,
         )
     return None
 

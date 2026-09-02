@@ -199,3 +199,39 @@ def test_no_flag_when_already_spaced_or_no_adnominal():
     assert _flag("이런 말 했어") is None  # 이미 띄어 써 있다
     assert _flag("잘 말했어") is None  # 부사 수식은 붙임이 맞다
     assert _flag("공부했어") is None  # 관형어가 없다
+
+
+class TestNounPhraseHadaDetach:
+    """명사구(캐럿 표기, 예: '초과^근무') 뒤에 접사처럼 바로 붙은 '하다'를
+    띄운다(작업자자료 w05·w06, 2026-09-02). 합성어(하이픈 표기, 통행-금지)
+    뒤의 '하다'는 접사로 붙을 수 있어 대상이 아니다."""
+
+    def _detach(self, text):
+        from subtitle_corrector.engine import correct_noun_phrase_hada_detach
+
+        return correct_noun_phrase_hada_detach(text)[0]
+
+    def test_fully_joined_noun_phrase_gets_hada_detached(self):
+        assert self._detach("우리는 매일 초과근무했다") == "우리는 매일 초과근무 했다"
+
+    def test_spaced_noun_pair_still_gets_hada_detached(self):
+        """두 명사 사이 띄어쓰기는 건드리지 않는다 — 명사구는 붙여도
+        띄어도 둘 다 사전이 인정하는 형태라 정답이 갈리지 않는다."""
+        assert self._detach("우리는 매일 초과 근무했다") == "우리는 매일 초과 근무 했다"
+
+    def test_already_detached_untouched(self):
+        assert self._detach("우리는 매일 초과근무 했다") == "우리는 매일 초과근무 했다"
+        assert self._detach("우리는 매일 초과 근무 했다") == "우리는 매일 초과 근무 했다"
+
+    def test_registered_compound_word_untouched(self):
+        """'통행금지'는 합성어(하이픈 표기)라 '하다'가 접사로 붙을 수
+        있다 — 이 규칙의 대상이 아니다(기존 접사 붙임 정책이 따로 다룸)."""
+        assert self._detach("고작 이걸로 통행금지하는 나라가 어딨냐") == (
+            "고작 이걸로 통행금지하는 나라가 어딨냐"
+        )
+
+    def test_unregistered_noun_pair_untouched(self):
+        """사전에 아예 없는 명사쌍('국어공부')은 이 규칙의 근거
+        (compound_status == '명사구')가 없어 건드리지 않는다 — 이 조합은
+        별도 판단이 필요한 항목으로 BACKLOG에 남아 있다."""
+        assert self._detach("나는 어제 국어공부했어") == "나는 어제 국어공부했어"

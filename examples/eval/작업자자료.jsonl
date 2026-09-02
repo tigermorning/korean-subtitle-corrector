@@ -20,8 +20,8 @@
 {"id": "w21", "category": "외래어", "input": "까페에서 기다릴게", "gold": "카페에서 기다릴게", "basis": "작업자 자료 151행 — 된소리 금지", "verify": true}
 {"id": "w22", "category": "외래어", "input": "피애노를 배웠어", "gold": "피아노를 배웠어", "basis": "작업자 자료 153행 — 관용 표기 인정", "verify": true}
 {"id": "w23", "category": "외래어", "input": "쉬림프 요리를 시켰어", "gold": "슈림프 요리를 시켰어", "basis": "작업자 자료 252행 — shrimp '쉬림프'(x) '슈림프'(o). 라벨 조회불가(2026-09-01): kornorms·표준국어대사전·우리말샘 어디에도 두 표기 다 없음 — 영어 표기 세칙([ʃ]에 '쉬'를 쓰지 않는다, BACKLOG 31번)이 코드로 없어 확인할 근거가 없다. 31번이 선행돼야 한다.", "verify": true}
-{"id": "w24", "category": "외래어-형용사국명", "input": "페르시안 건축이 아름답다", "gold": "페르시아 건축이 아름답다", "basis": "작업자 자료 303행 — 형용사형 국명은 국명으로 옮긴다", "verify": true}
-{"id": "w25", "category": "외래어-형용사국명", "input": "멕시칸 음식을 좋아해", "gold": "멕시코 음식을 좋아해", "basis": "작업자 자료 305행", "verify": true}
+{"id": "w24", "category": "외래어-형용사국명", "input": "페르시안 건축이 아름답다", "gold": "페르시안 건축이 아름답다", "basis": "작업자 자료 303행 — 형용사형 국명은 국명으로 옮긴다. 국명(고유명사)이라 correct_loanwords()의 고유명사 정책과 같은 이유로 자동 반영하지 않고 확인 플래그만 낸다(2026-09-02 구현, check_adjectival_demonym) — 텍스트 무변경 + 제안 플래그가 정상. suggested_fix='페르시아 건축이 아름답다'", "verify": true, "expect_flag": true}
+{"id": "w25", "category": "외래어-형용사국명", "input": "멕시칸 음식을 좋아해", "gold": "멕시칸 음식을 좋아해", "basis": "작업자 자료 305행. 국명(고유명사)이라 확인 플래그만 낸다(2026-09-02 구현, check_adjectival_demonym) — 텍스트 무변경 + 제안 플래그가 정상. suggested_fix='멕시코 음식을 좋아해'", "verify": true, "expect_flag": true}
 {"id": "w26", "category": "외래어-관용", "input": "매카서 장군이 왔다", "gold": "맥아더 장군이 왔다", "basis": "작업자 자료 312행 — 관용 표기 우선", "verify": true}
 {"id": "w27", "category": "외래어-관용", "input": "폴크스바겐을 몰아", "gold": "폭스바겐을 몰아", "basis": "작업자 자료 328행 — 상표명은 굳어진 표기를 따른다. 라벨 조회불가(2026-09-01): kornorms에 두 표기 다 없음(상표명은 심의 대상에서 아예 빠져 있는 것으로 보임) — 확인 근거를 못 찾았다.", "verify": true}
 {"id": "w28", "category": "외래어-관용", "input": "포르쉐가 지나갔다", "gold": "포르셰가 지나갔다", "basis": "라벨 정정(2026-09-01) — 원래 입력/정답이 뒤바뀌어 있었다. kornorms 실조회: korean_mark='포르셰', mean 필드에 '×포르쉐'로 명시(포르쉐가 오표기). Porsche -> 포르셰가 국립국어원 확정 표기다.", "verify": true}

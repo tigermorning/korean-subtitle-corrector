@@ -33,6 +33,7 @@ if sys.platform == "win32":
 from subtitle_corrector.engine import (  # noqa: E402
     correct_action_noun_affix,
     correct_adnominal_noun_verb_split,
+    correct_noun_phrase_hada_detach,
     correct_always_wrong,
     correct_aux_verb_spacing,
     correct_colon_spacing,
@@ -45,6 +46,7 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_gumeon_ending,
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
+    correct_loanword_forbidden_batchim,
     correct_loanwords,
     correct_bun_spacing,
     correct_duration_cha_spacing,
@@ -110,6 +112,12 @@ RULES = [
         "'명사+하다'가 표제어면 동작성으로 보고 접사를 붙인다. '되다'는 '명사되다'가 표제어일 때 붙인다",
     ),
     (
+        "명사구하다분리",
+        _plain(correct_noun_phrase_hada_detach),
+        "규범",
+        "compound_status가 '명사구'(캐럿 표기)면 '하다'가 접사로 붙을 근거가 없어 항상 동사로 띄운다. 두 명사 사이 자체는 안 건드림 — 붙여도/띄어도 둘 다 사전이 인정(2026-09-02, 작업자자료3 w05·w06)",
+    ),
+    (
         "님씨띄어쓰기",
         _plain(correct_honorific_dependent_noun_spacing),
         "태그",
@@ -156,6 +164,12 @@ RULES = [
         _plain(correct_gumeon_ending),
         "태그",
         "'구먼'(표준, '-군'의 본말)을 잘못 적은 '구만'을 고친다. kiwi가 그 자리를 종결 어미(EF)로 태깅했는지만 본다 — 지명·어근 뜻이면 NNG/NNP로 갈린다(2026-09-02, 작업자자료3)",
+    ),
+    (
+        "외래어금지받침",
+        _plain(correct_loanword_forbidden_batchim),
+        "부정",
+        "외래어 표기법 제3항(받침 ㄱㄴㄹㅁㅂㅅㅇ만) 위반 음절('숖'·'켙')만 문자 치환. word_exists()로 '어떤 표제어에도 안 쓰인다'를 확인한 음절만 등재(2026-09-02, 작업자자료3)",
     ),
     (
         "쌍점띄어쓰기",

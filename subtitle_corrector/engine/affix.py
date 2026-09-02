@@ -1,7 +1,7 @@
 """접사 붙임 규칙(하다/시키다/당하다/받다) 및 관형어+명사 분리.
 """
 
-from ..dictionary import only_sino_korean_headword, sino_korean_origin, word_exists
+from ..dictionary import compound_status, only_sino_korean_headword, sino_korean_origin, word_exists
 from ..report import FlagItem
 from .text_utils import _josa, _localized_change
 from .kiwi_adapter import _QUANTITY_LEAD_TAGS, _kiwi
@@ -133,6 +133,50 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
     corrected = text
     for gap_start, gap_end in sorted(cuts, reverse=True):
         corrected = corrected[:gap_start] + corrected[gap_end:]
+    return corrected, [_localized_change(text, corrected)]
+
+
+def correct_noun_phrase_hada_detach(text: str) -> tuple[str, list[str]]:
+    """명사구(캐럿 표기, 예: '초과^근무')로 등재된 명사 두 개 뒤에 '하다'가
+    접사처럼 바로 붙어 있으면 띄운다('초과근무했다' -> '초과근무 했다',
+    '초과 근무했다' -> '초과 근무 했다' — 작업자자료 w05·w06,
+    2026-09-02).
+
+    표준국어대사전·우리말샘은 두 명사가 합쳐 **하나의 등재어**를 이루면
+    하이픈으로(합성어, '통행-금지'), 등재는 됐지만 각자 품사를 지닌 채
+    묶인 구(句)이면 캐럿으로(명사구, '초과^근무') 적어 구분한다
+    (`dictionary.compound_status`). 합성어는 '통행금지하다'처럼 '하다'가
+    그 전체에 접사로 곧장 붙을 수 있지만, 명사구는 두 낱말이 여전히
+    따로 존재하는 구일 뿐이라 '하다'가 그 전체에 접사로 붙을 근거가
+    없다 — 그래서 명사구 뒤의 '하다'는 항상 동사로 띄어 쓴다.
+
+    두 명사 사이 자체는 건드리지 않는다 — 명사구는 붙여도('초과근무')
+    띄어도('초과 근무') 둘 다 사전이 인정하는 형태라 정답이 하나로
+    갈리지 않는다(제50항 허용/원칙, `join_term_phrases`가 다루는 것과
+    같은 선택 폭). 이 함수는 오직 '하다'가 그 뒤에 접사로 잘못 붙은
+    자리만 정리한다.
+
+    반환값: (교정된 텍스트, 적용 로그)."""
+    tokens = _kiwi.tokenize(text)
+    cuts = []  # (하다 시작 위치) — 여기에 공백을 넣는다
+    for i in range(2, len(tokens)):
+        hae, noun2, noun1 = tokens[i], tokens[i - 1], tokens[i - 2]
+        if hae.tag != "XSV" or hae.form != "하":
+            continue
+        if noun2.tag not in ("NNG", "NNP") or noun1.tag not in ("NNG", "NNP"):
+            continue
+        if noun2.start + noun2.len != hae.start:
+            continue  # 명사와 '하'가 이미 떨어져 있으면 대상 아님
+        if text[noun1.start + noun1.len : noun2.start] not in (" ", ""):
+            continue  # 두 명사 사이에 다른 말이 끼어 있으면 이 패턴이 아님
+        if compound_status(noun1.form + noun2.form) != "명사구":
+            continue
+        cuts.append(hae.start)
+    if not cuts:
+        return text, []
+    corrected = text
+    for pos in sorted(set(cuts), reverse=True):
+        corrected = corrected[:pos] + " " + corrected[pos:]
     return corrected, [_localized_change(text, corrected)]
 
 

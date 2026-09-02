@@ -37,6 +37,7 @@ from .affix import (
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
     correct_intensive_prefix_cheo,
+    correct_noun_phrase_hada_detach,
     correct_ordinal_prefix_je,
 )
 from .punctuation import (
@@ -55,7 +56,13 @@ from .subtitle_rules import (
     correct_subtitle_internal_period,
     correct_subtitle_quotes,
 )
-from .loanwords import check_colloquial_loanword, check_palatal_glide_loanword, correct_loanwords
+from .loanwords import (
+    check_adjectival_demonym,
+    check_colloquial_loanword,
+    check_palatal_glide_loanword,
+    correct_loanword_forbidden_batchim,
+    correct_loanwords,
+)
 from .replacements import (
     check_ambiguous_particle,
     check_contracted_form,
@@ -224,6 +231,9 @@ def _correct_line(
         return accepted
 
     before = corrected_text
+    corrected_text, batchim_fixes = correct_loanword_forbidden_batchim(corrected_text)
+    corrected_text = _guard("외래어 금지 받침", before, corrected_text, batchim_fixes)
+    before = corrected_text
     corrected_text, applied_fixes, review_fixes, proper_noun_fixes = correct_loanwords(corrected_text)
     corrected_text = _guard("외래어 표기", before, corrected_text, applied_fixes)
     before = corrected_text
@@ -235,6 +245,9 @@ def _correct_line(
     before = corrected_text
     corrected_text, affix_fixes = correct_action_noun_affix(corrected_text)
     corrected_text = _guard("접사 붙임", before, corrected_text, affix_fixes)
+    before = corrected_text
+    corrected_text, noun_phrase_hada_fixes = correct_noun_phrase_hada_detach(corrected_text)
+    corrected_text = _guard("명사구+하다 분리", before, corrected_text, noun_phrase_hada_fixes)
     before = corrected_text
     corrected_text, honorific_fixes = correct_honorific_dependent_noun_spacing(corrected_text)
     corrected_text = _guard("의존명사 님·씨", before, corrected_text, honorific_fixes)
@@ -305,10 +318,12 @@ def _correct_line(
     applied.extend(
         AppliedNote(message=m, is_edit=True)
         for m in (
-            applied_fixes
+            batchim_fixes
+            + applied_fixes
             + particle_fixes
             + adnominal_fixes
             + affix_fixes
+            + noun_phrase_hada_fixes
             + honorific_fixes
             + cheo_fixes
             + comma_fixes
@@ -455,6 +470,7 @@ def _correct_line(
         check_purified_terms(index, corrected_text),
         check_colloquial_loanword(index, corrected_text),
         check_palatal_glide_loanword(index, corrected_text),
+        check_adjectival_demonym(index, corrected_text),
         # 도로명 검사는 합성어 병합 후보보다 **먼저** 온다. 같은 제안(`충무 로` ->
         # `충무로`)을 둘 다 내는데, 중복은 먼저 온 것만 남기므로(seen_fixes) 규칙
         # 이름과 근거를 정확히 말해 주는 쪽이 남아야 한다.

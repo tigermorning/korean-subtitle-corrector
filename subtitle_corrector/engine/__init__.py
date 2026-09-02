@@ -96,6 +96,7 @@ from .affix import (
     correct_adnominal_noun_verb_split,
     correct_honorific_dependent_noun_spacing,
     correct_intensive_prefix_cheo,
+    correct_noun_phrase_hada_detach,
     correct_ordinal_prefix_je,
 )
 from .punctuation import (
@@ -114,7 +115,13 @@ from .subtitle_rules import (
     correct_subtitle_internal_period,
     correct_subtitle_quotes,
 )
-from .loanwords import check_colloquial_loanword, check_palatal_glide_loanword, correct_loanwords
+from .loanwords import (
+    check_adjectival_demonym,
+    check_colloquial_loanword,
+    check_palatal_glide_loanword,
+    correct_loanword_forbidden_batchim,
+    correct_loanwords,
+)
 from .replacements import (
     check_ambiguous_particle,
     check_contracted_form,
@@ -173,6 +180,7 @@ __all__ = [
     "check_honorific_dependent_noun",
     "check_intensive_prefix_cheo",
     "correct_action_noun_affix",
+    "correct_noun_phrase_hada_detach",
     "correct_honorific_dependent_noun_spacing",
     "correct_intensive_prefix_cheo",
     "correct_ordinal_prefix_je",
@@ -204,6 +212,8 @@ __all__ = [
     "check_contracted_form",
     "check_colloquial_loanword",
     "check_palatal_glide_loanword",
+    "check_adjectival_demonym",
+    "correct_loanword_forbidden_batchim",
     "check_dialect",
     "check_aux_verb_consistency",
     "check_street_name_spacing",
