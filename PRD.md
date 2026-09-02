@@ -39,7 +39,9 @@
   온라인가나다 판례(코드와 함께 있어야 함).
 
 구조를 바꾸면 이 목록을 참조하는 곳도 함께 갱신할 것: `.claude/skills/`의 4개
-스킬, `~/.claude/scheduled-tasks/gananda-precedent-research/SKILL.md`, `AGENTS.md`.
+스킬, `AGENTS.md`. (판례 스터디용 예약 스킬 `~/.claude/scheduled-tasks/
+gananda-precedent-research/`는 2026-09-02 판례 스터디 영구 종결과 함께
+삭제됐다 — 더 이상 존재하지 않으니 참조하지 말 것.)
 
 **PRD 사본을 만들지 않는다(2026-07-27 결정, 이 파일이 유일한 정본).** 과거 다른
 도구 인계를 대비해 사본을 동기화하던 관례가 실제 사고(작업이 사본에만 반영되고
