@@ -118,6 +118,7 @@ from .subtitle_rules import (
 from .loanwords import (
     check_adjectival_demonym,
     check_colloquial_loanword,
+    check_conventional_proper_noun_spelling,
     check_palatal_glide_loanword,
     correct_loanword_forbidden_batchim,
     correct_loanwords,
@@ -219,6 +220,7 @@ __all__ = [
     "check_colloquial_loanword",
     "check_palatal_glide_loanword",
     "check_adjectival_demonym",
+    "check_conventional_proper_noun_spelling",
     "correct_loanword_forbidden_batchim",
     "check_dialect",
     "check_aux_verb_consistency",

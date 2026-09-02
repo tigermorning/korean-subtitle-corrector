@@ -18,6 +18,7 @@ from subtitle_corrector.engine import (
     SubtitleEntry,
     _aux_verb_spacing,
     check_adjectival_demonym,
+    check_conventional_proper_noun_spelling,
     check_ampersand_usage,
     check_spacing,
     check_spelling,
@@ -580,6 +581,44 @@ class TestAdjectivalDemonym:
         자체로 사전 표제어(대회 이름)라 예외가 실재하기 때문이다."""
         assert check_adjectival_demonym(1, "아시안게임이 열렸다") is None
         assert check_adjectival_demonym(1, "아시안 게임이 열렸다") is None
+
+
+class TestConventionalProperNounSpelling:
+    """kornorms 역방향 검색이 안 닿는 소수 인명·지명 관용 표기를 확인
+    플래그한다(작업자자료 w30·w31, 2026-09-03). '주윤발'(kornorms 정방향
+    표제어 '저우룬파'의 relate_mark_o가 비어 있음)·'덴 하흐'(표제어 '헤이그'의
+    뜻풀이 문장 안에만 등장) — 둘 다 손으로 확인했다. 고유명사라 자동
+    반영하지 않는다."""
+
+    def test_chinese_name_flagged_with_particle_allomorph(self):
+        flag = check_conventional_proper_noun_spelling(1, "주윤발이 나오는 영화")
+        assert flag is not None
+        assert flag.suggested_fix == "저우룬파가 나오는 영화"
+
+    def test_place_name_two_token_span_flagged(self):
+        flag = check_conventional_proper_noun_spelling(1, "덴 하흐에 갔었지")
+        assert flag is not None
+        assert flag.suggested_fix == "헤이그에 갔었지"
+
+    def test_brand_name_flagged(self):
+        """포르쉐→포르셰(w28) — kornorms relate_mark_o가 비어 있어
+        loanword_fix()의 역방향 검색이 안 걸리는 같은 데이터 공백(2026-09-03
+        재확인)."""
+        flag = check_conventional_proper_noun_spelling(1, "포르쉐가 지나갔다")
+        assert flag is not None
+        assert flag.suggested_fix == "포르셰가 지나갔다"
+
+    def test_already_correct_untouched(self):
+        assert check_conventional_proper_noun_spelling(1, "저우룬파가 나오는 영화") is None
+        assert check_conventional_proper_noun_spelling(1, "헤이그에 갔었지") is None
+
+    def test_uncatalogued_wrong_form_untouched(self):
+        """'매카서'는 kornorms '맥아더' 표제어의 relate_mark_o에도 없는
+        오표기라 표에 넣지 않았다 — 권위 있는 근거가 없어서다."""
+        assert check_conventional_proper_noun_spelling(1, "매카서 장군이 왔다") is None
+
+    def test_unrelated_text_untouched(self):
+        assert check_conventional_proper_noun_spelling(1, "오늘 날씨가 참 좋네요") is None
 
 
 class TestNonstandardTermReplacement:

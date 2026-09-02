@@ -6,7 +6,7 @@ from ..report import FlagItem
 from .kiwi_adapter import _LOANWORD_TAGS, _kiwi
 from .kiwi_adapter import _has_reading
 from .lexicon import _inside_unknown_compound, is_hada_stem, _tensified_headword_variant
-from .text_utils import _josa
+from .text_utils import _JOSA_ALLOMORPHS, _josa
 
 def correct_loanwords(
     text: str,
@@ -252,3 +252,91 @@ def check_adjectival_demonym(index: int, text: str) -> FlagItem | None:
 def _has_proper_noun_reading(text: str, token) -> bool:
     """kiwi 대안 분석에 이 자리를 고유명사(NNP)로 읽는 후보가 있는지."""
     return _has_reading(text, token, ("NNP",))
+
+
+# 인명·지명·상표 관용 표기 — kornorms 정방향 표제어는 있으나 `loanword_fix()`가
+# 쓰는 relate_mark_o(오표기 목록)가 비어 있거나(w31·포르쉐), 원문이 다른
+# 표제어의 뜻풀이 문장 속에만 등장해(w30) 동적 조회가 닿지 못하는 자리(BACKLOG
+# w26·w27·w30·w31, 2026-09-03 kornorms 직접 조회로 확인). 손으로 확인한
+# 근거를 남긴다.
+#
+# 주윤발 -> 저우룬파: kornorms 정확 일치, 中 인명, 제38차 외래어 심의회
+# (2001.2.28.), example_no 63262 — "周潤發(Zhōu Rùnfā)" 표제어의 확정 한글
+# 표기가 "저우룬파"다. relate_mark_o가 비어 있어 "주윤발"로는 loanword_fix()의
+# 역방향 검색이 안 걸린다(코드가 아니라 데이터 공백).
+#
+# 덴 하흐 -> 헤이그: kornorms에 "덴 하흐"로 검색하면 "헤이그" 표제어(지명,
+# 제32차 외래어 심의회 2000.3.8., example_no 44165)가 걸린다 — 뜻풀이 자체가
+# "네덜란드 12 주명과 주도명-약칭 덴 하흐 Den Haag"라고 명시한다. relate_mark_o가
+# 아니라 뜻풀이 문장 안에만 있어 loanword_fix()의 필드 기반 조회가 못 잡는다.
+#
+# 포르쉐 -> 포르셰(작업자자료 w28, 2026-09-03 재확인 — §98이 "라벨 정정"으로
+# 끝냈던 자리인데 실측하니 loanword_fix()가 여전히 못 잡는 같은 데이터
+# 공백이었다): kornorms "포르셰" 표제어(회사·제품명, 제53차 외래어 심의회
+# 2003.9.3., example_no 53212)의 뜻풀이가 "×포르쉐"라고 명시하는데도
+# relate_mark_o는 비어 있다 — 위 "덴 하흐"와 같은 성격(뜻풀이 문장에만 근거가
+# 있음).
+#
+# **매카서(w26)·폴크스바겐(w27)은 같은 부류로 보이지만 여기 넣지 않는다.**
+# 매카서는 kornorms "맥아더" 표제어의 relate_mark_o에도 없는 오표기다(등재된
+# 것은 맥아썰·맥아서·매가더뿐) — 권위 있는 근거가 없어 우리가 임의로 "틀렸다"고
+# 판정하는 셈이 된다. 폴크스바겐/폭스바겐은 kornorms에 상표명 자체가 없다(심의
+# 대상 아님). 둘 다 데이터가 없어 못 고치는 것이지 이 표의 누락이 아니다 —
+# BACKLOG에 "받아들인 한계"로 남긴다.
+_CONVENTIONAL_PROPER_NOUN_SPELLINGS: dict[str, tuple[str, str]] = {
+    "주윤발": ("저우룬파", "중국 인명은 현지음 표기가 원칙(kornorms 제38차 외래어 심의회, 2001.2.28.)"),
+    "덴 하흐": ("헤이그", "지명은 관용 표기 우선(kornorms 제32차 외래어 심의회, 2000.3.8.)"),
+    "포르쉐": ("포르셰", "kornorms 표제어 뜻풀이에 '×포르쉐'로 명시(제53차 외래어 심의회, 2003.9.3.)"),
+}
+
+
+def check_conventional_proper_noun_spelling(index: int, text: str) -> FlagItem | None:
+    """kornorms 역방향 검색이 안 닿는 소수 인명·지명·상표 관용 표기를 손으로
+    확인해 플래그한다(작업자자료 w28·w30·w31). 고유명사는 절대 자동 반영하지
+    않는 이 파일의 기존 정책과 같은 이유로 텍스트는 바꾸지 않는다 — 같은
+    표기가 실제 인물이 아니라 다른 고유명사(작품 제목 등)를 가리킬 수도
+    있다."""
+    tokens = _kiwi.tokenize(text)
+    for i, t in enumerate(tokens):
+        if t.tag != "NNP":
+            continue
+        hit = _CONVENTIONAL_PROPER_NOUN_SPELLINGS.get(t.form)
+        span_end = t.start + t.len
+        last_idx = i
+        if hit is None and i + 1 < len(tokens):
+            nxt = tokens[i + 1]
+            if nxt.tag == "NNP" and text[t.start + t.len : nxt.start] == " ":
+                hit = _CONVENTIONAL_PROPER_NOUN_SPELLINGS.get(f"{t.form} {nxt.form}")
+                if hit is not None:
+                    span_end = nxt.start + nxt.len
+                    last_idx = i + 1
+        if hit is None:
+            continue
+        fix, basis = hit
+        original = text[t.start:span_end]
+        replacement = fix
+        replacement_end = span_end
+        # 받침이 달라지면 곧바로 붙는 조사도 이형태를 맞춰 바꾼다(작업자자료
+        # w31 — 받침 없는 '저우룬파'로 바뀌면 '주윤발이'의 '이'가 '가'가 돼야
+        # 한다). kiwi가 조사(J로 시작하는 태그)로 읽고 사이에 공백이 없을
+        # 때만 건드린다.
+        if last_idx + 1 < len(tokens):
+            particle = tokens[last_idx + 1]
+            if (
+                particle.tag.startswith("J")
+                and particle.start == span_end
+                and particle.form in _JOSA_ALLOMORPHS
+            ):
+                replacement += _josa(fix, particle.form)
+                replacement_end = particle.start + particle.len
+        suggested = text[: t.start] + replacement + text[replacement_end:]
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=(
+                f"'{original}'{_josa(original, '은')} 관용 표기 '{fix}'로 굳어져 있습니다"
+                f"({basis}). 고유명사라 자동 반영하지 않습니다 — 확인해 주세요."
+            ),
+            suggested_fix=suggested,
+        )
+    return None

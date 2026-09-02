@@ -59,6 +59,7 @@ from .subtitle_rules import (
 from .loanwords import (
     check_adjectival_demonym,
     check_colloquial_loanword,
+    check_conventional_proper_noun_spelling,
     check_palatal_glide_loanword,
     correct_loanword_forbidden_batchim,
     correct_loanwords,
@@ -476,6 +477,7 @@ def _correct_line(
         check_colloquial_loanword(index, corrected_text),
         check_palatal_glide_loanword(index, corrected_text),
         check_adjectival_demonym(index, corrected_text),
+        check_conventional_proper_noun_spelling(index, corrected_text),
         # 도로명 검사는 합성어 병합 후보보다 **먼저** 온다. 같은 제안(`충무 로` ->
         # `충무로`)을 둘 다 내는데, 중복은 먼저 온 것만 남기므로(seen_fixes) 규칙
         # 이름과 근거를 정확히 말해 주는 쪽이 남아야 한다.
