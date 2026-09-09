@@ -7,6 +7,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
+from subtitle_corrector import feedback
 from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
     apply_report_fixes,
@@ -146,6 +147,9 @@ def apply_report_cmd(
 
     output = output or target_file
     write_srt(updated_entries, output)
+
+    doc_hash = feedback.document_id("\n".join(e.text for e in updated_entries))
+    feedback.record_decisions(feedback.decisions_from_report_rows(rows), doc_hash=doc_hash)
 
     typer.echo(f"리포트 반영 {applied_count}건 -> {output}")
 

@@ -521,6 +521,8 @@ def _accept(
             original_text=original,
             reason=f"[모델 제안] {rule} — {', '.join(declared)} (확인 후 반영해 주세요)",
             suggested_fix=accepted,
+            source="model",
+            rule=rule,
         ),
         None,
     )

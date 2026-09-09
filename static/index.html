@@ -1059,6 +1059,8 @@ function recordDecisions(picked) {
     after: f.suggested_fix,
     reason: f.reason,
     accepted: chosen.has(f),
+    source: f.source,
+    rule: f.rule,
   }))));
   body.append('document', resultState.text || '');
 

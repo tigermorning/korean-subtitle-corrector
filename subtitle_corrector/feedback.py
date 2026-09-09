@@ -114,7 +114,13 @@ def record_decisions(decisions: list[dict], doc_hash: str = "") -> int:
                 if not before or not after or before == after:
                     continue
                 reason = _clip(decision.get("reason"))
-                source, rule = classify(reason)
+                # 호출부가 구조화된 출처를 실어 보내면(FlagItem.source/rule 유래) 그걸
+                # 그대로 쓴다. 안 보내는 옛 호출부만 문구 파싱으로 되돌아간다 — 규칙
+                # 엔진 flag는 reason에 대괄호가 없어 이 경로로는 rule이 늘 비어 있었다.
+                if decision.get("source"):
+                    source, rule = _clip(decision.get("source")), _clip(decision.get("rule"))
+                else:
+                    source, rule = classify(reason)
                 log.write(
                     json.dumps(
                         {
@@ -136,6 +142,35 @@ def record_decisions(decisions: list[dict], doc_hash: str = "") -> int:
     except OSError:
         return 0
     return written
+
+
+def decisions_from_report_rows(rows: list[dict]) -> list[dict]:
+    """CLI(`apply-report`)가 읽은 리포트 CSV 한 줄씩을 판정으로 바꾼다.
+
+    CLI에는 화면의 체크박스가 없다 — 사람이 리포트를 손으로 고쳐 쓴 뒤 그 파일을
+    다시 읽어 자막에 반영한다. `report.write_report()`가 사람이 고쳐 쓰는
+    `suggested_fix` 칸과 나란히 `engine_suggestion`(엔진이 처음 제안한 값, 사람이
+    손대지 않는 사본)을 함께 적어 두므로, 둘을 비교하면 "엔진이 제안한 그대로
+    받았는가"를 알 수 있다 — 웹 화면의 체크박스와 같은 신호다. `engine_suggestion`이
+    애초에 비어 있던 줄(엔진이 아무 제안도 하지 않아 사람이 스스로 채운 칸)은
+    (원문, 제안) 짝이 성립하지 않으므로 건너뛴다.
+    """
+    decisions = []
+    for row in rows:
+        offered = (row.get("engine_suggestion") or "").strip()
+        if not offered:
+            continue
+        final = (row.get("suggested_fix") or "").strip()
+        decisions.append({
+            "line_index": row.get("line_index"),
+            "before": row.get("original_text"),
+            "after": offered,
+            "reason": row.get("reason"),
+            "accepted": final == offered,
+            "source": row.get("source"),
+            "rule": row.get("rule"),
+        })
+    return decisions
 
 
 def summarize() -> dict:

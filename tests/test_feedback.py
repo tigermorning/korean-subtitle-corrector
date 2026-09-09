@@ -82,6 +82,21 @@ class TestRecording:
         assert records[0]["source"] == "model" and records[0]["rule"] == "되/돼"
         assert records[1]["source"] == "rule" and records[1]["rule"] == "제42항"
 
+    def test_구조화된_출처가_있으면_문구_파싱보다_그것을_쓴다(self, log_dir):
+        """규칙 엔진 flag의 reason엔 대괄호가 없어 classify()로는 rule이 늘 비었다.
+
+        FlagItem.source/rule을 그대로 실어 보내면 이 유실이 없어야 한다.
+        """
+        feedback.record_decisions([
+            {
+                "line_index": 1, "before": "한번 더", "after": "한 번 더", "accepted": True,
+                "reason": "'번'은 의존명사라 앞말과 띄어 씁니다",  # 대괄호 없음 — 실제 규칙 엔진 문구
+                "source": "rule", "rule": "제42항",
+            },
+        ])
+        record = _records(log_dir)[0]
+        assert record["source"] == "rule" and record["rule"] == "제42항"
+
     def test_원문_전문은_저장하지_않는다(self, log_dir):
         doc = "대사 전문이 여기 통째로 들어 있다"
         feedback.record_decisions([_decision()], doc_hash=feedback.document_id(doc))
@@ -103,6 +118,43 @@ class TestRecording:
         feedback.record_decisions([_decision(before="가" * 5000, after="나" * 5000)])
         record = _records(log_dir)[0]
         assert len(record["before"]) == feedback.MAX_FIELD_LENGTH
+
+
+class TestDecisionsFromReportRows:
+    """CLI(`apply-report`)용 변환 — 체크박스가 없는 대신 CSV 두 칸을 비교한다."""
+
+    def test_제안대로_받으면_채택이다(self):
+        rows = [{
+            "line_index": "3", "original_text": "됬다", "reason": "[모델 제안] 되/돼 — 됬다 -> 됐다",
+            "suggested_fix": "됐다", "engine_suggestion": "됐다", "source": "model", "rule": "되/돼",
+        }]
+        decisions = feedback.decisions_from_report_rows(rows)
+        assert decisions == [{
+            "line_index": "3", "before": "됬다", "after": "됐다", "reason": "[모델 제안] 되/돼 — 됬다 -> 됐다",
+            "accepted": True, "source": "model", "rule": "되/돼",
+        }]
+
+    def test_사람이_지우면_기각이다(self):
+        rows = [{
+            "original_text": "됬다", "suggested_fix": "", "engine_suggestion": "됐다",
+            "reason": "", "source": "model", "rule": "되/돼", "line_index": "3",
+        }]
+        assert feedback.decisions_from_report_rows(rows)[0]["accepted"] is False
+
+    def test_사람이_다른_값으로_고치면_기각이다(self):
+        """제안 그대로가 아니면, 그 제안 자체는 채택되지 않은 것이다."""
+        rows = [{
+            "original_text": "됬다", "suggested_fix": "됬었다", "engine_suggestion": "됐다",
+            "reason": "", "source": "model", "rule": "되/돼", "line_index": "3",
+        }]
+        assert feedback.decisions_from_report_rows(rows)[0]["accepted"] is False
+
+    def test_엔진이_아무_제안도_안_한_줄은_건너뛴다(self):
+        rows = [{
+            "original_text": "무언가", "suggested_fix": "사람이 직접 채운 값", "engine_suggestion": "",
+            "reason": "", "source": "rule", "rule": "", "line_index": "1",
+        }]
+        assert feedback.decisions_from_report_rows(rows) == []
 
 
 class TestResilience:
