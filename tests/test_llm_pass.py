@@ -9,6 +9,7 @@
 
 import json
 
+import pytest
 import requests
 
 from subtitle_corrector.engine import LlmSettings, normalize_llm_settings, propose_corrections
@@ -68,6 +69,18 @@ def _record_posts(monkeypatch, responder):
 
 
 class TestSettings:
+    @pytest.fixture(autouse=True)
+    def _no_env_defaults(self, monkeypatch):
+        """`.env`에 LLM_BASE_URL/LLM_MODEL을 채워 둔 개발 환경에서 돌려도, 이
+        클래스의 "인자를 안 주면 꺼진다" 가정이 실제 환경변수에 흔들리지 않게
+        모듈 전역을 비운다(2026-09-09) — `feedback.py`의 `log_dir` 픽스처와 같은
+        이유다."""
+        from subtitle_corrector.engine import llm_pass
+
+        monkeypatch.setattr(llm_pass, "LLM_BASE_URL", "")
+        monkeypatch.setattr(llm_pass, "LLM_MODEL", "")
+        monkeypatch.setattr(llm_pass, "LLM_API_KEY", "")
+
     def test_기본값은_꺼짐(self):
         assert normalize_llm_settings().enabled is False
 
@@ -215,6 +228,38 @@ class TestBlockedProposal:
         )
         assert flags == []
         assert any("존재하지 않는 줄 번호" in n.message for n in notes)
+
+
+class TestRuleValidation:
+    """`rule: "조사"`라고 주장했는데 실제로는 조사가 아닌 제안을 막는다(2026-09-09).
+
+    실측(exaone3.5:7.8b, 8~16줄 배치): 완전히 정상인 반말 종결어미를 존댓말로
+    바꾸거나("싶다 -> 싶어요") 다른 반말 종결어미로 바꾸면서("계획이야? -> 계획이니?")
+    둘 다 `rule: "조사"`라고 내놓았다 — 시스템 프롬프트가 명시적으로 금지한 말투
+    훼손인데 그럴듯한 이름표를 달고 나온 것이다.
+    """
+
+    def test_조사가_아닌데_조사라고_하면_버린다(self):
+        flags, notes = propose_corrections(
+            [_entry(1, "커피 한 잔 마시고 싶다")], ON,
+            complete=_responder([{
+                "id": 1, "before": "커피 한 잔 마시고 싶다", "after": "커피 한 잔 마시고 싶어요",
+                "rule": "조사", "declared": ["싶다 -> 싶어요"],
+            }]),
+        )
+        assert flags == []
+        assert any("실제 내용이 그" in n.message for n in notes)
+
+    def test_진짜_조사_교체는_통과한다(self):
+        flags, _ = propose_corrections(
+            [_entry(1, "그를 만났다")], ON,
+            complete=_responder([{
+                "id": 1, "before": "그를 만났다", "after": "그와 만났다",
+                "rule": "조사", "declared": ["그를 -> 그와"],
+            }]),
+        )
+        assert len(flags) == 1
+        assert flags[0].suggested_fix == "그와 만났다"
 
 
 class TestSkipping:

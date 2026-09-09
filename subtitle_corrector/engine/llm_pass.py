@@ -18,7 +18,7 @@
 `verify_edit()` 관문에 넣는다(`edit_guard.py` 참고). 설명하지 못하는 낱말 변경은
 제안 목록에도 오르지 못한다.
 
-여기서 규칙 엔진보다 **더 조이는** 것이 셋 있다.
+여기서 규칙 엔진보다 **더 조이는** 것이 넷 있다.
 
 1. `declared`(무엇을 무엇으로 바꿨는지)가 비어 있으면 무조건 버린다. `verify_edit`는
    띄어쓰기·부호만 바뀐 변경을 근거 없이 통과시키는데(뼈대가 같으므로), 모델에게는
@@ -28,6 +28,14 @@
    `edit_guard`의 뼈대 계산은 `\n`을 무시하므로 이 사고를 못 잡는다.
 3. 보낸 원문과 모델이 되돌려준 `before`가 다르면 버린다. 모델이 문맥을 지어냈다는
    뜻이고, 그 위에서 만든 `after`는 볼 가치가 없다.
+4. `rule: "조사"`인데 `declared`에 실제 조사가 하나도 없으면 버린다
+   (`_matches_declared_rule`). 모델이 스스로 붙인 이름표를 믿지 않는다 — 실측으로
+   `싶다 -> 싶어요`·`계획이야? -> 계획이니?`(둘 다 말투/어미 교체, 조사 아님)를
+   `rule: "조사"`라고 내놓는 걸 확인했다(2026-09-09, 배치 8~16줄에서 재현).
+   시스템 프롬프트의 "말투 건드리지 마라"는 부탁일 뿐이라 여기서도 구조로 막는다.
+   되/돼·안/않·로서/로써·데/대까지 넓히려다 접었다 — 한글 완성형 글자는
+   초성·중성·종성이 합쳐진 한 코드포인트라 `"되" in "됬다"`가 False로 나온다.
+   문자열 대조로는 안 되고, 자모 분해까지 가는 건 이번 범위 밖이라 남겨 둔다.
 
 **타임코드는 모델에게 보내지 않는다.** `index`와 텍스트만 보낸다. 시간은 코드가
 들고 있는다 — 모델은 숫자를 조용히 틀리고, 자막에서 그건 복구가 어려운 사고다.
@@ -47,6 +55,7 @@ from dotenv import load_dotenv
 from ..parsers import SubtitleEntry
 from ..report import AppliedNote, FlagItem
 from .edit_guard import verify_edit
+from .kiwi_adapter import _kiwi
 from .markers import _is_marker_only_line
 from .options import SubtitleMarkers
 
@@ -74,7 +83,20 @@ LLM_BACKEND = os.getenv("LLM_BACKEND", "")
 
 # 한 번에 보낼 줄 수. 너무 크면 모델이 뒤쪽 줄을 성의 없이 처리하고, 너무 작으면
 # 문맥이 끊겨 이 패스의 존재 이유(문맥 판단)가 사라진다.
-_DEFAULT_BATCH_SIZE = 40
+#
+# 40에서 4로 내림(2026-09-09, exaone3.5:7.8b·Ollama·GPU 100% 사용 상태에서 실측).
+# 같은 문장이 혼자면 잡히는데 다른 문장 여럿과 한 배치에 들어가면 놓쳤다(로서/로써
+# 오류가 8줄 배치에서 사라짐). 필러만 채운 배치로는 4·8·16줄 다 정확했지만, 진짜
+# 오류가 여럿 섞인 8줄 배치·필러뿐인 8·16줄 배치 양쪽에서 **배치 마지막 줄에 없는
+# 오류를 지어내는** 사고가 났다(완전히 정상인 구어체 종결어미를 "고치라"고 제안 —
+# 시스템 프롬프트가 명시적으로 금지한 말투 훼손). 4줄에서는 이 사고가 안 났다.
+# 표본이 각 크기당 1~2회뿐이라 정확한 임계값(5~7 사이일 수 있음)은 못 잡았지만,
+# 이 패스의 출력은 사람이 화면에서 보고 채택하는 제안이라 "놓치는 것"보다 "없는
+# 걸 지어내 그럴듯하게 들이미는 것"이 더 위험하다 — 값을 안전한 쪽으로 낮췄다.
+# 배치가 작아지면 자막 한 편 전체 처리 시간이 최대 10배 늘어난다(GPU를 최대로
+# 써도 이 비용은 못 줄인다 — 오래 걸리는 건 스키마 강제 디코딩 자체다). 처리 속도가
+# 급하면 호출부에서 `batch_size`를 명시적으로 올려 쓸 것.
+_DEFAULT_BATCH_SIZE = 4
 
 
 # 한 줄에 허용하는 제안 개수. 이보다 많으면 모델이 그 줄을 "다시 쓰고" 있는 것이지
@@ -174,6 +196,16 @@ def normalize_llm_settings(
 # (3)이 이 도구에서 제일 중요하다. 자막 대사의 구어체·비문·사투리는 대부분 작가의
 # 의도이고, 언어 모델은 지시가 없으면 그것을 전부 표준 문어체로 밀어 버린다.
 # `dialect.py`가 지키는 것과 같은 선을 여기서도 지켜야 한다.
+#
+# `rule`을 이 닫힌 목록으로 강제하는 이유(2026-09-09 추가): 실측해 보니 모델이
+# `rule` 칸에 자유 문구를 지어내다 스스로 헷갈렸다 — "던대 -> 던데"(데/대 문제)를
+# 고치면서 `rule: "되/돼"`라고 딴 걸 적었다. `feedback.py`가 이 값으로 규칙별
+# 채택률을 가르는데, 자유 문구면 그 집계가 흩어진다. `_RESPONSE_FORMAT`의 enum이
+# 서버 쪽에서 강제하는 자리이고, 이 목록은 그 값과 프롬프트 예시가 같은 것을
+# 가리키게 하는 단일 출처다.
+_CANONICAL_RULES = ("되/돼", "안/않", "로서/로써", "데/대", "조사", "전사 오류")
+
+
 _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 교정기가 이미 한 번 훑고
 지나간 뒤라, 사전으로 확정되는 오류는 남아 있지 않다. 너는 **문맥을 봐야만 판단되는 것**만
 찾는다.
@@ -199,8 +231,29 @@ _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 �
 - `before`는 받은 원문과 **한 글자도 다르지 않아야** 한다.
 - `declared`에는 바꾼 낱말을 `"틀린것 -> 맞는것"` 형식으로 **빠짐없이** 적는다.
   여기 적지 않은 변경이 `after`에 있으면 그 제안은 버려진다.
+- `rule`은 반드시 다음 중 하나로만 쓴다: __RULE_LIST__. 목록에 없는 이유를
+  지어내지 마라.
 - 고칠 것이 없으면 `{"proposals": []}`를 반환한다. 억지로 찾지 마라.
-"""
+
+예시(입력은 "번호<탭>내용" 형식):
+1\t아까 그 일 어떻게 됬어?
+2\t저는 이 학교 학생으로서 책임감을 느낍니다.
+3\t칼로서 사과를 깎았다.
+4\t그 사람이 범인이라던대.
+
+이 입력에 대한 올바른 출력:
+{"proposals": [
+  {"id": 1, "before": "아까 그 일 어떻게 됬어?", "after": "아까 그 일 어떻게 됐어?",
+   "rule": "되/돼", "declared": ["됬어 -> 됐어"]},
+  {"id": 3, "before": "칼로서 사과를 깎았다.", "after": "칼로써 사과를 깎았다.",
+   "rule": "로서/로써", "declared": ["로서 -> 로써"]},
+  {"id": 4, "before": "그 사람이 범인이라던대.", "after": "그 사람이 범인이라던데.",
+   "rule": "데/대", "declared": ["던대 -> 던데"]}
+]}
+
+2번 줄은 제안하지 않는다 — "학생으로서"(자격·신분)는 이미 맞는 표기다. 로서는
+자격·신분, 로써는 수단·도구를 가리킬 때 쓴다.
+""".replace("__RULE_LIST__", ", ".join(_CANONICAL_RULES))
 
 
 # 출력 형식을 **지시문이 아니라 서버**에 맡기는 자리(2026-09-01 추가).
@@ -233,7 +286,7 @@ _RESPONSE_FORMAT = {
                             "id": {"type": "integer"},
                             "before": {"type": "string"},
                             "after": {"type": "string"},
-                            "rule": {"type": "string"},
+                            "rule": {"type": "string", "enum": list(_CANONICAL_RULES)},
                             "declared": {"type": "array", "items": {"type": "string"}},
                         },
                         "required": ["id", "before", "after", "rule", "declared"],
@@ -442,6 +495,55 @@ def _parse_proposals(raw: str) -> tuple[list, str | None]:
     return [], excerpt or "(빈 응답)"
 
 
+# 4번 검사가 쓰는 표. 처음엔 되/돼·안/않·로서/로써·데/대도 "declared 문자열에 그
+# 두 형태가 있는지" 문자열로 대조하려 했지만, 한글 완성형 글자는 초성·중성·종성이
+# 합쳐진 하나의 코드포인트라 실패한다 — `"되" in "됬다"`는 False다(됬은 되에
+# 받침 ㅆ이 결합된 별개 글자다). 실측 없이 짠 가정이 실제 예시("됬다 -> 됐다")부터
+# 깨졌다(2026-09-09). 자모 분해까지 가는 대신, 문자열로 안전하게 판정되는 `조사`
+# 하나만 이 표에 남긴다 — 나머지 넷은 아래에서 검사하지 않는다(True 취급).
+#
+# `조사`는 닫힌 두 형태가 아니라 열린 집합이라 애초에 문자열 대조가 안 통했다 —
+# 대신 kiwi로 형태소를 분석해 실제 조사 태그가 있는지 본다(`_has_josa_tag`).
+_CHECKED_RULES = {"조사"}
+
+
+# kiwi가 조사에 매기는 태그(`kiwi_adapter._ATTACH_TAGS`와 같은 집합에서 조사만
+# 추린 것). 어미(EP/EF/EC/ETN/ETM)·접미사(XS*)·서술격 조사(VCP)는 여기 없다 —
+# 이 검사의 목적이 정확히 "이게 조사냐 어미냐"를 가르는 것이기 때문이다.
+_JOSA_TAGS = {"JKS", "JKC", "JKG", "JKO", "JKB", "JKV", "JKQ", "JX", "JC"}
+
+
+def _has_josa_tag(token: str) -> bool:
+    """토큰을 형태소 분석해 조사 태그가 하나라도 있는지 본다."""
+    return any(t.tag in _JOSA_TAGS for t in _kiwi.tokenize(token))
+
+
+def _matches_declared_rule(rule: str, declared: list[str]) -> bool:
+    """`declared`의 각 쌍이 실제로 `rule`이 주장하는 범주에 속하는지 확인한다.
+
+    지금은 `조사`만 검사한다(위 `_CHECKED_RULES` 주석 참고). 실측(2026-09-09,
+    exaone3.5:7.8b): `커피 마시고 싶다 -> 싶어요`와 `계획이야? -> 계획이니?`를
+    둘 다 `rule: "조사"`로 내놓았다. kiwi로 보면 둘 다 조사 태그가 하나도 없다
+    (각각 VX+EF, NNG+VCP+EF/EC) — 종결어미 교체를 조사라고 잘못 부른 것이다.
+    시스템 프롬프트의 "말투 건드리지 마라"는 부탁이지 강제가 아니므로, `declared`가
+    실제로 그 범주인지 여기서 직접 확인한다.
+
+    나머지 범주(닫힌 형태 대조가 자모 분해 없이는 안 되는 것들, `전사 오류`,
+    스키마가 안 걸린 경로에서 모델이 마음대로 쓴 이름)는 여기서 판정하지 않는다 —
+    True를 돌려준다.
+    """
+    if rule not in _CHECKED_RULES:
+        return True
+    for note in declared:
+        wrong, separator, right = note.partition(" -> ")
+        if not separator:
+            continue
+        wrong, right = wrong.strip(), right.strip()
+        if not (_has_josa_tag(wrong) or _has_josa_tag(right)):
+            return False
+    return True
+
+
 def _restore_padding(original: str, stripped_after: str) -> str:
     """모델이 떼어 낸 앞뒤 공백을 원문 그대로 되돌린다.
 
@@ -507,6 +609,13 @@ def _accept(
         return None, (
             f"[모델 제안 차단] {index}번 줄 — 줄바꿈 개수를 바꾸려 해 버렸습니다"
             f"(줄 나눔은 화면 배치이지 교정 대상이 아닙니다): '{original}' -> '{after}'"
+        )
+
+    if not _matches_declared_rule(rule, declared):
+        return None, (
+            f"[모델 제안 차단] {index}번 줄 — '{rule}'이라 주장했지만 실제 내용이 그 "
+            f"범주가 아니라 버렸습니다(말투·어미 교체를 다른 이름으로 포장했을 수 "
+            f"있습니다): '{original}' -> '{after}'"
         )
 
     accepted, refusal = verify_edit(f"모델 제안({rule})", original, after, declared)
