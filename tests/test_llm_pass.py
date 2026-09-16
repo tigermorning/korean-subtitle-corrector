@@ -231,35 +231,167 @@ class TestBlockedProposal:
 
 
 class TestRuleValidation:
-    """`rule: "조사"`라고 주장했는데 실제로는 조사가 아닌 제안을 막는다(2026-09-09).
+    """모델이 붙인 이름표와 실제 바꾼 내용이 맞지 않는 제안을 막는다(2026-09-09).
 
     실측(exaone3.5:7.8b, 8~16줄 배치): 완전히 정상인 반말 종결어미를 존댓말로
     바꾸거나("싶다 -> 싶어요") 다른 반말 종결어미로 바꾸면서("계획이야? -> 계획이니?")
-    둘 다 `rule: "조사"`라고 내놓았다 — 시스템 프롬프트가 명시적으로 금지한 말투
-    훼손인데 그럴듯한 이름표를 달고 나온 것이다.
+    그럴듯한 이름표를 달고 내놓았다 — 시스템 프롬프트가 명시적으로 금지한 말투 훼손이다.
     """
 
-    def test_조사가_아닌데_조사라고_하면_버린다(self):
+    def test_되돼라고_하고_말투를_바꾸면_버린다(self):
         flags, notes = propose_corrections(
-            [_entry(1, "커피 한 잔 마시고 싶다")], ON,
+            [_entry(1, "커피 마시면 되")], ON,
             complete=_responder([{
-                "id": 1, "before": "커피 한 잔 마시고 싶다", "after": "커피 한 잔 마시고 싶어요",
-                "rule": "조사", "declared": ["싶다 -> 싶어요"],
+                "id": 1, "before": "커피 마시면 되", "after": "커피 마시면 돼요",
+                "rule": "되/돼", "declared": ["되 -> 돼요"],
             }]),
         )
         assert flags == []
         assert any("실제 내용이 그" in n.message for n in notes)
 
-    def test_진짜_조사_교체는_통과한다(self):
+    # 2026-09-16: "그 규칙의 차이만 있는가"로 검사한다.
+    @pytest.mark.parametrize("rule, before, after, declared", [
+        ("되/돼", "어떻게 됬어?", "어떻게 됐어?", "됬어 -> 됐어"),
+        ("되/돼", "그러면 안되", "그러면 안 돼", "안되 -> 안 돼"),
+        ("안/않", "밥을 않 먹었다", "밥을 안 먹었다", "않 -> 안"),
+        ("로서/로써", "칼로서 깎았다", "칼로써 깎았다", "칼로서 -> 칼로써"),
+    ])
+    def test_그_규칙의_차이뿐이면_통과한다(self, rule, before, after, declared):
         flags, _ = propose_corrections(
-            [_entry(1, "그를 만났다")], ON,
+            [_entry(1, before)], ON,
             complete=_responder([{
-                "id": 1, "before": "그를 만났다", "after": "그와 만났다",
-                "rule": "조사", "declared": ["그를 -> 그와"],
+                "id": 1, "before": before, "after": after,
+                "rule": rule, "declared": [declared],
             }]),
         )
-        assert len(flags) == 1
-        assert flags[0].suggested_fix == "그와 만났다"
+        assert [f.suggested_fix for f in flags] == [after]
+
+    @pytest.mark.parametrize("rule, before, after, declared", [
+        # 되/돼라는 이름표로 반말을 존댓말로 바꿨다
+        ("되/돼", "그렇게 됬어", "그렇게 됐어요", "됬어 -> 됐어요"),
+        # 안/않이라는 이름표로 부정 표현을 통째로 바꿨다
+        ("안/않", "안 했다", "하지 않았다", "안 했다 -> 하지 않았다"),
+        ("로서/로써", "학생으로서", "학생이니까", "학생으로서 -> 학생이니까"),
+        # 실제 자막에서 나온 것: 띄어쓰기만 고치고 되/돼·안/않 이름표를 달았다
+        ("되/돼", "전화 좀 받고 올 게요", "전화 좀 받고 올게요", "올 게요 -> 올게요"),
+        ("안/않", "도와 달라고요", "도와달라고요", "도와 달라고요 -> 도와달라고요"),
+    ])
+    def test_이름표와_다른_차이가_섞이면_버린다(self, rule, before, after, declared):
+        flags, notes = propose_corrections(
+            [_entry(1, before)], ON,
+            complete=_responder([{
+                "id": 1, "before": before, "after": after,
+                "rule": rule, "declared": [declared],
+            }]),
+        )
+        assert flags == []
+        assert any("실제 내용이 그" in n.message for n in notes)
+
+    def test_밝힌_쌍이_원문과_제안에_실제로_없으면_버린다(self):
+        # 실제 자막(2026-09-16): 띄어쓰기만 바꾸고(형사 말로는 -> 형사말로는) 로서/로써
+        # 이름표를 달아 목록에 올랐다. declared는 규칙 차이처럼 적혀 있어도 본문에 없다.
+        flags, notes = propose_corrections(
+            [_entry(1, "형사 말로는")], ON,
+            complete=_responder([{
+                "id": 1, "before": "형사 말로는", "after": "형사말로는",
+                "rule": "로서/로써", "declared": ["형사 말로서 -> 형사말로써"],
+            }]),
+        )
+        assert flags == []
+        assert any("실제로 없는" in n.message for n in notes)
+
+    @pytest.mark.parametrize("declared", ["말로는 ->말로써", "말로는→말로써", "로써로"])
+    def test_쌍_형식이_어긋나도_검사를_건너뛰지_않는다(self, declared):
+        # 실제 자막(2026-09-16): `말로는 ->말로써`(화살표 뒤 공백 없음)로 두 검사를 다
+        # 건너뛰고 띄어쓰기만 바꾼 제안이 목록에 올랐다.
+        flags, _ = propose_corrections(
+            [_entry(1, "형사 말로는")], ON,
+            complete=_responder([{
+                "id": 1, "before": "형사 말로는", "after": "형사말로는",
+                "rule": "로서/로써", "declared": [declared],
+            }]),
+        )
+        assert flags == []
+
+    def test_화살표_공백이_없어도_맞는_제안은_통과한다(self):
+        flags, _ = propose_corrections(
+            [_entry(1, "칼로서 깎았다")], ON,
+            complete=_responder([{
+                "id": 1, "before": "칼로서 깎았다", "after": "칼로써 깎았다",
+                "rule": "로서/로써", "declared": ["칼로서->칼로써"],
+            }]),
+        )
+        assert [f.suggested_fix for f in flags] == ["칼로써 깎았다"]
+
+    # 2026-09-16 규칙 목록에서 뺀 둘. 스키마를 강제하지 못한 서버에서도 막혀야 한다.
+    @pytest.mark.parametrize("rule, before, after, declared", [
+        ("데/대", "그 사람이 범인이라던대", "그 사람이 범인이라던데", "던대 -> 던데"),
+        ("전사 오류", "네", "네, 알겠습니다", "네 -> 네, 알겠습니다"),
+        # 진짜 조사 교체여도 이제 이 패스의 일이 아니다(실제 자막에서 조사 제안 20건이 전부 말투 변경)
+        ("조사", "그를 만났다", "그와 만났다", "그를 -> 그와"),
+        ("조사", "싶다", "싶어요", "싶다 -> 싶어요"),
+    ])
+    def test_규칙_목록_밖_이름표는_버린다(self, rule, before, after, declared):
+        flags, notes = propose_corrections(
+            [_entry(1, before)], ON,
+            complete=_responder([{
+                "id": 1, "before": before, "after": after,
+                "rule": rule, "declared": [declared],
+            }]),
+        )
+        assert flags == []
+        assert any("이 패스가 다루는 규칙이 아니라" in n.message for n in notes)
+
+    def test_스키마와_프롬프트에서_뺀_규칙이_사라졌다(self):
+        enum = llm_pass._RESPONSE_FORMAT["json_schema"]["schema"]["properties"]["proposals"][
+            "items"]["properties"]["rule"]["enum"]
+        assert "데/대" not in enum and "전사 오류" not in enum
+        assert "데/대" not in llm_pass._SYSTEM_PROMPT
+        assert "전사 오류" not in llm_pass._SYSTEM_PROMPT
+        assert "조사" not in enum
+
+
+class TestMultiLineSubtitle:
+    """두 줄 자막이 요청문 형식을 깨지 않는다(2026-09-16).
+
+    실제 자막 645줄 측정에서 차단 165건 중 118건이 '원문 오인용'이었다 — 자막 안의
+    줄바꿈이 `번호<탭>내용` 형식을 깨서 모델이 첫 줄만 인용했다.
+    """
+
+    def test_요청문에서_한_자막은_한_줄이다(self):
+        prompt = llm_pass._build_prompt([(7, "그렇게 됬다\n정말로"), (8, "다음 줄")])
+        body = prompt.split("\n\n", 1)[1].splitlines()
+        assert body == ["7\t그렇게 됬다⏎정말로", "8\t다음 줄"]
+
+    def test_표시로_인용한_제안은_원래_줄바꿈으로_되돌려_받는다(self):
+        flags, notes = propose_corrections(
+            [_entry(1, "그렇게 됬다\n정말로")], ON,
+            complete=_responder([{
+                "id": 1, "before": "그렇게 됬다⏎정말로", "after": "그렇게 됐다⏎정말로",
+                "rule": "되/돼", "declared": ["됬다 -> 됐다"],
+            }]),
+        )
+        assert [f.suggested_fix for f in flags] == ["그렇게 됐다\n정말로"]
+        assert not any("차단" in n.message for n in notes)
+
+    def test_표시를_지우면_줄바꿈_변경으로_막힌다(self):
+        flags, notes = propose_corrections(
+            [_entry(1, "그렇게 됬다\n정말로")], ON,
+            complete=_responder([{
+                "id": 1, "before": "그렇게 됬다⏎정말로", "after": "그렇게 됐다 정말로",
+                "rule": "되/돼", "declared": ["됬다 -> 됐다"],
+            }]),
+        )
+        assert flags == []
+        assert any("줄바꿈 개수를 바꾸려 해" in n.message for n in notes)
+
+    def test_원문에_표시_글자가_있으면_보내지_않는다(self):
+        sent = []
+        propose_corrections(
+            [_entry(1, "재생 ⏎ 버튼")], ON,
+            complete=lambda prompt, settings: sent.append(prompt) or '{"proposals": []}',
+        )
+        assert sent == []
 
 
 class TestSkipping:

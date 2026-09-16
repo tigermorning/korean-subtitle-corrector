@@ -1,9 +1,9 @@
 """규칙이 끝난 뒤 남은 것만 언어 모델에게 물어보는 마지막 패스(2026-08-12 추가).
 
 **왜 필요한가.** 규칙 엔진은 사전이 유일한 정답을 주는 것만 고친다. 그래서 문맥을
-봐야 갈리는 것들이 그대로 남는다 — `되/돼`가 어느 쪽인지, 조사가 문장 구조에 맞는지,
-자막 한 줄이 앞뒤 대사와 이어지는지. 이것들은 사전을 아무리 잘 뒤져도 답이 안 나온다.
-언어 모델은 이 자리에만 쓴다.
+봐야 갈리는 것들이 그대로 남는다 — `되/돼`·`안/않`·`로서/로써`가 어느 쪽인지. 이것들은
+사전을 아무리 잘 뒤져도 답이 안 나온다. 언어 모델은 이 자리에만 쓴다.
+(처음엔 조사·데/대·전사 오류도 맡겼다가 2026-09-16 실측으로 뺐다 — `_CANONICAL_RULES`.)
 
 **무엇을 하지 않는가.** 이 패스는 `entries`의 텍스트를 **절대 바꾸지 않는다.**
 `FlagItem`(사람이 확인할 제안)만 만든다. `pipeline.py`가 명시한 정책 — "확률적
@@ -28,14 +28,14 @@
    `edit_guard`의 뼈대 계산은 `\n`을 무시하므로 이 사고를 못 잡는다.
 3. 보낸 원문과 모델이 되돌려준 `before`가 다르면 버린다. 모델이 문맥을 지어냈다는
    뜻이고, 그 위에서 만든 `after`는 볼 가치가 없다.
-4. `rule: "조사"`인데 `declared`에 실제 조사가 하나도 없으면 버린다
-   (`_matches_declared_rule`). 모델이 스스로 붙인 이름표를 믿지 않는다 — 실측으로
-   `싶다 -> 싶어요`·`계획이야? -> 계획이니?`(둘 다 말투/어미 교체, 조사 아님)를
-   `rule: "조사"`라고 내놓는 걸 확인했다(2026-09-09, 배치 8~16줄에서 재현).
-   시스템 프롬프트의 "말투 건드리지 마라"는 부탁일 뿐이라 여기서도 구조로 막는다.
-   되/돼·안/않·로서/로써·데/대까지 넓히려다 접었다 — 한글 완성형 글자는
-   초성·중성·종성이 합쳐진 한 코드포인트라 `"되" in "됬다"`가 False로 나온다.
-   문자열 대조로는 안 되고, 자모 분해까지 가는 건 이번 범위 밖이라 남겨 둔다.
+4. 모델이 스스로 붙인 이름표를 믿지 않는다(`_matches_declared_rule`). 실측으로
+   `싶다 -> 싶어요`·`계획이야? -> 계획이니?`(둘 다 말투/어미 교체)를 `rule: "조사"`라고
+   내놓는 걸 확인했다(2026-09-09, 배치 8~16줄에서 재현). 시스템 프롬프트의 "말투
+   건드리지 마라"는 부탁일 뿐이라 구조로 막는다. 2026-09-16부터 `declared` 쌍이 그
+   규칙의 차이 **말고는** 같아야 통과한다(`_only_rule_difference`, 완성형 음절을
+   코드포인트 산술로 접어 비교). 규칙 목록 밖 이름표는 통째로 버린다.
+5. 자막 한 항목 안의 줄바꿈은 `⏎`로 바꿔 보낸다(`_LINE_BREAK_TOKEN`). 그대로 보내면
+   `번호<탭>내용` 형식이 깨져 둘째 줄이 별개 줄로 읽힌다.
 
 **타임코드는 모델에게 보내지 않는다.** `index`와 텍스트만 보낸다. 시간은 코드가
 들고 있는다 — 모델은 숫자를 조용히 틀리고, 자막에서 그건 복구가 어려운 사고다.
@@ -55,7 +55,6 @@ from dotenv import load_dotenv
 from ..parsers import SubtitleEntry
 from ..report import AppliedNote, FlagItem
 from .edit_guard import verify_edit
-from .kiwi_adapter import _kiwi
 from .markers import _is_marker_only_line
 from .options import SubtitleMarkers
 
@@ -203,7 +202,16 @@ def normalize_llm_settings(
 # 채택률을 가르는데, 자유 문구면 그 집계가 흩어진다. `_RESPONSE_FORMAT`의 enum이
 # 서버 쪽에서 강제하는 자리이고, 이 목록은 그 값과 프롬프트 예시가 같은 것을
 # 가리키게 하는 단일 출처다.
-_CANONICAL_RULES = ("되/돼", "안/않", "로서/로써", "데/대", "조사", "전사 오류")
+#
+# `데/대`·`전사 오류`·`조사`를 뺐다(2026-09-16, 사용자 결정, `docs/IMPLEMENTATION_LOG.md` §102).
+# - 데/대: 전용 평가셋에서 배치 1·4·8 모두 재현율 0, 맞는 표기 4건에 4건 다 고치려 들었다.
+# - 전사 오류: 실제 자막 645줄에서 목록에 오른 4건이 전부 말투 변경. 규범으로 판정할
+#   근거가 없어 이름표 검사도 걸 수 없었다.
+# - 조사: 두 줄 자막을 제대로 보내기 시작하자(`_LINE_BREAK_TOKEN`) 같은 자막에서 목록에
+#   오른 20건이 전부 `조사` 이름표였고 전부 말투·문체 변경이었다(`발견했고요 -> 찾았어요`,
+#   구어의 조사 생략 채우기). 조사 이형태 같은 확정 오류는 규칙 엔진이 이미 맡는다.
+# 목록 밖 이름표는 `_accept`가 막는다 — 스키마를 강제하지 못한 서버(cli 경로)에서도.
+_CANONICAL_RULES = ("되/돼", "안/않", "로서/로써")
 
 
 _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 교정기가 이미 한 번 훑고
@@ -211,14 +219,12 @@ _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 �
 찾는다.
 
 찾을 것:
-- 문맥으로만 갈리는 표기 (되/돼, 안/않, 로서/로써, 데/대)
-- 문장 구조에 맞지 않는 조사
-- 앞뒤 대사와 이어지지 않는 명백한 전사 오류
+- 문맥으로만 갈리는 표기 (되/돼, 안/않, 로서/로써)
 
 절대 건드리지 말 것:
 - 말투, 구어체, 사투리, 반말/존댓말 — 전부 작가의 의도다
 - 맞는 표기를 다른 맞는 표기로 바꾸는 것 (도리어→되레 같은 것)
-- 줄바꿈 위치와 개수
+- 줄바꿈 위치와 개수 — 한 자막 안의 줄바꿈은 `⏎`로 보인다. 그대로 옮겨 적어라
 - 문장부호 취향 (…와 ... 중 어느 쪽인지 등)
 - 고유명사 표기
 
@@ -239,16 +245,13 @@ _SYSTEM_PROMPT = """너는 한국어 자막 교정 보조자다. 규칙 기반 �
 1\t아까 그 일 어떻게 됬어?
 2\t저는 이 학교 학생으로서 책임감을 느낍니다.
 3\t칼로서 사과를 깎았다.
-4\t그 사람이 범인이라던대.
 
 이 입력에 대한 올바른 출력:
 {"proposals": [
   {"id": 1, "before": "아까 그 일 어떻게 됬어?", "after": "아까 그 일 어떻게 됐어?",
    "rule": "되/돼", "declared": ["됬어 -> 됐어"]},
   {"id": 3, "before": "칼로서 사과를 깎았다.", "after": "칼로써 사과를 깎았다.",
-   "rule": "로서/로써", "declared": ["로서 -> 로써"]},
-  {"id": 4, "before": "그 사람이 범인이라던대.", "after": "그 사람이 범인이라던데.",
-   "rule": "데/대", "declared": ["던대 -> 던데"]}
+   "rule": "로서/로써", "declared": ["로서 -> 로써"]}
 ]}
 
 2번 줄은 제안하지 않는다 — "학생으로서"(자격·신분)는 이미 맞는 표기다. 로서는
@@ -495,51 +498,113 @@ def _parse_proposals(raw: str) -> tuple[list, str | None]:
     return [], excerpt or "(빈 응답)"
 
 
-# 4번 검사가 쓰는 표. 처음엔 되/돼·안/않·로서/로써·데/대도 "declared 문자열에 그
-# 두 형태가 있는지" 문자열로 대조하려 했지만, 한글 완성형 글자는 초성·중성·종성이
+# 4번 검사의 역사. 처음엔 되/돼·안/않·로서/로써·데/대도 "declared 문자열에 그 두
+# 형태가 있는지" 문자열로 대조하려 했지만, 한글 완성형 글자는 초성·중성·종성이
 # 합쳐진 하나의 코드포인트라 실패한다 — `"되" in "됬다"`는 False다(됬은 되에
-# 받침 ㅆ이 결합된 별개 글자다). 실측 없이 짠 가정이 실제 예시("됬다 -> 됐다")부터
-# 깨졌다(2026-09-09). 자모 분해까지 가는 대신, 문자열로 안전하게 판정되는 `조사`
-# 하나만 이 표에 남긴다 — 나머지 넷은 아래에서 검사하지 않는다(True 취급).
+# 받침 ㅆ이 결합된 별개 글자다). 그래서 한동안 `조사` 하나만 kiwi 조사 태그로
+# 검사했다(2026-09-09).
 #
-# `조사`는 닫힌 두 형태가 아니라 열린 집합이라 애초에 문자열 대조가 안 통했다 —
-# 대신 kiwi로 형태소를 분석해 실제 조사 태그가 있는지 본다(`_has_josa_tag`).
-_CHECKED_RULES = {"조사"}
+# 2026-09-16: 되/돼·안/않·로서/로써를 "접어서 같아지는가"로 다시 열었고(아래),
+# `조사`는 규칙 목록에서 뺐다(`_CANONICAL_RULES` 주석) — "어느 쪽에든 조사 태그가
+# 있는가"만으로는 말투 변경이 섞여도 통과했다.
+#
+# 접는 방법: 필요한 분해는 완성형 코드포인트 산술 한 줄이다(가=0xAC00부터 초성 19 ×
+# 중성 21 × 종성 28 순으로 배열). 되/돼만 바꾼 쌍이면 둘 다 '되'로 접으면 같아지고,
+# 말투·어미를 함께 바꾼 쌍이면 접어도 달라서 걸린다. 띄어쓰기는 접기 전에 지운다
+# (`안되 -> 안 돼`).
+_HANGUL_BASE = 0xAC00
+_JUNG_COUNT, _JONG_COUNT = 21, 28
+_CHO_D = 3                      # ㄷ
+_JUNG_WAE, _JUNG_OE = 10, 11    # ㅙ(돼), ㅚ(되)
 
 
-# kiwi가 조사에 매기는 태그(`kiwi_adapter._ATTACH_TAGS`와 같은 집합에서 조사만
-# 추린 것). 어미(EP/EF/EC/ETN/ETM)·접미사(XS*)·서술격 조사(VCP)는 여기 없다 —
-# 이 검사의 목적이 정확히 "이게 조사냐 어미냐"를 가르는 것이기 때문이다.
-_JOSA_TAGS = {"JKS", "JKC", "JKG", "JKO", "JKB", "JKV", "JKQ", "JX", "JC"}
+def _fold_syllables(text: str, fold) -> str:
+    out = []
+    for char in text:
+        code = ord(char) - _HANGUL_BASE
+        if 0 <= code < 19 * _JUNG_COUNT * _JONG_COUNT:
+            cho, rest = divmod(code, _JUNG_COUNT * _JONG_COUNT)
+            jung, jong = divmod(rest, _JONG_COUNT)
+            cho, jung, jong = fold(cho, jung, jong)
+            char = chr(_HANGUL_BASE + (cho * _JUNG_COUNT + jung) * _JONG_COUNT + jong)
+        out.append(char)
+    return "".join(out)
 
 
-def _has_josa_tag(token: str) -> bool:
-    """토큰을 형태소 분석해 조사 태그가 하나라도 있는지 본다."""
-    return any(t.tag in _JOSA_TAGS for t in _kiwi.tokenize(token))
+def _fold_doe(cho, jung, jong):
+    if cho == _CHO_D and jung == _JUNG_WAE:
+        jung = _JUNG_OE
+    return cho, jung, jong
+
+
+# 규칙마다 "이 차이만 지우는" 접기. 접은 뒤 같아지면 그 규칙의 차이뿐이다.
+_RULE_FOLDS = {
+    "되/돼": lambda s: _fold_syllables(s, _fold_doe),
+    "안/않": lambda s: s.replace("않", "안"),
+    "로서/로써": lambda s: s.replace("로써", "로서"),
+}
+
+
+def _only_rule_difference(rule: str, wrong: str, right: str) -> bool:
+    fold = _RULE_FOLDS[rule]
+    squeeze = lambda s: "".join(s.split())  # noqa: E731
+    wrong, right = squeeze(wrong), squeeze(right)
+    # 띄어쓰기만 다른 쌍은 이 규칙의 차이가 아니다. 공백을 지운 뒤에도 달라야 한다 —
+    # 실측(2026-09-16, 실제 자막 645줄): '올 게요 -> 올게요'가 `되/돼`, '도와 달라고요 ->
+    # 도와달라고요'가 `안/않` 이름표를 달고 통과했다.
+    return wrong != right and fold(wrong) == fold(right)
+
+
+def _split_declared(note: str) -> tuple[str, str] | None:
+    """`"틀린것 -> 맞는것"`을 둘로 가른다. 화살표 앞뒤 공백은 따지지 않는다.
+
+    처음엔 `" -> "`(공백 포함)만 인식하고 못 가르면 그 항목을 건너뛰었는데, 실측
+    (2026-09-16, 실제 자막)에서 모델이 `말로는 ->말로써`처럼 공백 하나를 빼자 이름표·본문
+    검사가 둘 다 건너뛰어져 띄어쓰기만 바꾼 제안이 목록에 올랐다. 못 가르면 None.
+    """
+    wrong, separator, right = note.partition("->")
+    if not separator or not wrong.strip() or not right.strip():
+        return None
+    return wrong.strip(), right.strip()
+
+
+def _declared_pairs_in_text(declared: list[str], original: str, after: str) -> bool:
+    """`declared`의 각 쌍이 실제로 원문(틀린 쪽)과 제안(맞는 쪽)에 들어 있는가.
+
+    이름표 검사는 `declared` 쌍만 본다. 그런데 모델은 쌍을 규칙 차이처럼 적어 놓고
+    본문에는 전혀 다른 변경을 할 수 있다 — 실측(2026-09-16, 실제 자막): `형사 말로는 ->
+    형사말로는`(띄어쓰기만)이 `로서/로써` 이름표로 목록에 올랐다. `verify_edit`는 띄어쓰기만
+    바뀐 변경을 뼈대가 같다고 통과시키므로 여기서 막는다. 띄어쓰기는 비교에서 뺀다.
+    """
+    squeeze = lambda s: "".join(s.split())  # noqa: E731
+    original, after = squeeze(original), squeeze(after)
+    for note in declared:
+        pair = _split_declared(note)
+        # 쌍 형식이 아닌 항목은 무엇을 바꿨는지 확인할 수 없다 — 건너뛰면 검사가 통째로 빠진다.
+        if pair is None:
+            return False
+        wrong, right = pair
+        if squeeze(wrong) not in original or squeeze(right) not in after:
+            return False
+    return True
 
 
 def _matches_declared_rule(rule: str, declared: list[str]) -> bool:
     """`declared`의 각 쌍이 실제로 `rule`이 주장하는 범주에 속하는지 확인한다.
 
-    지금은 `조사`만 검사한다(위 `_CHECKED_RULES` 주석 참고). 실측(2026-09-09,
-    exaone3.5:7.8b): `커피 마시고 싶다 -> 싶어요`와 `계획이야? -> 계획이니?`를
-    둘 다 `rule: "조사"`로 내놓았다. kiwi로 보면 둘 다 조사 태그가 하나도 없다
-    (각각 VX+EF, NNG+VCP+EF/EC) — 종결어미 교체를 조사라고 잘못 부른 것이다.
-    시스템 프롬프트의 "말투 건드리지 마라"는 부탁이지 강제가 아니므로, `declared`가
-    실제로 그 범주인지 여기서 직접 확인한다.
+    그 규칙의 차이 **말고는** 같아야 통과한다(`_only_rule_difference`). 시스템
+    프롬프트의 "말투 건드리지 마라"는 부탁이지 강제가 아니므로 여기서 직접 확인한다 —
+    실측(2026-09-09, exaone3.5:7.8b)으로 `싶다 -> 싶어요` 같은 말투 교체를 그럴듯한
+    이름표를 달아 내놓는 걸 확인했다.
 
-    나머지 범주(닫힌 형태 대조가 자모 분해 없이는 안 되는 것들, `전사 오류`,
-    스키마가 안 걸린 경로에서 모델이 마음대로 쓴 이름)는 여기서 판정하지 않는다 —
-    True를 돌려준다.
+    목록 밖 이름표는 여기 오기 전에 `_accept`가 막는다. 접기가 없는 이름이면 이
+    함수는 판정하지 않고 True를 돌려준다.
     """
-    if rule not in _CHECKED_RULES:
+    if rule not in _RULE_FOLDS:
         return True
     for note in declared:
-        wrong, separator, right = note.partition(" -> ")
-        if not separator:
-            continue
-        wrong, right = wrong.strip(), right.strip()
-        if not (_has_josa_tag(wrong) or _has_josa_tag(right)):
+        pair = _split_declared(note)
+        if pair is None or not _only_rule_difference(rule, *pair):
             return False
     return True
 
@@ -578,10 +643,15 @@ def _accept(
         # 보내지 않은 줄에 대한 제안. 모델이 번호를 지어냈다.
         return None, f"[모델 제안 차단] 존재하지 않는 줄 번호 {index}에 대한 제안을 버렸습니다."
 
-    before = str(proposal.get("before") or "")
-    after = str(proposal.get("after") or "")
+    before = _decode_line_breaks(str(proposal.get("before") or ""))
+    after = _decode_line_breaks(str(proposal.get("after") or ""))
     rule = str(proposal.get("rule") or "문맥 교정").strip() or "문맥 교정"
     declared = [str(note) for note in proposal.get("declared") or [] if str(note).strip()]
+    # 화살표 앞뒤 공백을 `"틀린것 -> 맞는것"` 한 모양으로 맞춘다 — `verify_edit`는 이 모양만 읽는다.
+    declared = [
+        f"{pair[0]} -> {pair[1]}" if (pair := _split_declared(note)) else note
+        for note in declared
+    ]
 
     if before.strip() != original.strip():
         return None, (
@@ -611,6 +681,18 @@ def _accept(
             f"(줄 나눔은 화면 배치이지 교정 대상이 아닙니다): '{original}' -> '{after}'"
         )
 
+    if rule not in _CANONICAL_RULES:
+        return None, (
+            f"[모델 제안 차단] {index}번 줄 — '{rule}'은 이 패스가 다루는 규칙이 아니라 "
+            f"버렸습니다: '{original}' -> '{after}'"
+        )
+
+    if not _declared_pairs_in_text(declared, original, after):
+        return None, (
+            f"[모델 제안 차단] {index}번 줄 — 밝힌 변경이 원문·제안에 실제로 없는 제안이라 "
+            f"버렸습니다({', '.join(declared)}): '{original}' -> '{after}'"
+        )
+
     if not _matches_declared_rule(rule, declared):
         return None, (
             f"[모델 제안 차단] {index}번 줄 — '{rule}'이라 주장했지만 실제 내용이 그 "
@@ -637,9 +719,28 @@ def _accept(
     )
 
 
+# 자막 한 항목 안의 줄바꿈을 모델에게 보여 줄 표시(2026-09-16).
+#
+# 요청문은 `번호<탭>내용`을 줄바꿈으로 잇는다. 자막 텍스트 안의 `\n`을 그대로 두면
+# 둘째 줄이 번호 없는 별개 줄로 읽혀, 모델은 첫 줄만 `before`로 인용하고 그 제안은
+# "원문 오인용"으로 전부 버려졌다 — 실측(실제 자막 645줄): 차단 165건 중 118건이
+# 원문 오인용이었고 대부분 두 줄짜리 자막이었다. 두 줄 자막은 흔하므로 이 패스가
+# 대사의 상당 부분을 사실상 못 보고 있었던 것이다.
+# 원문에 쓰일 일이 없는 글자를 고르고, 원문에 이미 들어 있으면 그 줄은 보내지 않는다.
+_LINE_BREAK_TOKEN = "⏎"
+
+
+def _encode_line_breaks(text: str) -> str:
+    return text.replace("\n", _LINE_BREAK_TOKEN)
+
+
+def _decode_line_breaks(text: str) -> str:
+    return text.replace(_LINE_BREAK_TOKEN, "\n")
+
+
 def _build_prompt(batch: list[tuple[int, str]]) -> str:
     """줄 번호와 텍스트만 담은 요청문. 타임코드·화자 설정은 넣지 않는다."""
-    lines = "\n".join(f"{index}\t{text}" for index, text in batch)
+    lines = "\n".join(f"{index}\t{_encode_line_breaks(text)}" for index, text in batch)
     return (
         "아래는 자막 원고의 일부다. 각 줄은 `번호<탭>내용` 형식이다.\n"
         "문맥을 보고 판단해야 하는 오류만 찾아 JSON 배열로 답하라.\n\n"
@@ -687,6 +788,9 @@ def propose_corrections(
             token and token in entry.text
             for token in (markers.screen_text, markers.line_break, markers.position)
         ):
+            continue
+        # 줄바꿈 표시 글자가 원문에 이미 있으면 되돌릴 때 원래 글자와 구분이 안 된다.
+        if _LINE_BREAK_TOKEN in entry.text:
             continue
         candidates.append((entry.index, entry.text))
 
