@@ -180,50 +180,154 @@ _PAST_EP_FORMS = ("었", "았", "였")
 _CONTRACTING_STEM_TAGS = ("VV", "VA", "VX", "XSV", "XSA")
 
 
-def check_past_contraction_spelling(index: int, text: str) -> FlagItem | None:
-    """어간+'-었-'이 한 음절로 줄어든 자리의 표기가 준말 규정과 다르면 플래그한다
-    ('됬다' -> '됐다').
+def _past_contraction_fixes(text: str, tokens) -> dict:
+    """어간+'-었-'이 한 음절로 줄어든 자리 중 표기가 준말 규정과 다른 곳.
 
-    **왜 따로 보나(2026-09-17).** kiwi는 '됬다'를 되/VV + 었/EP + 다/EF로 **정상
-    분석**한다 — 틀린 표면을 표준 형태소로 정규화해 버리므로, 기본형('되다')만
-    사전에 묻는 `check_spelling()`에는 아무것도 걸리지 않았다. 표면의 오류가
-    형태소 분석 단계에서 지워지는 것이다.
+    반환값: {음절 위치: 규정대로의 준말 음절}.
 
-    근거는 사전 조회가 아니라 한글 맞춤법 준말 규정(제34·35항, '되었다'->'됐다'는
-    제35항 [붙임 2])이다. 줄어든 음절을 kiwi가 같은 형태소로 **다시 짜 본 결과**
-    (`kiwi.join`)가 규정대로의 준말이므로, 원문 음절이 그것과 다르면 원문이 규정
-    밖의 표기다. 형태소가 한 음절에 겹친 자리(줄어든 자리)만 본다 — '되었다'처럼
-    줄이지 않은 본말은 대상이 아니다(본말도 맞는 표기다).
+    kiwi는 '됬다'를 되/VV + 었/EP + 다/EF로 **정상 분석**한다 — 틀린 표면을 표준
+    형태소로 정규화해 버리므로, 기본형('되다')만 사전에 묻는 `check_spelling()`에는
+    아무것도 걸리지 않았다(2026-09-17). 줄어든 음절을 kiwi가 같은 형태소로 **다시 짜
+    본 결과**(`kiwi.join`)가 규정대로의 준말이므로(한글 맞춤법 제34·35항), 원문
+    음절이 그것과 다르면 원문이 규정 밖의 표기다. 형태소가 한 음절에 겹친 자리만
+    본다 — '되었다'처럼 줄이지 않은 본말도 맞는 표기다.
 
-    **실측(2026-09-17)**: 맞는 준말·불규칙 활용 60여 개(파랬다·도왔다·불렀다·
-    뵀다·쇘다·쬈다·가르쳤다·괜찮아졌다 …)에서 0건, 저장소 코퍼스 1,457줄에서
-    '됬' 말고는 0건.
-
-    **자동 교정하지 않는다.** 규정상 답은 하나지만, 그 답은 kiwi가 이 음절을
-    '어간+었'으로 읽었다는 분석에 기대고 있다 — 분석이 틀렸을 때 원문을 바꾸면
-    되돌릴 근거가 없다. 첫 후보를 달아 사람에게 확인받는다."""
-    tokens = _kiwi.tokenize(text)
-    fixes = {}  # 음절 위치 -> 규정대로의 준말 음절
+    실측(2026-09-17): 맞는 준말·불규칙 활용 60여 개(파랬다·도왔다·불렀다·뵀다·쇘다·
+    쬈다·가르쳤다·괜찮아졌다 …)에서 0건, 저장소 코퍼스 1,457줄에서 '됬' 말고 0건.
+    """
+    fixes = {}
     for stem, ep in zip(tokens, tokens[1:]):
         if not stem.tag.startswith(_CONTRACTING_STEM_TAGS):
             continue
-        if ep.tag != "EP" or ep.form not in _PAST_EP_FORMS or ep.len != 1:
+        # kiwi는 문맥에 따라 '됬었다'의 '었었'을 한 토큰으로 묶는다('그렇게 됬었다',
+        # 2026-09-17 실측). 어간과 겹치는 것은 그 첫 음절뿐이므로 첫 '었'만 다시 짠다.
+        if ep.tag != "EP" or ep.form[:1] not in _PAST_EP_FORMS or ep.len != len(ep.form):
             continue
         if ep.start != stem.start + stem.len - 1:
             continue  # 어간 마지막 음절과 겹치지 않음 = 줄이지 않은 본말
         try:
-            rebuilt = _kiwi.join([(stem.form, stem.tag), (ep.form, ep.tag)])
+            rebuilt = _kiwi.join([(stem.form, stem.tag), (ep.form[:1], ep.tag)])
         except Exception:
             continue
         if rebuilt and rebuilt[-1] != text[ep.start]:
             fixes[ep.start] = rebuilt[-1]
+    return fixes
+
+
+# '되' 어간 뒤에 '-어'가 빠진 채 붙은 어미. 이 어미들은 표준어에서 '-어요·-어서·
+# -어야·-어야지·-어도'로만 쓰이므로, 어간에 바로 붙은 표면('되요')은 언제나 '되어'가
+# 줄어든 '돼'를 잘못 적은 것이다(한글 맞춤법 제35항 [붙임 2]). 뜻(이루어짐/허락)과
+# 무관하다 — '일이 잘 돼요'도 '들어가도 돼요'도 '돼요'다. '되라'(하라체 명령)·'되오'
+# (하오체)·'되고'·'되면'·'되지'·'되니까'처럼 어간에 직접 붙는 어미는 넣지 않는다.
+# 값은 kiwi가 그 자리에 다는 태그들(2026-09-17 실측: '되요'=EF, '밥이 되도'=JX).
+_DWAE_ENDINGS = {
+    "요": ("EF", "JX"),
+    "서": ("EC",),
+    "야": ("EF", "EC"),
+    "야지": ("EC", "EF"),
+    "도": ("EC", "JX"),
+}
+
+# 앞에 오면 '되'가 부피 단위 명사일 수 있는 자리 — kiwi가 동사로 잘못 읽는 것을
+# 실측했다('보리 되도 팔았다'·'말과 되요' -> 되/VV). 수 관형사('한 되요')는 kiwi가
+# NNB로 잘 가르지만 같은 부류라 함께 막는다. 뒤에 단위 명사가 오면('되서 개만') '두세'의
+# 방언(우리말샘 '되-서')일 수 있다. 이런 자리는 자동 교정하지 않고 확인 플래그로 내린다.
+_MEASURE_NOUN_PREV_TAGS = ("MM", "SN", "NR", "NNB", "JC")
+_BARE_NOUN_TAGS = ("NNG", "NNP")
+_COUNTER_NEXT_TAGS = ("NNB", "NR", "SN")
+_CLOSING_QUOTES = frozenset({"\"", "'", "”", "’", ")", "」", "』"})
+
+
+def _dwae_ending_fixes(text: str, tokens) -> tuple[set, set]:
+    """'되요'·'되서'·'되야'·'되도', 그리고 문장 끝 '되'('가도 되?') 자리.
+
+    문장 끝 '되': 용언 어간은 어미 없이 문장을 끝낼 수 없으므로, kiwi가 동사 '되'
+    뒤에 어미를 하나도 못 찾고 곧바로 문장부호나 줄 끝을 만났다면 '-어'가 빠진
+    것이다('안 되!' -> '안 돼!'). 뒤에 다른 낱말이 오면('되 찾았다' — 띄어 쓴
+    '되찾다'일 수 있다) 이 판정을 하지 않는다.
+
+    반환값: (자동 교정할 '되' 위치, 확인만 할 위치)."""
+    auto, review = set(), set()
+    for i, stem in enumerate(tokens):
+        ending = tokens[i + 1] if i + 1 < len(tokens) else None
+        if stem.form != "되" or not stem.tag.startswith(("VV", "XSV")) or stem.len != 1:
+            continue
+        if text[stem.start] != "되":
+            continue  # '돼'로 적힌 자리(kiwi는 '돼요'도 되/VV로 돌려준다)
+        if ending is None or ending.tag.startswith("S"):
+            # 문장을 끝내는 부호만 인정한다. '되/돼'처럼 빗금·화살표가 오는 자리는
+            # 낱말을 설명하는 글이지 문장 끝이 아니다(코퍼스 실측 오탐지, 2026-09-17).
+            if ending is not None and (
+                ending.start <= stem.start
+                or not (ending.tag in ("SF", "SE") or ending.form in _CLOSING_QUOTES)
+            ):
+                continue
+            nxt = None  # 문장 끝 '되' — 뒤따르는 단위 명사 검사는 해당 없음
+        else:
+            if ending.start != stem.start + 1:
+                continue  # 어미가 어간 음절에 겹쳤다 = '어'와 이미 줄어든 형태
+            if ending.tag not in _DWAE_ENDINGS.get(ending.form, ()):
+                continue
+            if text[ending.start : ending.start + len(ending.form)] != ending.form:
+                continue
+            nxt = tokens[i + 2] if i + 2 < len(tokens) else None
+        prev = tokens[i - 1] if i >= 1 else None
+        spaced = prev is not None and prev.start + prev.len < stem.start
+        risky = (
+            (prev is not None and prev.tag in _MEASURE_NOUN_PREV_TAGS)
+            or (spaced and prev.tag in _BARE_NOUN_TAGS)
+            or (nxt is not None and nxt.tag in _COUNTER_NEXT_TAGS)
+        )
+        (review if risky else auto).add(stem.start)
+    return auto, review
+
+
+def correct_dwae_spelling(text: str) -> tuple[str, list[str]]:
+    """'되/돼' 표기 오류 중 답이 하나로 정해지는 자리를 자동으로 고친다.
+
+    - '됬' -> '됐'('됬다' -> '됐다'): '됬'은 표준 낱말 어디에도 없는 음절이다 — 우리말샘
+      포함 검색 0건(2026-09-17, 제목·속담까지 담는 개방형 사전). kiwi가 그 음절을
+      '되'+'었'으로 읽은 자리만 고친다.
+    - '되요/되서/되야/되야지/되도' -> '돼…': `_DWAE_ENDINGS` 참고. 부피 단위 명사 '되'나
+      '두세'의 방언일 수 있는 자리는 `check_dwae_spelling()`이 확인 플래그로 넘긴다.
+
+    **2026-09-17 사용자 결정으로 자동 교정한다**(처음엔 확인 플래그만 뒀다). 되/돼는
+    발음이 같아 생기는 표기 오류이지 사투리 어미가 아니므로, "표준어 화자의 비표준
+    어미를 자동 교정하지 않는다"는 원칙(AGENTS.md)의 대상이 아니다.
+
+    반환값: (수정된 텍스트, 적용된 수정 설명 목록: '원문 -> 정답')"""
+    tokens = _kiwi.tokenize(text)
+    edits = {
+        pos: "됐"
+        for pos, syllable in _past_contraction_fixes(text, tokens).items()
+        if text[pos] == "됬" and syllable == "됐"
+    }
+    auto, _review = _dwae_ending_fixes(text, tokens)
+    edits.update({pos: "돼" for pos in auto})
+    if not edits:
+        return text, []
+    chars = list(text)
+    for pos, syllable in edits.items():
+        chars[pos] = syllable
+    corrected = "".join(chars)
+    return corrected, [_localized_change(text, corrected)]
+
+
+def check_dwae_spelling(index: int, text: str) -> FlagItem | None:
+    """되/돼 표기가 틀렸을 가능성이 높지만 자동으로 고치지 않은 자리를 확인 플래그한다.
+
+    자동 교정(`correct_dwae_spelling()`) 뒤의 텍스트에 돈다. 남는 것은 둘이다.
+    - '되요'류인데 '되'가 부피 단위 명사·'두세'의 방언일 수 있는 자리('보리 되도').
+    - '됬' 말고 준말 규정과 다른 줄어든 음절(지금까지 실측 0건 — 안전망)."""
+    tokens = _kiwi.tokenize(text)
+    fixes = dict(_past_contraction_fixes(text, tokens))
+    _auto, review = _dwae_ending_fixes(text, tokens)
+    fixes.update({pos: "돼" for pos in review})
     if not fixes:
         return None
-
-    suggested = list(text)
+    chars = list(text)
     for pos, syllable in fixes.items():
-        suggested[pos] = syllable
-    suggested_fix = "".join(suggested)
+        chars[pos] = syllable
     pairs = ", ".join(
         dict.fromkeys(f"'{text[pos]}' -> '{syllable}'" for pos, syllable in sorted(fixes.items()))
     )
@@ -231,11 +335,11 @@ def check_past_contraction_spelling(index: int, text: str) -> FlagItem | None:
         line_index=index,
         original_text=text,
         reason=(
-            f"용언 어간과 '-었-'이 줄어든 표기가 준말 규정과 다릅니다({pairs}). "
-            "한글 맞춤법 제34·35항(예: 제35항 [붙임 2] '되었다' -> '됐다'). "
-            "줄이지 않은 본말로 적어도 맞습니다."
+            f"되/돼 표기를 확인해 주세요({pairs}). '되어'가 줄면 '돼'로 적습니다 — "
+            "한글 맞춤법 제35항 [붙임 2]('되어요'->'돼요', '되었다'->'됐다'). "
+            "다만 '되'가 부피 단위(쌀 한 되)나 '두세'의 방언이면 원문이 맞습니다."
         ),
-        suggested_fix=suggested_fix,
+        suggested_fix="".join(chars),
     )
 
 

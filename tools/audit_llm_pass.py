@@ -239,8 +239,14 @@ def score_eval(items: list[dict], by_line: dict[int, dict]) -> dict:
 
         bucket = rules.setdefault(item["rule"], {
             "positive": 0, "tp": 0, "wrong": 0, "miss": 0,
-            "negative": 0, "overfix": 0, "overfix_attempted": 0,
+            "negative": 0, "overfix": 0, "overfix_attempted": 0, "rule_fixed": 0,
         })
+        if split == "positive" and not attempted and got["after_rules"].strip() == item["gold"].strip():
+            # 규칙 엔진이 모델 패스 전에 이미 고친 문항. 모델이 볼 오류가 없으니 놓침으로
+            # 세면 재현율이 근거 없이 떨어진다(2026-09-17 되/돼 자동 교정 도입, §104).
+            # 모델 채점에서 빼고 따로 센다.
+            bucket["rule_fixed"] += 1
+            continue
         if split == "positive":
             bucket["positive"] += 1
             if item["gold"].strip() in fixes:
@@ -327,11 +333,11 @@ def _fmt(value) -> str:
 
 def print_eval(score: dict, show_details: bool) -> None:
     print(f"{'규칙':<8} {'정밀도':>6} {'재현율':>6} {'F1':>5}  "
-          f"{'맞힘':>4} {'오교정':>5} {'놓침':>4} {'과교정(차단 포함)':>16}")
+          f"{'맞힘':>4} {'오교정':>5} {'놓침':>4} {'과교정(차단 포함)':>16} {'규칙이 먼저 고침':>8}")
     for rule, b in sorted(score["rules"].items()):
         print(f"{rule:<8} {_fmt(b['precision']):>6} {_fmt(b['recall']):>6} {b['f1']:5.2f}  "
               f"{b['tp']:>2}/{b['positive']:<2} {b['wrong']:>5} {b['miss']:>4} "
-              f"{b['overfix']:>6}/{b['negative']} ({b['overfix_attempted']})")
+              f"{b['overfix']:>6}/{b['negative']} ({b['overfix_attempted']}) {b['rule_fixed']:>8}")
     print(f"macro F1             {score['macro_f1']:.3f}")
     f = score["forbid"]
     print(f"② forbid·outscope 위반 {f['surfaced']}/{f['lines']}줄 (차단 포함 {f['attempted']})  "

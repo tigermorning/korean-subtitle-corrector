@@ -75,9 +75,10 @@ from .replacements import (
 )
 from .spelling import (
     check_negation_reply_spelling,
-    check_past_contraction_spelling,
+    check_dwae_spelling,
     check_purified_terms,
     check_spelling,
+    correct_dwae_spelling,
     correct_gumeon_ending,
 )
 from .dialect import check_dialect
@@ -307,6 +308,9 @@ def _correct_line(
     corrected_text, gumeon_fixes = correct_gumeon_ending(corrected_text)
     corrected_text = _guard("종결 어미 -구먼", before, corrected_text, gumeon_fixes)
     before = corrected_text
+    corrected_text, dwae_fixes = correct_dwae_spelling(corrected_text)
+    corrected_text = _guard("되/돼 표기", before, corrected_text, dwae_fixes)
+    before = corrected_text
     corrected_text, mot_hada_fixes = correct_mot_hada_compound(corrected_text)
     corrected_text = _guard("부사+못하다 활용", before, corrected_text, mot_hada_fixes)
     before = corrected_text
@@ -500,7 +504,7 @@ def _correct_line(
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
         check_negation_reply_spelling(index, corrected_text),
-        check_past_contraction_spelling(index, corrected_text),
+        check_dwae_spelling(index, corrected_text),
         check_spacing(index, corrected_text),
         check_double_passive_voice(index, corrected_text),
     ]

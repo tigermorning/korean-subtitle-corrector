@@ -94,6 +94,15 @@ class TestAuditScoring:
         assert b["precision"] == pytest.approx(1 / 3)
         assert b["recall"] == pytest.approx(1 / 3)
 
+    def test_규칙_엔진이_먼저_고친_문항은_모델_놓침으로_세지_않는다(self):
+        items = [
+            {"id": "d01", "rule": "되/돼", "split": "positive", "input": "됬네", "gold": "됐네"},
+            {"id": "d02", "rule": "되/돼", "split": "positive", "input": "되?", "gold": "돼?"},
+        ]
+        fixed_by_rules = {"after_rules": "됐네", "proposals": [], "blocked": []}
+        b = audit.score_eval(items, {1: fixed_by_rules, 2: self._line()})["rules"]["되/돼"]
+        assert (b["rule_fixed"], b["positive"], b["miss"]) == (1, 1, 1)
+
     def test_forbid는_막힌_제안도_따로_센다(self):
         items = [
             {"id": "f01", "rule": None, "split": "forbid", "input": "밥 먹었냐?", "gold": "밥 먹었냐?"},

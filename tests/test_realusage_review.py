@@ -985,27 +985,81 @@ def test_quantity_expression_not_merged_with_hada_via_particle_spacing():
 
 # --- 2026-09-17: 형태소 분석이 지운 표면 오류 / 보조 용언 붙임의 우연한 표제어 충돌 ---
 
-def test_nonstandard_past_contraction_is_flagged_not_silently_passed():
+def test_dwae_spelling_is_auto_corrected_end_to_end():
     """'됬다'는 kiwi가 되/VV+었/EP로 **정상 분석**해 기본형 '되다'만 사전에 묻는
-    맞춤법 검사를 그대로 통과했다(flags=[], 로그 없음). 제35항 [붙임 2]대로 '됐다'를
-    첫 후보로 확인 플래그한다 — 자동 교정은 하지 않는다(IMPLEMENTATION_LOG §103)."""
-    out, flags = _run("어제 숙제를 다 했어. 이제 됬다.")
-    assert "됬다" in out  # 원문은 바꾸지 않는다
-    assert any(f.suggested_fix.endswith("이제 됐다") for f in flags)
-
-    out, flags = _run("잘됬네, 안됬어")
-    assert out == "잘됬네, 안됬어"
-    assert any(f.suggested_fix == "잘됐네, 안됐어" for f in flags)
+    맞춤법 검사를 그대로 통과했다(flags=[], 로그 없음). 처음엔 확인 플래그로만
+    막았으나(§103), 2026-09-17 사용자 결정으로 '되/돼' 표기 오류는 자동 교정한다(§104)."""
+    out, _flags = _run("어제 숙제를 다 했어. 이제 됬다.")
+    assert out.endswith("이제 됐다")
+    assert _run("잘됬네, 안됬어")[0] == "잘됐네, 안됐어"
+    assert _run("그럼 안되요")[0] == "그럼 안돼요"
 
 
-def test_standard_past_contractions_are_not_flagged():
-    """맞는 준말·본말·불규칙 활용은 새 검사에 걸리면 안 된다."""
-    from subtitle_corrector.engine import check_past_contraction_spelling
+# 되/돼 정답표(2026-09-17). 근거: 한글 맞춤법 제35항 [붙임 2]. '되요'와 '돼요'는 뜻으로
+# 갈리지 않는다 — 이루어짐('일이 잘 돼요')이든 허락('들어가도 돼요')이든 '되어요'가
+# 줄어든 '돼요'이고, '되요'는 어떤 뜻으로도 표준 표기가 아니다. kiwi만 쓰므로 사전 API
+# 없이 돈다.
+_DWAE_AUTO = {
+    "이제 됬다": "이제 됐다",
+    "잘됬네, 안됬어": "잘됐네, 안됐어",
+    "일이 됬었어": "일이 됐었어",       # kiwi가 '었었'을 한 토큰으로 묶는 경우
+    "그렇게 됬었어요": "그렇게 됐었어요",
+    "그거면 되요": "그거면 돼요",
+    "해도 되요?": "해도 돼요?",
+    "걱정되요": "걱정돼요",
+    "이제 되서 다행이다": "이제 돼서 다행이다",
+    "시작되서": "시작돼서",
+    "잘 되야 할 텐데": "잘 돼야 할 텐데",
+    "되야지": "돼야지",
+    "밥이 되도 좋고": "밥이 돼도 좋고",
+    "되서요": "돼서요",
+    # 문장 끝 '되' — 용언 어간은 어미 없이 문장을 끝낼 수 없다
+    "이제 집에 가도 되?": "이제 집에 가도 돼?",
+    "내일은 출근 안 해도 되": "내일은 출근 안 해도 돼",
+    "안 되!": "안 돼!",
+    "그럼 안되": "그럼 안돼",
+}
 
-    for text in ("일이 잘 됐다", "그렇게 되었다", "하늘이 파랬다", "친구를 도왔다",
-                 "노래를 불렀다", "선생님을 뵀다", "명절을 쇘다", "학생을 가르쳤다",
-                 "많이 괜찮아졌다", "그 사람이었다", "정말 했었지"):
-        assert check_past_contraction_spelling(1, text) is None, text
+_DWAE_KEEP = (
+    "일이 잘 돼요", "들어가도 돼요", "되세요", "되죠", "되고", "되면", "됩니다", "되어서",
+    "돼서", "돼야", "돼도", "되도록", "훌륭한 사람이 되라", "되라고", "되오", "되니까",
+    "되겠다", "되어", "돼", "되고요", "되면서요", "되시나요", "됐다", "되었다",
+    "그렇게 됐었다", "그렇게 되었었다", "사되요",
+    # 부피 단위 명사 '되' — kiwi가 NNB로 가른다
+    "쌀 한 되요", "쌀 한 되도 없다", "한 되서 두 되로 늘었다", "몇 되야?", "쌀 한 되",
+    "쌀 두 되 주세요", "이제 되.", "되?",
+    # 뒤에 다른 낱말이 오는 '되' — 띄어 쓴 '되찾다'일 수 있어 건드리지 않는다
+    "잃어버린 걸 되 찾았다", "그러면 되 그리고 가",
+    # 낱말을 설명하는 글의 '되' — 빗금·화살표는 문장 끝이 아니다
+    "되/VV로 읽는다", "안되 -> 안 돼",
+    # 다른 어간의 맞는 준말·불규칙 활용
+    "하늘이 파랬다", "친구를 도왔다", "노래를 불렀었다", "선생님을 뵀다", "명절을 쇘다",
+    "학생을 가르쳤다", "많이 괜찮아졌다", "그 사람이었다", "정말 했었지", "영화를 봤었어요",
+)
+
+# kiwi가 명사 '되'(부피 단위)·'두세'의 방언을 동사로 잘못 읽는 자리 — 자동 교정하지 않고
+# 확인만 한다.
+_DWAE_REVIEW = {
+    "보리 되도 팔았다": "보리 돼도 팔았다",
+    "말과 되요": "말과 돼요",
+    "되서 개만 주세요": "돼서 개만 주세요",
+}
+
+
+def test_dwae_answer_table():
+    from subtitle_corrector.engine import check_dwae_spelling, correct_dwae_spelling
+
+    for text, expected in _DWAE_AUTO.items():
+        corrected, log = correct_dwae_spelling(text)
+        assert corrected == expected, text
+        assert log, text  # edit_guard가 재구성할 로그가 있어야 한다
+    for text in _DWAE_KEEP:
+        assert correct_dwae_spelling(text) == (text, []), text
+        assert check_dwae_spelling(1, text) is None, text
+    for text, candidate in _DWAE_REVIEW.items():
+        assert correct_dwae_spelling(text) == (text, []), text
+        flag = check_dwae_spelling(1, text)
+        assert flag is not None and flag.suggested_fix == candidate, text
 
 
 def test_aux_spacing_ignores_headword_that_only_shares_letters():

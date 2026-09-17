@@ -43,6 +43,7 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_discriminatory_terms,
     correct_former_terms,
     correct_honorific_dependent_noun_spacing,
+    correct_dwae_spelling,
     correct_gumeon_ending,
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
@@ -158,6 +159,12 @@ RULES = [
         _plain(correct_always_wrong),
         "목록",
         "common_errors.ALWAYS_WRONG — 문맥 무관 오용으로 검증된 정적 목록",
+    ),
+    (
+        "되돼표기",
+        _plain(correct_dwae_spelling),
+        "태그",
+        "'됬'->'됐'(우리말샘 포함 검색 0건인 음절, kiwi가 되+었으로 읽은 자리), '되요·되서·되야·되도'와 문장 끝 '되'->'돼'(제35항 붙임 2). 앞이 수 관형사·맨 명사·접속 조사이거나 뒤가 단위 명사면 '되'(부피 단위)일 수 있어 플래그로 내림(2026-09-17 사용자 결정, §104)",
     ),
     (
         "종결어미구먼",

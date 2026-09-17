@@ -134,7 +134,8 @@ from .replacements import (
 )
 from .spelling import (
     check_negation_reply_spelling,
-    check_past_contraction_spelling,
+    check_dwae_spelling,
+    correct_dwae_spelling,
     check_purified_terms,
     check_spelling,
     correct_gumeon_ending,
@@ -212,7 +213,8 @@ __all__ = [
     "correct_subtitle_ellipsis",
     "check_spelling",
     "check_negation_reply_spelling",
-    "check_past_contraction_spelling",
+    "check_dwae_spelling",
+    "correct_dwae_spelling",
     "check_purified_terms",
     "check_spacing",
     "check_ambiguous_compound",
