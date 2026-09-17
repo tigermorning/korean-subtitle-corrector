@@ -173,6 +173,72 @@ def check_negation_reply_spelling(index: int, text: str) -> FlagItem | None:
     )
 
 
+# 어간과 한 음절로 줄어드는 과거 시제 선어말 어미. '였'은 '하'+'였'('했')처럼
+# 용언 어간 뒤에서만 본다 — 서술격 조사 '이'+'었'('였')은 VCP라 아래 어간 태그에
+# 걸리지 않는다(코퍼스에서 '이었'/'였'이 kiwi.join과 갈리는 것을 확인했다).
+_PAST_EP_FORMS = ("었", "았", "였")
+_CONTRACTING_STEM_TAGS = ("VV", "VA", "VX", "XSV", "XSA")
+
+
+def check_past_contraction_spelling(index: int, text: str) -> FlagItem | None:
+    """어간+'-었-'이 한 음절로 줄어든 자리의 표기가 준말 규정과 다르면 플래그한다
+    ('됬다' -> '됐다').
+
+    **왜 따로 보나(2026-09-17).** kiwi는 '됬다'를 되/VV + 었/EP + 다/EF로 **정상
+    분석**한다 — 틀린 표면을 표준 형태소로 정규화해 버리므로, 기본형('되다')만
+    사전에 묻는 `check_spelling()`에는 아무것도 걸리지 않았다. 표면의 오류가
+    형태소 분석 단계에서 지워지는 것이다.
+
+    근거는 사전 조회가 아니라 한글 맞춤법 준말 규정(제34·35항, '되었다'->'됐다'는
+    제35항 [붙임 2])이다. 줄어든 음절을 kiwi가 같은 형태소로 **다시 짜 본 결과**
+    (`kiwi.join`)가 규정대로의 준말이므로, 원문 음절이 그것과 다르면 원문이 규정
+    밖의 표기다. 형태소가 한 음절에 겹친 자리(줄어든 자리)만 본다 — '되었다'처럼
+    줄이지 않은 본말은 대상이 아니다(본말도 맞는 표기다).
+
+    **실측(2026-09-17)**: 맞는 준말·불규칙 활용 60여 개(파랬다·도왔다·불렀다·
+    뵀다·쇘다·쬈다·가르쳤다·괜찮아졌다 …)에서 0건, 저장소 코퍼스 1,457줄에서
+    '됬' 말고는 0건.
+
+    **자동 교정하지 않는다.** 규정상 답은 하나지만, 그 답은 kiwi가 이 음절을
+    '어간+었'으로 읽었다는 분석에 기대고 있다 — 분석이 틀렸을 때 원문을 바꾸면
+    되돌릴 근거가 없다. 첫 후보를 달아 사람에게 확인받는다."""
+    tokens = _kiwi.tokenize(text)
+    fixes = {}  # 음절 위치 -> 규정대로의 준말 음절
+    for stem, ep in zip(tokens, tokens[1:]):
+        if not stem.tag.startswith(_CONTRACTING_STEM_TAGS):
+            continue
+        if ep.tag != "EP" or ep.form not in _PAST_EP_FORMS or ep.len != 1:
+            continue
+        if ep.start != stem.start + stem.len - 1:
+            continue  # 어간 마지막 음절과 겹치지 않음 = 줄이지 않은 본말
+        try:
+            rebuilt = _kiwi.join([(stem.form, stem.tag), (ep.form, ep.tag)])
+        except Exception:
+            continue
+        if rebuilt and rebuilt[-1] != text[ep.start]:
+            fixes[ep.start] = rebuilt[-1]
+    if not fixes:
+        return None
+
+    suggested = list(text)
+    for pos, syllable in fixes.items():
+        suggested[pos] = syllable
+    suggested_fix = "".join(suggested)
+    pairs = ", ".join(
+        dict.fromkeys(f"'{text[pos]}' -> '{syllable}'" for pos, syllable in sorted(fixes.items()))
+    )
+    return FlagItem(
+        line_index=index,
+        original_text=text,
+        reason=(
+            f"용언 어간과 '-었-'이 줄어든 표기가 준말 규정과 다릅니다({pairs}). "
+            "한글 맞춤법 제34·35항(예: 제35항 [붙임 2] '되었다' -> '됐다'). "
+            "줄이지 않은 본말로 적어도 맞습니다."
+        ),
+        suggested_fix=suggested_fix,
+    )
+
+
 def check_spelling(index: int, text: str) -> FlagItem | None:
     """사전에 없는 단어는 신조어일 수도, 외국어 음차(이름·지명 등)일 수도
     있어 이 함수만으로는 구분할 수 없다 — 그래서 고치자고 제안하지 않고,

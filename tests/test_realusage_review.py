@@ -981,3 +981,56 @@ def test_quantity_expression_not_merged_with_hada_via_particle_spacing():
     실제로 이 사고를 낸 건 별개 경로인 이 함수였다(docs/log-archive/2026-h2.md §60 부류)."""
     assert _run("20번 했어")[0] == "20번 했어"
     assert _run("3세트 해라")[0] == "3세트 해라"
+
+
+# --- 2026-09-17: 형태소 분석이 지운 표면 오류 / 보조 용언 붙임의 우연한 표제어 충돌 ---
+
+def test_nonstandard_past_contraction_is_flagged_not_silently_passed():
+    """'됬다'는 kiwi가 되/VV+었/EP로 **정상 분석**해 기본형 '되다'만 사전에 묻는
+    맞춤법 검사를 그대로 통과했다(flags=[], 로그 없음). 제35항 [붙임 2]대로 '됐다'를
+    첫 후보로 확인 플래그한다 — 자동 교정은 하지 않는다(IMPLEMENTATION_LOG §103)."""
+    out, flags = _run("어제 숙제를 다 했어. 이제 됬다.")
+    assert "됬다" in out  # 원문은 바꾸지 않는다
+    assert any(f.suggested_fix.endswith("이제 됐다") for f in flags)
+
+    out, flags = _run("잘됬네, 안됬어")
+    assert out == "잘됬네, 안됬어"
+    assert any(f.suggested_fix == "잘됐네, 안됐어" for f in flags)
+
+
+def test_standard_past_contractions_are_not_flagged():
+    """맞는 준말·본말·불규칙 활용은 새 검사에 걸리면 안 된다."""
+    from subtitle_corrector.engine import check_past_contraction_spelling
+
+    for text in ("일이 잘 됐다", "그렇게 되었다", "하늘이 파랬다", "친구를 도왔다",
+                 "노래를 불렀다", "선생님을 뵀다", "명절을 쇘다", "학생을 가르쳤다",
+                 "많이 괜찮아졌다", "그 사람이었다", "정말 했었지"):
+        assert check_past_contraction_spelling(1, text) is None, text
+
+
+def test_aux_spacing_ignores_headword_that_only_shares_letters():
+    """제47항 보조 용언 구간에서 붙임형이 '사전에 있다'는 긍정 근거만 보면, 글자만
+    같고 짜임이 다른 표제어가 걸린다(원리 3). '한척-하다'(옷을 빨다) 때문에
+    '아는 척'과 같은 구성인 '한척했다'가 띄어지지 않았다. 하이픈이 관형사형과
+    의존명사 사이에 있는 표제어('볼-만하다', '그럴-듯하다')만 붙임 근거로 인정한다."""
+    assert _run("그는 공부 한척했다")[0] == "그는 공부한 척했다"
+    assert _run("이거 할만하다")[0] == "이거 할 만하다"
+    # '볼만하다'는 '볼만-하다'(동사, 무관)와 함께 '볼-만하다'(형용사, 구경거리가 될
+    # 만하다)가 표준국어대사전에 있다 — 붙여 쓴 원문이 한 낱말로 맞다.
+    assert _run("그 영화는 볼만했어")[0] == "그 영화는 볼만했어"
+    assert _run("그럴듯하다")[0] == "그럴듯하다"
+    # 패턴 1: '나가보다'는 북한어 표제어(하이픈 없음)뿐이라 붙임 근거가 아니다.
+    assert _run("나가보자")[0] == "나가 보자"
+    assert _run("내가 알아볼게")[0] == "내가 알아볼게"  # '알아-보다'
+
+
+def test_joined_headword_at_requires_hyphen_at_the_construction_boundary():
+    from subtitle_corrector.dictionary import joined_headword_at
+
+    assert joined_headword_at("볼만하다", 1)      # 볼-만하다
+    assert joined_headword_at("그럴듯하다", 2)    # 그럴-듯하다
+    assert joined_headword_at("알아보다", 2)      # 알아-보다
+    assert not joined_headword_at("한척하다", 1)  # 한척-하다
+    assert not joined_headword_at("할양하다", 1)  # 할양-하다
+    assert not joined_headword_at("나가보다", 2)  # 나가보다(북한어)
+    assert not joined_headword_at("떠주다", 1)    # 떠주다(방언)

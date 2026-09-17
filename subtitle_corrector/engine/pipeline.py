@@ -75,6 +75,7 @@ from .replacements import (
 )
 from .spelling import (
     check_negation_reply_spelling,
+    check_past_contraction_spelling,
     check_purified_terms,
     check_spelling,
     correct_gumeon_ending,
@@ -499,6 +500,7 @@ def _correct_line(
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
         check_negation_reply_spelling(index, corrected_text),
+        check_past_contraction_spelling(index, corrected_text),
         check_spacing(index, corrected_text),
         check_double_passive_voice(index, corrected_text),
     ]
