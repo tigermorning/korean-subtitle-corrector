@@ -334,3 +334,107 @@ class TestLookupFailureIsNotAbsence:
 
         assert body["lookup_failed"] is False
         assert body["candidates"] == []
+
+
+class TestEmptyBodyIsVerifiedWithCanary:
+    """빈 결과를 "표제어 없음"으로 믿기 전에 반드시 있는 낱말로 확인하는지 고정한다
+    (2026-09-17, docs/IMPLEMENTATION_LOG.md §104).
+
+    그날 16시 20분께 표준국어대사전 검색 API가 '사람'·'나무'까지 모든 검색어에 HTTP 200
+    + 0바이트 본문을 줬다. 예전 `_get_json()`은 그것을 "검색 결과 없음(정상 응답)"으로
+    받아, 장애가 "등재 안 됨"이라는 판정으로 둔갑했고 `failed_lookups()`는 비어 있었다.
+    같은 시각 우리말샘은 복구돼 `is_standard_word()`는 참인데 `search_stdict()`는
+    0건인 모순이 한 호출 안에서 났다.
+    """
+
+    @staticmethod
+    def _by_query(monkeypatch, table, default):
+        """검색어(q)별로 응답을 고른다. 기준 낱말 요청도 여기로 온다."""
+        seen = []
+
+        def fake_get(_url, params=None, **_kw):
+            q = (params or {}).get("q")
+            seen.append(q)
+            return table.get(q, default)
+
+        monkeypatch.setattr(clients.requests, "get", fake_get)
+        return seen
+
+    def test_기준_낱말도_비면_실패로_집계한다(self, monkeypatch):
+        seen = self._by_query(monkeypatch, {}, _Response(""))
+        assert clients.search_stdict("짜장면")["channel"]["total"] == 0  # 안전한 기본값은 그대로
+        assert clients.failed_lookups() == ["표준국어대사전"]
+        stats = clients.lookup_stats()["표준국어대사전"]
+        assert stats["failures"] == 1
+        assert "짜장면" in stats["queries"][0] and "빈 응답" in stats["queries"][0]
+        assert clients._CANARY_WORD in seen
+
+    def test_기준_낱말이_나오면_진짜_없음이다(self, monkeypatch):
+        self._by_query(
+            monkeypatch, {clients._CANARY_WORD: _Response("{...}", payload=_OK)}, _Response("")
+        )
+        assert clients.search_stdict("뛟뷁쉙퀣")["channel"]["total"] == 0
+        assert clients.failed_lookups() == []
+
+    def test_우리말샘의_total_0_응답도_확인한다(self, monkeypatch):
+        """장애 중 XML 모드는 '사람'에도 `<total>0</total>`을 줬다 — 모양이 멀쩡한 0건도
+        장애일 수 있다. 우리말샘의 진짜 0건 응답(`total: "0"`)도 같은 확인을 거친다."""
+        zero = {"channel": {"total": "0", "num": "0"}}
+        self._by_query(monkeypatch, {}, _Response("{...}", payload=zero))
+        assert clients.search_opendict("사람")["channel"]["total"] == 0
+        assert clients.failed_lookups() == ["우리말샘"]
+
+    def test_실패는_캐시되지_않아_복구되면_다시_찾는다(self, monkeypatch):
+        self._by_query(monkeypatch, {}, _Response(""))
+        assert clients.search_stdict("나무")["channel"]["total"] == 0
+        self._by_query(monkeypatch, {}, _Response("{...}", payload=_OK))
+        assert clients.search_stdict("나무") == _OK
+
+    def test_살아_있다는_확인은_잠깐_재사용한다(self, monkeypatch):
+        """자막 한 편에 "없음"이 수백 건 나온다 — 매번 기준 낱말을 찌르면 조회가 배로 는다."""
+        seen = self._by_query(
+            monkeypatch, {clients._CANARY_WORD: _Response("{...}", payload=_OK)}, _Response("")
+        )
+        for i in range(5):
+            clients.search_stdict(f"없는말{i}")
+        assert seen.count(clients._CANARY_WORD) == 1
+        assert clients.failed_lookups() == []
+
+    def test_죽었다는_확인은_재사용하지_않는다(self, monkeypatch):
+        """죽음을 캐시하면 복구된 뒤에도 "없음"을 실패로 잘못 보고한다."""
+        self._by_query(monkeypatch, {}, _Response(""))
+        clients.search_stdict("없는말")
+        clients.reset_failed_lookups()
+        self._by_query(
+            monkeypatch, {clients._CANARY_WORD: _Response("{...}", payload=_OK)}, _Response("")
+        )
+        clients._fetch_stdict.cache_clear()
+        clients.search_stdict("없는말")
+        assert clients.failed_lookups() == []
+
+    def test_연달아_비면_차단기가_열린다(self, monkeypatch):
+        """빈 응답 장애도 통신 장애처럼 차단기를 연다 — 수천 건을 두 번씩 찌르지 않는다."""
+        seen = self._by_query(monkeypatch, {}, _Response(""))
+        for i in range(10):
+            clients.search_stdict(f"낱말{i}")
+        assert clients.lookup_stats()["표준국어대사전"]["failures"] == 10
+        assert len(seen) == 10  # 앞 5건만 (본 요청 + 기준 낱말) 2회씩, 뒤 5건은 네트워크 없음
+
+    def test_잘못된_검색어_오류는_확인하지_않는다(self, monkeypatch):
+        """코드 100(검색어 문법 오류)은 서버 장애가 아니다 — 기준 낱말을 찌를 이유가 없다."""
+        seen = self._by_query(monkeypatch, {}, _Response(_ERROR_XML))
+        clients.search_stdict("/")
+        assert clients._CANARY_WORD not in seen
+        assert clients.failed_lookups() == []
+
+    def test_headwords_판정이_흡수해도_집계된다(self, monkeypatch):
+        """같은 날 모순의 재현: 우리말샘은 살아 있고 표준국어대사전만 빈 본문일 때,
+        판정 함수는 기본값으로 흡수하되 실패 사실은 리포트에 남는다."""
+        def fake_get(url, params=None, **_kw):
+            if "stdict" in url:
+                return _Response("")
+            return _Response("{...}", payload=_OK)
+
+        monkeypatch.setattr(clients.requests, "get", fake_get)
+        assert headwords.definition_markers("짜장면") == frozenset()
+        assert clients.failed_lookups() == ["표준국어대사전"]
