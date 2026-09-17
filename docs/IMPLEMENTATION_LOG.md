@@ -436,3 +436,67 @@ kiwi가 곧바로 뒤에 붙는 조사를 찾아 `_JOSA_ALLOMORPHS`로 이형태
 - `tests/test_llm_pass.py`: 이름표 검사·범위 밖 규칙·두 줄 자막·declared 본문·파싱 회귀 추가.
 - `tests/test_eval_tools.py` 신규: run_eval 행동 판정, audit 채점, 평가셋 누수·균형·생성 스크립트 일치.
 - 두 파일 68건 통과. `tools/check_names.py` 0건.
+
+## 104. 표준국어대사전 빈 응답 장애가 "표제어 없음"으로 흡수되던 것 (2026-09-17)
+
+원리 5(실패를 성공으로 흡수)의 다섯 번째 사고. 상담 창구 저장소(`korean-corrector-help-desk`)
+측정 중 발견돼 넘어온 작업(그쪽 `runs/LAB.md`).
+
+### 증상
+
+- 16시 20분께부터 표준국어대사전 검색 API가 **모든 검색어에 HTTP 200 + 0바이트 본문**.
+  - '사람'·'나무'·'짜장면'·'먹거리' 전부. 같은 날 낮에는 정상.
+- `_get_json()`은 빈 본문을 "검색 결과 없음(정상 응답)"으로 받았다.
+  - 장애가 "등재 안 됨"이라는 판정으로 둔갑.
+  - `failed_lookups()`·`lookup_stats()`에 아무것도 안 남음.
+- 같은 시각 우리말샘은 복구 — `is_standard_word('짜장면')` 참인데 `search_stdict()`는 0건.
+
+### 실측 (16:32, 같은 키)
+
+| 요청 | 응답 |
+|---|---|
+| 표준 JSON '사람'·없는 낱말 | 200, 0바이트 |
+| 표준 JSON, 틀린 키 | 200, 0바이트 |
+| 표준 XML '사람'·없는 낱말 | 200, `<total>0</total>` |
+| 표준 XML, 틀린 키 | 200, `<error_code>020` Unregistered key |
+| 표준 사전 내용(view.do) | 200, `<total>0</total>` |
+| 우리말샘 JSON 없는 낱말 | 200, `"total": "0"` JSON(321바이트) |
+| kornorms JSON 없는 낱말 | 200, JSON(975바이트) |
+
+- **응답 모양으로는 못 가른다.**
+  - 표준 JSON은 키 오류까지 빈 본문으로 뭉갠다.
+  - 표준 XML은 장애를 멀쩡한 "0건"으로 준다.
+- 한도 초과인지 서버 장애인지는 못 가렸다(`<error>` 없음).
+- 표준 JSON의 정상 "0건" 모양은 장애 중이라 못 쟀다 — `docs/BACKLOG.md` 39번.
+
+### 고친 것 (`subtitle_corrector/dictionary/clients.py`)
+
+- `_get_json(..., verify_empty=True)` — 표준국어대사전·우리말샘 검색에만.
+  - 결과가 비면(빈 본문 또는 `channel.item` 없음) 기준 낱말 `'사람'`을 한 번 더 조회.
+  - 기준 낱말도 비면 `note_lookup_failure()` + `_LookupFailed` — 표본에 "빈 응답" 표시.
+  - 기준 낱말이 나오면 진짜 없음 → 예전처럼 빈 결과.
+- 반환값은 그대로 — `search_stdict()`는 여전히 빈 channel(안전한 기본값). 실패 사실만 위로 올린다.
+- **살아 있음 확인은 60초 재사용**(`_CANARY_TTL`) — 자막 한 편의 "없음" 수백 건마다 찌르지 않게.
+- **죽음 확인은 재사용 안 함** — 복구를 놓치지 않게. 연달아 죽으면 기존 차단기가 네트워크를 막는다.
+- 코드 100(검색어 문법 오류) XML은 확인 안 함 — 서버 장애가 아니다.
+- `reset_failed_lookups()`가 확인 기록도 비운다.
+
+### 안 고친 것
+
+- kornorms·한국어기초사전·온용어·지역어 — 같은 장애를 본 적 없음. `docs/BACKLOG.md` 39번.
+- 상담 창구 쪽 `desk_tools.search_dictionary` 기준 낱말 확인 — 그 저장소 것이라 그대로 둠.
+  이 수정 뒤에는 `lookup_failed` 경로로도 잡힐 것.
+
+### 검증
+
+- `tests/test_lookup_failure_report.py::TestEmptyBodyIsVerifiedWithCanary` 9건 신규.
+  - 옛 `clients.py`로 돌리면 9건 전부 실패, 새 코드로 파일 전체 31건 통과.
+- 실제 API(장애 중)로 재현:
+  - `search_stdict('사람'·'짜장면'·'뛟뷁쉙퀣')` — 반환 0건, `failed_lookups()` = `['표준국어대사전']`, 표본에 "빈 응답".
+  - `search_opendict('뛟뷁쉙퀣')` 0건 — 실패로 안 셈(기준 낱말 살아 있음).
+- `tools/check_names.py` 0건.
+- 전체 스위트(장애 중): 589 통과 · 15 실패.
+  - 12건은 옛 코드에서도 실패 — 표준국어대사전 응답에 기대는 실시간 시험(`test_former_terms` 9, `test_realusage_review` 3).
+  - 3건은 새 코드에서만 실패 — `test_integration::test_sample_srt_full_pipeline`, `test_dialect_modes::…no_flags`, `test_subtitle_markers::…whole_line`.
+  - 3건 모두 원인 같음: 로그에 `[사전 조회 실패] 표준국어대사전 — … 전부 실패` 한 줄이 붙어 `applied` 개수 단언이 깨짐.
+  - **옛 코드에서 통과한 것이 바로 이 버그** — 장애를 숨겨서 통과했다. API가 살아나면 다시 통과해야 한다(재확인은 `docs/BACKLOG.md` 39번).

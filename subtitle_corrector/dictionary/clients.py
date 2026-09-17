@@ -135,6 +135,7 @@ def lookup_stats() -> dict[str, dict]:
 
 def reset_failed_lookups() -> None:
     _LOOKUP_STATS.clear()
+    _CANARY_ALIVE_AT.clear()
 
 
 class _LookupFailed(Exception):
@@ -159,12 +160,67 @@ _BREAKER_STREAK = 5
 _BREAKER_PROBE_EVERY = 20
 
 
-def _get_json(url: str, params: dict, api: str, timeout: int = 10) -> dict:
+# **빈 결과는 기준 낱말로 확인한다**(2026-09-17, docs/IMPLEMENTATION_LOG.md §104).
+#
+# 표준국어대사전 검색 API가 16시 20분께부터 '사람'·'나무'까지 모든 검색어에 HTTP 200 +
+# 0바이트 본문을 줬다(같은 날 낮에는 정상). 예전 `_get_json()`은 빈 본문을 "검색 결과 없음
+# (정상 응답)"으로 받았으므로, 장애가 "표제어 없음"이라는 **정상 판정**으로 둔갑했고
+# `failed_lookups()`에는 아무것도 남지 않았다 — 원리 5(실패를 성공으로 흡수)의 다섯 번째 사고.
+#
+# 응답 모양만으로는 가를 수 없다(같은 날 실측):
+# - 장애 중 XML 모드는 '사람'에도 `<total>0</total>`을 줬다 — 모양은 멀쩡한 "0건"이다.
+# - JSON 모드는 키가 틀려도(XML이면 `<error_code>020`) 0바이트다 — 오류도 빈 본문으로 뭉갠다.
+# - 우리말샘·kornorms의 진짜 "0건"은 빈 본문이 아니라 `total: "0"` JSON이다.
+# 그래서 결과가 비면 **반드시 있는 표제어**를 한 번 더 찔러 본다. 그것까지 비면 서버가
+# 답을 못 하는 것이므로 실패로 올리고, 나오면 그 검색어가 정말 없는 것이다.
+#
+# 살아 있다는 확인은 잠깐 재사용한다 — 자막 한 편에 "없음"이 수백 건 나오므로(kiwi 조각)
+# 매번 찌르면 조회가 배로 는다. 죽었다는 확인은 재사용하지 않는다(복구를 놓치지 않게,
+# 연달아 죽으면 차단기가 네트워크를 막는다).
+_CANARY_WORD = "사람"
+_CANARY_TTL = 60.0
+_CANARY_ALIVE_AT: dict[str, float] = {}
+
+
+def _has_items(data: dict) -> bool:
+    channel = data.get("channel") if isinstance(data, dict) else None
+    if not isinstance(channel, dict):
+        return False
+    return bool(channel.get("item"))
+
+
+def _canary_alive(url: str, params: dict, api: str, timeout: int) -> bool:
+    """기준 낱말 검색이 실제 항목을 돌려주는가. 통신 실패도 '살아 있지 않음'이다."""
+    alive_at = _CANARY_ALIVE_AT.get(api)
+    if alive_at is not None and time.monotonic() - alive_at < _CANARY_TTL:
+        return True
+    try:
+        response = requests.get(
+            url, params={**params, "q": _CANARY_WORD}, headers=_HEADERS, timeout=timeout
+        )
+        response.raise_for_status()
+        alive = bool(response.text.strip()) and _has_items(response.json())
+    except (requests.RequestException, ValueError):
+        alive = False
+    if alive:
+        _CANARY_ALIVE_AT[api] = time.monotonic()
+    else:
+        _CANARY_ALIVE_AT.pop(api, None)
+    return alive
+
+
+def _get_json(
+    url: str, params: dict, api: str, timeout: int = 10, verify_empty: bool = False
+) -> dict:
     """JSON 조회 + 재시도. 결과가 없으면 빈 dict, 실패 확정이면 `_LookupFailed`.
 
     응답이 JSON이 아닌 경우(국립국어원 API는 잘못된 검색어에 XML `<error>`를 200으로
     돌려준다 — `'/'`·`'^'` 실측)도 실패로 본다. 전에는 `response.json()`이 그대로
     터져 파이프라인이 멈출 수 있었다.
+
+    `verify_empty`면 빈 결과(빈 본문 또는 항목 0건)를 그대로 믿지 않고 기준 낱말로
+    서버가 답을 하고 있는지 확인한다(`_canary_alive()` 위 주석). `channel.item` 모양의
+    응답(표준국어대사전·우리말샘 검색)에만 쓴다.
     """
     note_lookup_attempt(api)
     query = str(params.get("q") or params.get("searchKeyword") or params.get("searchWord") or "")
@@ -184,11 +240,9 @@ def _get_json(url: str, params: dict, api: str, timeout: int = 10) -> dict:
             response = requests.get(url, params=params, headers=_HEADERS, timeout=timeout)
             response.raise_for_status()
             body = response.text.strip()
-            # 응답이 왔으면 차단기를 푼다(API가 복구된 것이다).
-            stats["streak"] = 0
-            if not body:
-                return {}  # 검색 결과 없음(정상 응답) — API가 빈 본문을 준다
             if body.startswith("<"):
+                # 응답이 왔으면 차단기를 푼다(API가 복구된 것이다).
+                stats["streak"] = 0
                 # 국립국어원 API는 오류를 200 + XML `<error>`로 돌려준다. 이걸
                 # json()에 넘기면 그대로 터진다(전에는 파이프라인이 멈출 수 있었다).
                 code = _api_error_code(body)
@@ -199,7 +253,15 @@ def _get_json(url: str, params: dict, api: str, timeout: int = 10) -> dict:
                     return {}
                 note_lookup_failure(api, f"{query} (error_code={code or '?'})")
                 raise _LookupFailed(api)
-            return response.json()
+            data = response.json() if body else {}
+            if verify_empty and not _has_items(data) and not _canary_alive(url, params, api, timeout):
+                # 빈 결과인데 반드시 있는 낱말도 비었다 — "없음"이 아니라 서버가 답을
+                # 못 하는 것이다(장애·한도 초과). 차단기를 풀지 않는다.
+                note_lookup_failure(api, f"{query} (빈 응답 — 기준 낱말 '{_CANARY_WORD}'도 비어 있음)")
+                raise _LookupFailed(api)
+            # 응답이 왔으면 차단기를 푼다(API가 복구된 것이다).
+            stats["streak"] = 0
+            return data
         except (requests.RequestException, ValueError):
             if attempt < len(waits):
                 time.sleep(waits[attempt])
@@ -223,7 +285,7 @@ def _api_error_code(body: str) -> str | None:
 def _fetch_stdict(query: str) -> dict:
     if not STDICT_API_KEY:
         raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
-    data = _get_json(STDICT_URL, {"key": STDICT_API_KEY, "q": query, "req_type": "json"}, "표준국어대사전")
+    data = _get_json(STDICT_URL, {"key": STDICT_API_KEY, "q": query, "req_type": "json"}, "표준국어대사전", verify_empty=True)
     return data or _empty_channel()
 
 
@@ -241,7 +303,7 @@ def search_stdict(query: str) -> dict:
 def _fetch_opendict(query: str) -> dict:
     if not OPENDICT_API_KEY:
         raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
-    data = _get_json(OPENDICT_URL, {"key": OPENDICT_API_KEY, "q": query, "req_type": "json"}, "우리말샘")
+    data = _get_json(OPENDICT_URL, {"key": OPENDICT_API_KEY, "q": query, "req_type": "json"}, "우리말샘", verify_empty=True)
     return data or _empty_channel()
 
 
