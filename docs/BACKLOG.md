@@ -127,11 +127,12 @@ User-Agent 차단으로 밝혀졌을 때(`docs/log-archive/2026-h2.md` §79) 이
 
 **"먼저 할 일" 해결됨(2026-09-01).** `exampleReqList.do`는 확인대로 용례만
 준다. 세칙 원문은 `regltnView.do?regltn_code=0003` 열람 페이지에 실제로 다
-있다 — 단 이 페이지는 자바스크립트로 본문을 그려서 **정적 fetch(WebFetch)로는
-제3장(표기 세칙) 이후가 잘려 나온다.** Browser 도구(JS 렌더링)로 열어야
-전문이 보인다는 것까지 실측으로 확인했다. 우선순위 5개 언어(영어·독일어·
-프랑스어·중국어·일본어) 세칙 조문을 전부 이 방법으로 가져와
-`docs/LOANWORD_TRANSCRIPTION_RULES.md`에 옮겨 뒀다.
+있고, 이름을 밝힌 User-Agent로 일반 GET(`requests`·`curl`)하면 조문 전부가
+정적 HTML에 들어온다(JS는 접기·펴기만 한다, 2026-09-17 재확인). 예전에 적었던
+"JS가 본문을 그려 정적 fetch로는 제3장 이후가 잘린다"는 틀렸다 — 잘린 것은
+WebFetch(요약형 도구)의 한계였다. 추출기: `korean-corrector-help-desk` 저장소
+`tools/fetch_norms.py`. 우선순위 5개 언어(영어·독일어·프랑스어·중국어·일본어)
+세칙 조문은 `docs/LOANWORD_TRANSCRIPTION_RULES.md`에 옮겨 뒀다.
 
 **다섯 언어의 난이도가 균일하지 않다는 것도 확인했다.** 일본어·중국어 세칙은
 가나·한어병음이라는 **문자 체계** 기준이라 표 4·표 5 대조표만 있으면 되는데,

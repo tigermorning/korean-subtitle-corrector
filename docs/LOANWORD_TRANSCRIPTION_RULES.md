@@ -3,18 +3,18 @@
 `docs/BACKLOG.md` 31번의 "먼저 할 일"(규정 원문을 어디서 가져올지 정한다)에 대한
 답이다. **결론: `kornorms`의 `exampleReqList.do`(현재 코드가 쓰는 유일한 API)는
 용례만 주고 세칙 조문은 안 준다 — 조문 원문은 `regltnView.do` 열람 페이지에
-있고, 이 페이지는 자바스크립트로 본문을 그려서 정적 HTML 가져오기(WebFetch류)로는
-제3장(표기 세칙) 이후가 잘려 나온다. 브라우저 도구(JS 렌더링)로 접근해야
-전문을 볼 수 있다.**
+있고, 조문 전부가 이 페이지의 정적 HTML에 들어 있다.**
 
 - 출처: 국립국어원 한국어 어문 규범, 「외래어 표기법」[시행 2017. 3. 28.]
   문화체육관광부 고시 제2017-14호
 - URL: `https://korean.go.kr/kornorms/regltn/regltnView.do?regltn_code=0003`
-- 접근 방법: 이 URL은 일반 GET으로 열람 가능하나 본문이 JS로 그려진다 —
-  Claude Code의 Browser 도구(`preview_start` + `get_page_text`)로 열어야
-  제3장 이하가 채워진다. 정적 fetch(WebFetch)는 제2장 표 14 부근에서 끊긴다
-  (실측, 2026-09-01).
-- 이 문서에 옮긴 조문은 2026-09-01에 위 방법으로 가져온 스냅숏이다. 규정이
+- 접근 방법: 이름을 밝힌 User-Agent로 일반 GET(`requests`·`curl`) — 약 1.1MB
+  HTML에 조문(`input[regltn_path]`)·해설(`#explnaArea{n}`)이 전부 있고 JS는
+  접기·펴기만 한다(2026-09-17 확인). WebFetch(요약형 도구)는 제2장 표 14
+  부근에서 끊기지만 이는 도구 한계다 — 2026-09-01에 "JS 렌더링이 필요하다"고
+  적었던 것은 오진. 추출기: `korean-corrector-help-desk` 저장소
+  `tools/fetch_norms.py`.
+- 이 문서에 옮긴 조문은 2026-09-01에 브라우저 도구로 가져온 스냅숏이다. 규정이
   개정되면 이 문서도 낡는다 — 실제 규칙을 코드로 옮기기 직전에는 항상 원본을
   다시 확인할 것(`grammar-rule-verify-then-code` 절차와 동일한 이유).
 
