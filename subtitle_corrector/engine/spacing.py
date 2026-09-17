@@ -1,7 +1,7 @@
 """띄어쓰기 자동 교정 — 조사·어미 붙임(제41항), 합성어(제42항), 보조 용언(제47항).
 """
 
-from ..dictionary import compound_status, definition_markers, word_exists
+from ..dictionary import compound_status, definition_markers, joined_headword_at, word_exists
 from ..report import FlagItem
 from .text_utils import (
     _bracket_spans,
@@ -590,8 +590,11 @@ def _honorific_of_registered_aux(candidate: str) -> str | None:
     """
     if not candidate.endswith("드리다"):
         return None
-    plain = candidate[: -len("드리다")] + "주다"
-    return plain if word_exists(plain) else None
+    lead = candidate[: -len("드리다")]
+    plain = lead + "주다"
+    # 낮춤형도 '앞말+주다'로 짜인 표제어여야 한다 — '떠주다'('터뜨리다'의 방언)처럼
+    # 글자만 같은 표제어로 '떠드리다'를 붙이면 안 된다(joined_headword_at, 원리 3).
+    return plain if joined_headword_at(plain, len(lead)) else None
 
 
 def join_term_phrases(text: str) -> tuple[str, list[str]]:
@@ -711,8 +714,12 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
             # 억지로 띄우지 않는다 — correct_compound_spacing()이 명사 합성어를
             # 사전으로 확인하는 것과 같은 원칙이다.
             nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
-            candidate = text[prev.start : cur.start + cur.len] + nxt_citation
-            if word_exists(candidate):
+            lead = text[prev.start : cur.start + cur.len]
+            candidate = lead + nxt_citation
+            # 글자만 같은 표제어는 근거가 아니다 — '나가보다'(북한어)·'떠주다'(방언)는
+            # 하이픈 없이, 본용언+보조 용언으로 짜인 낱말은 '알아-보다'처럼 바로 그
+            # 경계에 하이픈을 두고 등재된다(joined_headword_at, 2026-09-17).
+            if joined_headword_at(candidate, len(lead)):
                 continue
             if _honorific_of_registered_aux(candidate):
                 continue
@@ -756,7 +763,11 @@ def _aux_verb_spacing(text: str, mode: str = "principle") -> tuple[str, list[str
                 lead_word_start = tokens[i - 2].start  # 그렇+ㄹ 같은 받침 공유 보정
             nxt_citation = nxt.lemma if nxt.lemma.endswith("다") else nxt.lemma + "다"
             whole_candidate = text[lead_word_start : cur.start + cur.len] + nxt_citation
-            if word_exists(whole_candidate):
+            # (a)는 **관형사형+의존명사하다로 짜인** 표제어일 때만이다. 글자만 같으면
+            # 무관한 낱말이 걸린다 — '한척-하다'(옷을 빨다) 때문에 '공부 한척했다'가
+            # 띄어지지 않고, '볼만-하다'(동사, 참견 안 함)와 '볼-만하다'(형용사)가 둘 다
+            # 있는 '볼만하다'는 뒤쪽 짜임이 있어서 붙여 둔다(2026-09-17, 원리 3).
+            if joined_headword_at(whole_candidate, cur.start - lead_word_start):
                 continue  # (a) 전체가 통째로 하나의 표제어 -> 그대로 둔다
             lead_start, lead_end = prev.start + prev.len, cur.start
             lead_gap = text[lead_start:lead_end]

@@ -403,6 +403,67 @@ def compound_status(word: str) -> str | None:
     return None
 
 
+def _hyphen_cuts(raw_word: str) -> tuple[str, frozenset]:
+    """사전 표제어 표기('볼-만하다')를 (글자만 남긴 표기, 하이픈이 끊는 글자 위치)로."""
+    letters = []
+    cuts = set()
+    for ch in raw_word:
+        if ch == "-":
+            cuts.add(len(letters))
+        elif ch != "^":
+            letters.append(ch)
+    return "".join(letters), frozenset(cuts)
+
+
+@lru_cache(maxsize=4096)
+def joined_headword_at(word: str, boundary: int) -> bool:
+    """word가 **바로 그 자리(boundary)에서 짜인** 한 낱말로 사전에 있는지.
+
+    "앞말+보조 용언을 붙인 문자열이 표제어인가"를 `word_exists()`로만 물으면,
+    **글자만 같고 짜임이 다른** 무관한 표제어가 걸린다(`docs/DESIGN_PRINCIPLES.md`
+    원리 3). 2026-09-17 실측:
+
+        한척하다  '한척-하다'(옷을 빨다)     <- '공부 한 척했다'가 '한척했다'로 붙었다
+        할양하다  '할양-하다'(땅을 떼어 줌)  <- '할 양하다'
+        볼만하다  '볼만-하다'(동사, 보기만 하고 참견 안 함) 와
+                  '볼-만하다'(형용사, 구경거리가 될 만하다) 가 **둘 다** 있다
+        나가보다  '나가보다'(북한어, 하이픈 없음)
+        떠주다    '떠주다'('터뜨리다'의 방언, 하이픈 없음)
+
+    두 사전은 합성어의 짜임을 하이픈으로 적는다(`compound_status()` 참고). 그래서
+    '볼'+'만하다'로 짜인 낱말이면 표제어도 `볼-만하다`로, 하이픈이 정확히 그 경계에
+    있다. 경계가 다르거나(`볼만-하다`, `한척-하다`) 하이픈이 아예 없으면(북한어·방언·
+    단일어 `타내다`) 우리가 본 구성과 같은 낱말이라는 근거가 없다 — 그러면 거짓을
+    돌려 호출부가 규정 원칙(띄어 씀)대로 처리하게 한다.
+
+    `word_exists()`도 함께 요구한다 — 우리말샘이 비표준으로 넘긴 표기를 거르는
+    판정은 그쪽에 한곳으로 모여 있다. 조회 실패는 거짓(=근거 없음)으로 흡수되고,
+    실패 사실은 `clients`의 `note_lookup_failure()`가 이미 집계한다(원리 5).
+    """
+    if not word_exists(word):
+        return False
+    try:
+        stdict_items = search_stdict(word).get("channel", {}).get("item", [])
+        opendict_items = search_opendict(word).get("channel", {}).get("item", [])
+    except Exception:
+        return False
+    if isinstance(stdict_items, dict):
+        stdict_items = [stdict_items]
+    if isinstance(opendict_items, dict):
+        opendict_items = [opendict_items]
+    candidates = [item.get("word") or "" for item in stdict_items]
+    candidates += [
+        item.get("word") or ""
+        for item in opendict_items
+        if _opendict_item_is_standard(item, contemporary_only=True)
+    ]
+    for raw_word in candidates:
+        letters, cuts = _hyphen_cuts(raw_word)
+        if letters == word and boundary in cuts:
+            return True
+    return False
+
+
 def usage_examples(word: str, limit: int = 2) -> list[str]:
     """우리말샘에서 word와 정확히 일치하는 표제어의 실제 용례(예문)를 가져온다.
 
