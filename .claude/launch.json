@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "subtitle_corrector.api:app", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "static-preview",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "http.server", "8792"],
+      "port": 8792
     }
   ]
 }
