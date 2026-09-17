@@ -233,5 +233,69 @@ class TestNounPhraseHadaDetach:
     def test_unregistered_noun_pair_untouched(self):
         """사전에 아예 없는 명사쌍('국어공부')은 이 규칙의 근거
         (compound_status == '명사구')가 없어 건드리지 않는다 — 이 조합은
-        별도 판단이 필요한 항목으로 BACKLOG에 남아 있다."""
+        `check_ambiguous_noun_hada_spacing`(BACKLOG 36번,
+        docs/IMPLEMENTATION_LOG.md §101, `TestAmbiguousNounHadaSpacing` 참고)이
+        확인 플래그로 대신 처리한다."""
         assert self._detach("나는 어제 국어공부했어") == "나는 어제 국어공부했어"
+
+
+class TestAmbiguousNounHadaSpacing:
+    """온라인가나다 직접 질의(2026-09-09)로 확인한 소수 "명사+명사+하다" 사례
+    (BACKLOG 36번, docs/IMPLEMENTATION_LOG.md §101). 두 명사 사이는 예외 없이
+    띄워야 하지만(확정 오류), '하다'가 뒷명사에 붙을지 따로 떨어질지는
+    문맥에 따라 갈릴 수 있어(국어공부·상호협력은 둘 다 정답) 자동 반영하지
+    않고 첫 후보만 제안한다."""
+
+    def _flag(self, text):
+        from subtitle_corrector.engine import check_ambiguous_noun_hada_spacing
+
+        return check_ambiguous_noun_hada_spacing(1, text)
+
+    def test_fused_pair_flagged_with_first_candidate(self):
+        f = self._flag("나는 어제 국어공부했어")
+        assert f is not None
+        assert f.suggested_fix == "나는 어제 국어 공부했어"
+
+    def test_fused_pair_detached_hada_also_flagged(self):
+        """'국어공부 했어'(하다는 이미 뗌)도 두 명사 사이가 붙어 있어 여전히
+        플래그 대상이다 — 원문의 '하다' 붙임 여부(문맥에 따라 둘 다 정답)는
+        건드리지 않고 제안에도 그대로 반영한다."""
+        f = self._flag("나는 어제 국어공부 했어")
+        assert f is not None
+        assert f.suggested_fix == "나는 어제 국어 공부했어"
+
+    def test_either_accepted_reading_untouched(self):
+        """두 명사 사이만 이미 띄어져 있으면 '하다' 붙임 여부와 무관하게
+        확인할 게 없다 — 국어공부·상호협력은 두 형태 다 정답이기 때문이다."""
+        assert self._flag("나는 어제 국어 공부했어") is None
+        assert self._flag("나는 어제 국어 공부 했어") is None
+        assert self._flag("우리는 상호 협력했다") is None
+        assert self._flag("우리는 상호 협력 했다") is None
+
+    def test_single_answer_pair_flags_wrong_hada_gap_even_when_nouns_spaced(self):
+        """'특수제작'은 온라인가나다 답변이 조건 없는 단일 정답
+        ('특수 제작 했습니다')이라, 두 명사 사이가 이미 띄어져 있어도
+        '하다' 간격이 그 정답과 다르면 여전히 플래그한다(국어공부·상호협력과
+        다른 점 — 그쪽은 '하다' 간격이 무엇이든 상관없다)."""
+        f = self._flag("불에 타지 않도록 특수 제작했습니다")
+        assert f is not None
+        assert f.suggested_fix == "불에 타지 않도록 특수 제작 했습니다"
+        assert self._flag("불에 타지 않도록 특수 제작 했습니다") is None
+
+    def test_unrelated_noun_hada_untouched(self):
+        assert self._flag("어제 청소했다") is None
+        assert self._flag("우리는 매일 초과근무했다") is None
+
+    def test_pipeline_does_not_silently_resolve_ambiguity(self):
+        """correct_action_noun_affix와 제41항 기계적 재띄어쓰기
+        (_mechanical_respace, engine/spacing.py) 둘 다 이 사례들에서 하다를
+        강제로 붙이거나 떼면 안 된다 — 실제로 두 번째가 이 사고를 냈었다
+        (2026-09-09 실측, IMPLEMENTATION_LOG §101)."""
+        from subtitle_corrector.engine import correct_entries
+        from subtitle_corrector.parsers import SubtitleEntry
+
+        text = "나는 어제 국어공부 했어"
+        entry = SubtitleEntry(index=1, start="00:00:00,000", end="00:00:02,000", text=text, speaker=None)
+        corrected, flags, _log = correct_entries([entry], {}, {})
+        assert corrected[0].text == text
+        assert any(f.suggested_fix for f in flags)

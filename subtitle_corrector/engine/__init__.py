@@ -90,6 +90,7 @@ from .spacing import (
 from .affix import (
     check_action_noun_affix,
     check_adnominal_noun_verb_split,
+    check_ambiguous_noun_hada_spacing,
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
     correct_action_noun_affix,
@@ -183,6 +184,7 @@ __all__ = [
     "_aux_verb_spacing",
     "check_action_noun_affix",
     "check_adnominal_noun_verb_split",
+    "check_ambiguous_noun_hada_spacing",
     "check_honorific_dependent_noun",
     "check_intensive_prefix_cheo",
     "correct_action_noun_affix",

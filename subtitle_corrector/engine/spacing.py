@@ -3,6 +3,7 @@
 
 from ..dictionary import compound_status, definition_markers, word_exists
 from ..report import FlagItem
+from .affix import _AMBIGUOUS_NOUN_HADA_PAIRS
 from .text_utils import (
     _bracket_spans,
     _force_span,
@@ -152,6 +153,21 @@ def _mechanical_respace(text: str, markers: "SubtitleMarkers | None" = None) -> 
                         and text[tokens[i - 1].start + tokens[i - 1].len : t1.start] in (" ", "")
                     )
                 )
+            ):
+                continue
+            # 온라인가나다로 확인한 소수 "명사+명사+하다" 사례(_AMBIGUOUS_NOUN_HADA_PAIRS,
+            # BACKLOG 36번)도 XSV '하'를 무조건 붙이지 않는다. 이 함수는 태그만 보고
+            # XSV를 항상 붙이는데, 이 사례들은 '하다'가 뒷명사에 붙을지 따로 떨어질지
+            # 자체가 문맥에 따라 갈려서(둘 다 정답인 경우 포함) 여기서 한쪽으로
+            # 강제하면 반대쪽 정답을 지운다 — affix.py의 correct_action_noun_affix에도
+            # 같은 예외가 있지만, 실제로 이 간격을 붙이는 건 이 함수였다(수량·관형어
+            # 가드와 같은 부류의 함정, docs/log-archive/2026-h2.md §60).
+            if (
+                t2.tag == "XSV"
+                and t2.form == "하"
+                and gap_start != gap_end
+                and i >= 1
+                and (tokens[i - 1].form, t1.form) in _AMBIGUOUS_NOUN_HADA_PAIRS
             ):
                 continue
             # 행 끝에 띄어 쓴 '나'는 조사('백 배 나'→'백 배나')인지 '낫다'의 활용

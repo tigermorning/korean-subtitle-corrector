@@ -31,6 +31,7 @@ from .spacing import (
 from .affix import (
     check_action_noun_affix,
     check_adnominal_noun_verb_split,
+    check_ambiguous_noun_hada_spacing,
     check_honorific_dependent_noun,
     check_intensive_prefix_cheo,
     correct_action_noun_affix,
@@ -499,6 +500,7 @@ def _correct_line(
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
         check_negation_reply_spelling(index, corrected_text),
+        check_ambiguous_noun_hada_spacing(index, corrected_text),
         check_spacing(index, corrected_text),
         check_double_passive_voice(index, corrected_text),
     ]

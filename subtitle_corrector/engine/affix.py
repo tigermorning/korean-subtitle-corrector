@@ -56,6 +56,34 @@ def is_honorific_drida_affix(noun_form: str) -> bool:
 # 자동이다 — 그쪽은 붙임형(`청소하다`) 자체가 표제어라 직접 근거다.
 _SUGGEST_ONLY_AFFIX_LEMMAS = {"시키다", "당하다", "받다"}
 
+# 온라인가나다 직접 질의(2026-09-09)로 확인한 "명사+명사+하다" 소수 사례
+# (BACKLOG 36번, docs/IMPLEMENTATION_LOG.md §101). 두 명사 사이는 어느 쪽으로
+# 읽어도 반드시 띄운다는 게 확인됐으나(예외 없이 '국어 공부'), '하다'가 뒷명사에
+# 붙을지 따로 떨어질지는 문맥에 따라 갈린다 — '국어(를) 공부하다'(붙임)와
+# '국어 공부(를) 하다'(뗌) 둘 다 국립국어원이 인정한 정답이다. '특수 제작'만
+# 예외로 조건 없는 단일 답변("특수 제작 했습니다")이었지만, 이 한 사례에서
+# 일반화 가능한 기준을 얻지 못해 그냥 같은 표에 넣어 둔다(과적합 회피).
+#
+# 값: (정답으로 인정되는 '하다-뒷명사 사이 간격' 목록, 첫 번째가 제안 후보,
+#      확인 플래그 사유). 국어공부·상호협력은 두 간격(붙임/뗌) 다 정답이라
+#      둘 다 넣는다 — 특수제작은 단일 정답이라 하나만 넣는다.
+_AMBIGUOUS_NOUN_HADA_PAIRS: dict[tuple[str, str], tuple[tuple[str, ...], str]] = {
+    ("국어", "공부"): (
+        ("", " "),
+        "'국어(를) 공부하다'면 붙여 쓰고('국어 공부했다'), '국어 공부(를) 하다'면 "
+        "띄어 씁니다('국어 공부 했다') — 온라인가나다 확인(2026-09-09), 문맥에 따라 다릅니다.",
+    ),
+    ("상호", "협력"): (
+        ("", " "),
+        "'상호'가 부사면 붙여 쓰고('상호 협력했다'), 명사로 쓰여 '상호 협력을 하다' "
+        "구조면 띄어 씁니다('상호 협력 했다') — 온라인가나다 확인(2026-09-09), 문맥에 따라 다릅니다.",
+    ),
+    ("특수", "제작"): (
+        (" ",),
+        "'특수 제작 했습니다'로 띄어 씁니다 — 온라인가나다 확인(2026-09-09).",
+    ),
+}
+
 
 def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
     """동작성 명사 뒤의 접사(하다/시키다/당하다/받다/되다)가 띄어 써 있으면 붙인다
@@ -113,6 +141,12 @@ def correct_action_noun_affix(text: str) -> tuple[str, list[str]]:
             #
             # 대가도 같다: '두 번 참고 하세요'처럼 수량이 부사어인 정당한 붙임을 놓친다.
             if prev.tag in _QUANTITY_LEAD_TAGS and text[prev.start + prev.len : noun.start] == " ":
+                continue
+            # 온라인가나다로 확인한 소수 사례(_AMBIGUOUS_NOUN_HADA_PAIRS)는 붙어
+            # 있든 띄어 있든 이 함수가 손대지 않는다 — 붙임 여부 자체가 문맥에
+            # 따라 갈려서, 여기서 한쪽으로 밀어붙이면 반대쪽 정답을 지워 버린다.
+            # check_ambiguous_noun_hada_spacing()이 대신 확인 플래그로 남긴다.
+            if (prev.form, noun.form) in _AMBIGUOUS_NOUN_HADA_PAIRS:
                 continue
         n = noun.form
         if n in _AFFIX_ACTION_EXCLUDE:
@@ -178,6 +212,44 @@ def correct_noun_phrase_hada_detach(text: str) -> tuple[str, list[str]]:
     for pos in sorted(set(cuts), reverse=True):
         corrected = corrected[:pos] + " " + corrected[pos:]
     return corrected, [_localized_change(text, corrected)]
+
+
+def check_ambiguous_noun_hada_spacing(index: int, text: str) -> FlagItem | None:
+    """`_AMBIGUOUS_NOUN_HADA_PAIRS`에 실린 소수 "명사+명사+하다" 사례의 표기가
+    정답 목록(`accepted_gaps`)과 어긋나면 확인 플래그한다(BACKLOG 36번,
+    docs/IMPLEMENTATION_LOG.md §101). 두 명사 사이를 띄우는 것 자체는 온라인
+    가나다가 예외 없이 확인해 준 확정 사실이라 항상 요구하지만, '하다'가
+    뒷명사에 붙을지 따로 떨어질지는 문맥에 따라 갈릴 수 있어(국어공부·
+    상호협력은 둘 다 정답) 자동 반영하지 않는다 — `loanword_fix()`가 관례가
+    갈리는 인명 표기를 다루는 것과 같은 원칙: 첫 후보를 제안하되 항상 사람
+    확인을 구한다. 이미 정답 목록에 있는 형태와 일치하면(둘 다 정답인
+    사례는 둘 중 아무거나, 특수제작처럼 단일 정답인 사례는 그 형태와)
+    확인할 게 없으므로 손대지 않는다."""
+    tokens = _kiwi.tokenize(text)
+    for i in range(2, len(tokens)):
+        hae, n2, n1 = tokens[i], tokens[i - 1], tokens[i - 2]
+        if hae.tag != "XSV" or hae.form != "하":
+            continue
+        if n1.tag not in ("NNG", "NNP") or n2.tag not in ("NNG", "NNP"):
+            continue
+        hit = _AMBIGUOUS_NOUN_HADA_PAIRS.get((n1.form, n2.form))
+        if hit is None:
+            continue
+        accepted_gaps, basis = hit
+        gap1 = text[n1.start + n1.len : n2.start]
+        gap2 = text[n2.start + n2.len : hae.start]
+        if gap1 == " " and gap2 in accepted_gaps:
+            continue  # 이미 정답 형태 중 하나와 일치 — 확인할 게 없다
+        n2_surface = text[n2.start : n2.start + n2.len]
+        suggested = text[: n1.start + n1.len] + " " + n2_surface + accepted_gaps[0] + text[hae.start :]
+        combined = n1.form + n2.form
+        return FlagItem(
+            line_index=index,
+            original_text=text,
+            reason=f"'{combined}'{_josa(combined, '은')} 서로 다른 낱말이라 반드시 띄어 씁니다. {basis}",
+            suggested_fix=suggested,
+        )
+    return None
 
 
 # 명사를 꾸미는 앞말. 관형사(MM)·관형형 어미(ETM)에 **관형격 조사(JKG)**를 더했다 —
