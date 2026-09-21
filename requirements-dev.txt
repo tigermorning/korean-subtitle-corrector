@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=8
+# fastapi.testclient.TestClient가 요구 (tests/test_api_reports.py)
+httpx>=0.27
