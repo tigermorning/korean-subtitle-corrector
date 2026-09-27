@@ -67,8 +67,8 @@ cd korean-subtitle-corrector
   - `#dialectRows`에 화자 안내문이 나오고 `#documentDialectRegion`에 지역 옵션이 채워졌는지도 본다.
 - **대기**
   - 교정은 사전을 실시간 조회해서 오래 걸린다. 고정 `sleep`으로 끝났다고 보지 않는다.
-  - `#status`가 `교정 중입니다 · N초 경과` 에서 `완료! (…)` 또는 `오류: …` 로 바뀔 때까지 폴링한다.
-  - `#submitBtn`이 다시 활성화되는 것도 끝 상태다.
+  - 교정을 시작했다면 `#status`가 `교정 중입니다 · …경과`에서 `완료! (…)` 또는 `오류: …`로 바뀔 때까지 기다린다(경과는 1분이 지나면 `N분 M초 경과`로 표시). 입력이 없어 안내문이 뜬 경우와 `?id=` 접속에는 이 규칙을 적용하지 않는다.
+  - 교정을 시작한 뒤에는 `#submitBtn`이 비활성이었다가 다시 활성화되면 끝난 것이다. 이 신호는 반드시 비활성이 확인된 뒤에만 쓰고, 단독으로 끝났다고 판단하지 않는다.
 - **입력**
   - 좌표보다 `id`로 조작한다.
   - `2단계` 패널이 접혀 있으면 안의 입력칸을 조작할 수 없다. `2단계 · 교정 옵션` 요약줄을 눌러 먼저 연다.
@@ -187,7 +187,7 @@ cd korean-subtitle-corrector
 - 선택자: `#newSpeakerName`, `#addSpeakerBtn`, `#dialectRows`, `.dialect-region-select`, `.dialect-mode-select`, `.remove-btn`, `+ 화자 추가`
 - 파일: `static/index.html`, `subtitle_corrector/api.py::correct_subtitle`
 - 검증:
-  - 처음에는 `#dialectRows`에 `사투리를 지정할 화자 이름을 아래에 직접 추가하세요.`가 보인다.
+  - 페이지를 연 직후 `/api/dialect-regions` 응답이 처리되고 나면 `#dialectRows`에 `사투리를 지정할 화자 이름을 아래에 직접 추가하세요.`가 보인다. 그 전에는 비어 있다.
   - 이름을 넣고 `+ 화자 추가`를 누르면 그 이름의 행이 생기고 칸이 비워진다.
   - 같은 이름을 다시 추가해도 행이 늘지 않는다.
   - `×`를 누르면 행이 사라진다. (미확인)
@@ -202,6 +202,7 @@ cd korean-subtitle-corrector
 
 ### 자동 교정 로그와 줄 단위 되돌리기
 - 사용자 경로: 결과 화면 `자동 교정 로그` 목록에서 항목의 `되돌리기` 체크 → `선택 반영하기 (제안 채택 + 자동 교정 되돌리기)` 버튼
+- `되돌리기` 체크칸은 줄 번호가 있고 실제로 글자를 바꾼 로그 항목에만 있다. 문서 전체 안내 항목과 `?id=`로 다시 연 결과에는 없다.
 - 선택자: `#appliedList`, `.auto-revert`, `#applyBtn`, `#appliedCount`, `#applyNote`, `되돌리기`
 - 파일: `static/index.html`, `subtitle_corrector/api.py::correct_subtitle`
 - 검증:
@@ -216,7 +217,7 @@ cd korean-subtitle-corrector
 - 파일: `static/index.html`
 - 검증:
   - 표에 `줄`, `내용`, `이유`, `제안` 열이 있고 `#flagCount`가 행 수와 같다.
-  - 제안이 있는 행의 `채택`을 체크하고 `#applyBtn`을 누르면 `#correctedSrt`에 제안이 반영된다.
+  - 제안이 있는 행의 `채택`을 체크하고 `#applyBtn`을 누르면 `#correctedSrt`에 제안이 반영된다. 그 줄을 되돌렸거나 같은 줄에 다른 제안이 이미 반영됐으면 건너뛰고 `#applyNote`에 `N건은 그 줄이 이미 바뀌어 건너뛰었습니다`가 붙는다.
   - 확인 항목이 없으면 표에 `없음`이 보인다. (미확인)
   - 1차 작성 때 관찰(재확인 안 함): 응답 `flags`에 `line_index`, `original_text`, `reason`, `suggested_fix` 키가 있었고 3건이었다.
 
@@ -226,9 +227,9 @@ cd korean-subtitle-corrector
 - 파일: `static/index.html`, `subtitle_corrector/api.py::get_loanword_by_source`, `subtitle_corrector/dictionary/clients.py`
 - 검증:
   - 입력칸을 비운 채 버튼을 누르면 결과 칸에 `원어(로마자) 표기를 넣어 주세요.`
-  - `Ruth`를 넣고 누르면 잠시 `조회 중…` 뒤 후보 목록이 뜬다.
-  - 확정·일치 후보에는 `'…'로 반영` 버튼이 있고, `참고` 후보에는 없다. (미확인)
-  - 이 입력칸은 외래어 음차 플래그가 있는 행에만 생긴다. `examples/sample_loanword.srt`로 그런 행이 생기는지는 (미확인)
+  - `Ruth`를 넣고 누르면 잠시 `조회 중…` 뒤 후보 목록이 뜬다. 서버 조회가 실패하면 `국립국어원 어문 규범 서버 조회에 실패했습니다.` 등 실패 문구가 뜬다.
+  - 확정·일치 후보에는 `'…'로 반영` 버튼이 있다(그 줄에서 해당 토막을 찾지 못하면 버튼 대신 `(이 줄에서 그 토막을 찾지 못해 반영 버튼을 주지 않습니다)`가 나온다). `참고` 후보에는 버튼이 없다. 후보는 최대 8개까지 보인다.
+  - 이 입력칸은 외래어 음차 플래그와 사전 미등재 단어 플래그처럼 원어를 조회할 토막이 있는 행에 생긴다. `examples/sample_loanword.srt`로 그런 행이 생기는지는 (미확인)
   - 1차 작성 때 관찰(재확인 안 함): `GET /api/loanword-source?source=Ruth` → `candidates` 24건, `confirmed:true`.
 
 ### 반영 판정 기록
@@ -236,7 +237,7 @@ cd korean-subtitle-corrector
 - 선택자: `#applyBtn`
 - 파일: `static/index.html`, `subtitle_corrector/api.py::record_feedback`, `subtitle_corrector/feedback.py::record_decisions`
 - 검증:
-  - 제안이 있는 확인 항목이 있을 때 `#applyBtn`을 누르면 네트워크에 `POST /api/feedback`이 한 번 나간다. (미확인)
+  - 채택 또는 자동 교정 되돌리기를 하나 이상 체크하고 `#applyBtn`을 누르면(제안이 있는 확인 항목이 있을 때) `POST /api/feedback`이 한 번 나간다. 아무것도 체크하지 않고 누르면 요청이 나가지 않는다. `'…'로 반영` 버튼을 눌러도 같은 요청이 나간다.
   - 응답은 200이다. 기능이 꺼져 있으면 `{"enabled": false, "recorded": 0}` 이다.
   - 실패해도 화면에는 아무 오류가 뜨지 않는다.
   - 1차 작성 때 관찰(재확인 안 함): `GET /api/feedback/summary` → `{"enabled":true,"total":0,"accepted":0,"by_source":{}}`.
@@ -292,7 +293,7 @@ cd korean-subtitle-corrector
 - 선택자: `#status`, `.spinner`, `교정 중입니다`
 - 파일: `static/index.html`
 - 검증:
-  - 교정 중 `#status`에 스피너와 `교정 중입니다 · N초 경과`가 나오고 N이 매초 올라간다.
+  - 교정 중 `#status`에 스피너와 `교정 중입니다 · N초 경과`가 나오고 매초 올라간다. 1분이 넘으면 `M분 S초 경과`로 표시된다. 끝나면 `완료! (N초 경과)` 또는 `완료! (M분 S초 경과)`로 바뀐다.
   - 그동안 `#submitBtn`은 비활성이다.
   - 끝나면 `완료! (N초 경과)`로 바뀐다. (미확인)
 
