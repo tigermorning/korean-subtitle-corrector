@@ -707,7 +707,9 @@ function renderResult(data) {
   document.getElementById('downloadNote').textContent = `파일 이름: ${resultState.filename}`;
   document.getElementById('applyNote').textContent = '';
 
-  const notes = normalizeAppliedLog(data.applied_log);
+  // 모델 제안을 관문이 버린 기록은 본문도 확인 항목도 바꾸지 않았으므로 화면에 싣지
+  // 않는다(응답 applied_log에는 남아 있다). 모델 호출 실패 같은 안내는 그대로 보인다.
+  const notes = normalizeAppliedLog(data.applied_log).filter(n => n.kind !== 'model_refusal');
   resultState.lineStatus = computeLineStatus(resultState.flags, notes);
   renderAppliedLog(notes);
   document.getElementById('appliedCount').textContent = notes.length;

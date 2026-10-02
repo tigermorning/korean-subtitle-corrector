@@ -194,6 +194,29 @@ class TestBlockedProposal:
         assert flags == []
         assert any("원문을 다르게 인용해" in n.message for n in notes)
 
+    def test_버린_제안만_model_refusal로_표시된다(self):
+        # 화면은 kind로 차단 기록을 감춘다. 받아들인 제안의 요약 안내나 호출 실패
+        # 안내까지 같은 표시가 붙으면 사용자에게 보여야 할 것이 함께 사라진다.
+        flags, notes = propose_corrections(
+            [_entry(1, "그렇게 됬다"), _entry(2, "저렇게 됬다")], ON,
+            complete=_responder([
+                {"id": 1, "before": "그렇게 됬다", "after": "그렇게 됐다",
+                 "rule": "되/돼", "declared": ["됬다 -> 됐다"]},
+                {"id": 2, "before": "이렇게 됬다", "after": "이렇게 됐다",
+                 "rule": "되/돼", "declared": ["됬다 -> 됐다"]},
+            ]),
+        )
+        assert len(flags) == 1
+        refusals = [n for n in notes if n.kind == "model_refusal"]
+        assert len(refusals) == 1 and "원문을 다르게 인용해" in refusals[0].message
+        assert any(n.kind == "" and n.message.startswith("[모델 제안]") for n in notes)
+
+        def _boom(prompt, settings):
+            raise RuntimeError("down")
+
+        _, failed = propose_corrections([_entry(1, "그렇게 됬다")], ON, complete=_boom)
+        assert failed and all(n.kind == "" for n in failed)
+
     def test_줄바꿈_개수를_바꾸면_버린다(self):
         flags, notes = propose_corrections(
             [_entry(1, "그렇게 됬다\n정말로")], ON,

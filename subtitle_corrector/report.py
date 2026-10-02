@@ -41,6 +41,10 @@ class AppliedNote:
     message: str
     line_index: int | None = None
     is_edit: bool = False
+    # "model_refusal"이면 언어 모델이 낸 제안을 관문이 버렸다는 기록이다. 본문도 확인
+    # 항목도 바뀌지 않았으므로 화면은 이것을 감추고, 응답·저장본에만 남긴다. 화면이
+    # 문구 앞머리("[모델 제안 차단]")를 파싱하지 않게 구조로 둔다.
+    kind: str = ""
 
     def text(self) -> str:
         """사람이 읽는 한 줄(CLI 출력·기존 로그 표기와 같은 형태)."""

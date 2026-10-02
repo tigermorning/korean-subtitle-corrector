@@ -856,7 +856,7 @@ def propose_corrections(
             if flag:
                 flags.append(flag)
             if refusal:
-                notes.append(AppliedNote(message=refusal, is_edit=False))
+                notes.append(AppliedNote(message=refusal, is_edit=False, kind="model_refusal"))
 
     if failed_batches and failed_batches == total_batches:
         notes.append(
