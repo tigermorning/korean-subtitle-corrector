@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.venv/
+__pycache__/
+*.pyc
+tests/
+docs/
+poc/
+examples/
+scripts/
+tools/
+*.md
+decisions-*.jsonl
+feedback/
+_check*
+*_ko_TL.srt
