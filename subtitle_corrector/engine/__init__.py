@@ -136,7 +136,12 @@ from .replacements import (
 from .spelling import (
     check_negation_reply_spelling,
     check_purified_terms,
+    check_bare_stem,
+    check_ending_redirect_question,
+    check_glued_noun_predicate,
     check_spelling,
+    correct_doe_dwae,
+    correct_ending_redirect,
     correct_gumeon_ending,
 )
 from .dialect import check_dialect
@@ -200,6 +205,11 @@ __all__ = [
     "correct_unit_case",
     "correct_unit_spacing",
     "correct_gumeon_ending",
+    "correct_doe_dwae",
+    "correct_ending_redirect",
+    "check_ending_redirect_question",
+    "check_bare_stem",
+    "check_glued_noun_predicate",
     "check_ampersand_usage",
     "correct_always_wrong",
     "correct_nonstandard_terms",

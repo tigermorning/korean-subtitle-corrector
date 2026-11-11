@@ -14,8 +14,9 @@ from .clients import (
     search_onyongeo,
     search_opendict,
     search_stdict,
+    search_stdict_words_ending_with,
 )
-from .headwords import _opendict_item_is_standard
+from .headwords import _opendict_item_is_standard, is_standard_word, word_exists
 
 _STANDARD_REPLACEMENT_RE = re.compile(
     r"(?:규범 표기는|표준 용어는)\s*[‘']([^’']+)[’']"
@@ -410,3 +411,88 @@ def get_purified_terms() -> dict[str, str]:
     merged = dict(PURIFIED_TERMS)
     merged.update(api_terms)
     return merged
+
+
+# 표준국어대사전이 비표준 어미를 표준 어미로 넘겨줄 때 쓰는 뜻풀이 꼴: "→ -ㄹ게."
+_ENDING_REDIRECT_RE = re.compile(r"^→\s*-([^\s.,]+)\.?$")
+
+
+@lru_cache(maxsize=4096)
+def ending_redirect(ending: str) -> str | None:
+    """어미 `ending`(하이픈 없이, 받침 자모는 호환 자모 'ㄹ'로)이 표준국어대사전에서
+    다른 어미로 넘겨지는 비표준 표기면 그 표준 어미를 돌려준다("ㄹ께" -> "ㄹ게").
+
+    **같은 표기의 어미 표제어가 모두** "→ -Y." 꼴이고 Y가 하나일 때만 돌려준다.
+    '-든'처럼 동형 어미 하나는 "→ -던."인데 다른 하나는 "'-든지'의 준말"(표준)이면 원문이
+    맞을 수 있어 None이다(2026-11-11 조회: -든 94881·94882, -든가 94884·94325).
+    어미가 아닌 동형어(명사 '구만' 등)는 하이픈이 없어 비교에서 빠진다.
+    검색 API는 항목마다 첫 뜻만 주므로, 첫 뜻이 '→'인 표제어는 넘겨주기 전용으로 본다.
+    """
+    items = search_stdict(ending).get("channel", {}).get("item", []) or []
+    if isinstance(items, dict):
+        items = [items]
+    targets = set()
+    seen = False
+    for item in items:
+        if (item.get("word") or "").replace("^", "") != f"-{ending}":
+            continue
+        seen = True
+        sense = item.get("sense") or {}
+        if isinstance(sense, list):
+            sense = sense[0] if sense else {}
+        match = _ENDING_REDIRECT_RE.match((sense.get("definition") or "").strip())
+        if not match:
+            return None
+        targets.add(match.group(1))
+    if seen and len(targets) == 1:
+        return targets.pop()
+    return None
+
+
+def _jamo(syllable: str) -> tuple[int, int, int] | None:
+    """완성형 한 음절의 (초성, 중성, 종성) 번호. 한글 음절이 아니면 None."""
+    code = ord(syllable) - 0xAC00
+    if not 0 <= code < 11172:
+        return None
+    return code // 588, (code % 588) // 28, code % 28
+
+
+def _one_jamo_apart(a: str, b: str) -> bool:
+    """두 음절이 초성·중성·종성 중 **딱 한 자리**만 다른가('의'/'이' = 중성만 다름)."""
+    ja, jb = _jamo(a), _jamo(b)
+    if ja is None or jb is None:
+        return False
+    return sum(x != y for x, y in zip(ja, jb)) == 1
+
+
+def one_syllable_headword_variant(word: str, fixed_tail: str) -> str | None:
+    """`word`(사전에 없는 기본형, 예: '어의없다')와 같은 길이이고 `fixed_tail`('없다')로
+    끝나며 **앞부분의 한 음절에서 자모 하나만 다른** 표준국어대사전 표제어가 정확히
+    하나면 그것을 돌려준다('어이없다'). 없거나 둘 이상이면 None.
+
+    음절 단위로만 비교하면 '어의없다'에 '어김없다'·'어림없다'·'어이없다' 셋이 걸려
+    (2026-11-11 실측) 답이 하나로 정해지지 않는다. 자모 하나 차이(의/이 = 중성만 다름)로
+    좁히면 '어이없다' 하나만 남는다 — 소리가 같거나 비슷해 잘못 적는 오기의 모양이다.
+
+    조회는 끝 검색 한 번(필요하면 최대 3쪽)이고 (꼬리, 음절 수)마다 캐시된다. 음절마다
+    후보를 넣어 보는 방식(완성형 음절 11,172개)은 쓰지 않는다. **긍정 근거**(비슷한
+    표제어가 있다)일 뿐이라 이 결과로 원문을 자동으로 바꾸지 않는다 — 호출부는 확인
+    필요 제안만 낸다(`tools/audit_auto_rules.py` 머리말: 긍정 근거 자동 교정은 사고를 낸다).
+    """
+    if not word.endswith(fixed_tail) or len(word) <= len(fixed_tail) or word_exists(word):
+        return None
+    words, complete = search_stdict_words_ending_with(fixed_tail, len(word))
+    if not complete:
+        return None
+    head_len = len(word) - len(fixed_tail)
+    matches = set()
+    for w in words:
+        if len(w) != len(word) or not w.endswith(fixed_tail):
+            continue
+        diffs = [(a, b) for a, b in zip(w[:head_len], word[:head_len]) if a != b]
+        if len(diffs) == 1 and _one_jamo_apart(*diffs[0]):
+            matches.add(w)
+    # 끝 검색 결과에는 '→ 다른 말'로 넘겨지는 비표준 표제어도 섞여 온다('시간없다'에
+    # '시난없다' → 시름없다, 2026-11-11 실측). 표준 표제어만 후보로 남긴다.
+    matches = {w for w in matches if is_standard_word(w)}
+    return matches.pop() if len(matches) == 1 else None
