@@ -44,6 +44,8 @@ from subtitle_corrector.engine import (  # noqa: E402
     correct_former_terms,
     correct_honorific_dependent_noun_spacing,
     correct_gumeon_ending,
+    correct_doe_dwae,
+    correct_ending_redirect,
     correct_intensive_prefix_cheo,
     correct_interjection_vocative_comma,
     correct_loanword_forbidden_batchim,
@@ -164,6 +166,18 @@ RULES = [
         _plain(correct_gumeon_ending),
         "태그",
         "'구먼'(표준, '-군'의 본말)을 잘못 적은 '구만'을 고친다. kiwi가 그 자리를 종결 어미(EF)로 태깅했는지만 본다 — 지명·어근 뜻이면 NNG/NNP로 갈린다(2026-09-02, 작업자자료3)",
+    ),
+    (
+        "되돼준말",
+        _plain(correct_doe_dwae),
+        "규범",
+        "제35항 붙임 2. 어미 없이 줄·문장 끝에 온 용언 어간 부류 검사(_bare_stem_indices) 중 '되'만 '돼'로 — 다른 어간은 check_bare_stem 표시. '됬'(되+었)·되/VV 바로 뒤 '요'·'서'도 같은 조항(2026-11-11, §105)",
+    ),
+    (
+        "사전지정어미",
+        _plain(correct_ending_redirect),
+        "부정",
+        "kiwi 어미(EF/EC)를 표준국어대사전에 묻고, 같은 표기의 어미 표제어가 모두 '→ -Y.'(넘겨주기)일 때만 Y로. 코퍼스에서 걸리는 것은 -ㄹ께·-을께·-구만. 뒤에 '?'면 표시로(2026-11-11, §105)",
     ),
     (
         "외래어금지받침",

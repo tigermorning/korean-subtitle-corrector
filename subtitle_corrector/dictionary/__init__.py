@@ -31,6 +31,7 @@ from .clients import (
     search_opendict,
     search_stdict,
     search_stdict_view,
+    search_stdict_words_ending_with,
 )
 from .headwords import (
     appears_in_standard_headword,
@@ -55,6 +56,8 @@ from .terms import (
     get_purified_terms,
     loanword_fix,
     lookup_by_source,
+    ending_redirect,
+    one_syllable_headword_variant,
     standard_term_replacement,
 )
 from .dialect import (
@@ -69,6 +72,9 @@ from .dialect import (
 __all__ = [
     "search_stdict",
     "search_stdict_view",
+    "search_stdict_words_ending_with",
+    "ending_redirect",
+    "one_syllable_headword_variant",
     "search_opendict",
     "search_kornorms",
     "search_kornorms_partial",

@@ -77,7 +77,12 @@ from .replacements import (
 from .spelling import (
     check_negation_reply_spelling,
     check_purified_terms,
+    check_bare_stem,
+    check_ending_redirect_question,
+    check_glued_noun_predicate,
     check_spelling,
+    correct_doe_dwae,
+    correct_ending_redirect,
     correct_gumeon_ending,
 )
 from .dialect import check_dialect
@@ -307,6 +312,12 @@ def _correct_line(
     corrected_text, gumeon_fixes = correct_gumeon_ending(corrected_text)
     corrected_text = _guard("종결 어미 -구먼", before, corrected_text, gumeon_fixes)
     before = corrected_text
+    corrected_text, doe_dwae_fixes = correct_doe_dwae(corrected_text)
+    corrected_text = _guard("되/돼 준말", before, corrected_text, doe_dwae_fixes)
+    before = corrected_text
+    corrected_text, ending_fixes = correct_ending_redirect(corrected_text)
+    corrected_text = _guard("사전 지정 어미", before, corrected_text, ending_fixes)
+    before = corrected_text
     corrected_text, mot_hada_fixes = correct_mot_hada_compound(corrected_text)
     corrected_text = _guard("부사+못하다 활용", before, corrected_text, mot_hada_fixes)
     before = corrected_text
@@ -339,6 +350,8 @@ def _correct_line(
             + aux_verb_fixes
             + always_wrong_fixes
             + gumeon_fixes
+            + doe_dwae_fixes
+            + ending_fixes
             + mot_hada_fixes
             + nonstandard_fixes
             + discriminatory_fixes
@@ -500,6 +513,11 @@ def _correct_line(
         check_hanpan_spacing(index, corrected_text),
         check_dependent_noun_sentence_start(index, corrected_text),
         check_negation_reply_spelling(index, corrected_text),
+        check_ending_redirect_question(index, corrected_text),
+        check_bare_stem(index, corrected_text),
+        # 붙여 쓴 '명사+용언'의 한 음절 오기 제안은 일반 띄어쓰기 검사보다 **먼저** 온다 —
+        # 같은 자리에 띄어쓰기 제안('어의 없네')도 나오는데, 둘 다 사람에게 보여 고르게 한다.
+        check_glued_noun_predicate(index, corrected_text),
         check_ambiguous_noun_hada_spacing(index, corrected_text),
         check_spacing(index, corrected_text),
         check_double_passive_voice(index, corrected_text),

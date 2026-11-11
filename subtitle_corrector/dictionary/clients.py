@@ -299,6 +299,50 @@ def search_stdict(query: str) -> dict:
         return _empty_channel()
 
 
+# 끝 검색 한 번에 받는 최대 쪽 수(쪽당 100건). 이보다 많으면 후보가 너무 넓다는 뜻이라
+# 호출부가 판단을 포기한다(`complete=False`).
+_ENDING_SEARCH_MAX_PAGES = 3
+
+
+@lru_cache(maxsize=2048)
+def search_stdict_words_ending_with(suffix: str, syllables: int) -> tuple[tuple[str, ...], bool]:
+    """표준국어대사전에서 `suffix`로 끝나고 음절 수가 `syllables`인 표제어를 모은다.
+
+    자세히 찾기(`advanced=y`, `method=end`, `letter_s`=`letter_e`)를 쓴다. 와일드카드
+    검색은 2026-11-11 실측에서 `?`·`_`·`*` 어느 기호로도 결과가 오지 않아 쓰지 않는다.
+    반환값: (하이픈·^를 벗긴 표제어들, 다 받았는가). 결과가 `_ENDING_SEARCH_MAX_PAGES`쪽을
+    넘거나 조회가 실패하면 `complete=False` — 호출부는 이때 아무 판단도 하지 않는다
+    (실패는 `note_lookup_failure()`로 리포트에 실린다). 빈 결과는 기준 낱말 확인을 하지
+    않는다: 0건이면 후보가 없다는 뜻이고 호출부는 그때도 아무것도 하지 않으므로, 장애가
+    빈 결과로 와도 판단이 근거 없이 생기지는 않는다.
+    """
+    if not STDICT_API_KEY:
+        raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
+    words: list[str] = []
+    for page in range(1, _ENDING_SEARCH_MAX_PAGES + 1):
+        params = {
+            "key": STDICT_API_KEY, "q": suffix, "req_type": "json", "advanced": "y",
+            "method": "end", "letter_s": syllables, "letter_e": syllables,
+            "num": 100, "start": page,
+        }
+        try:
+            data = _get_json(STDICT_URL, params, "표준국어대사전")
+        except _LookupFailed:
+            return tuple(words), False
+        channel = (data or {}).get("channel") or {}
+        items = channel.get("item") or []
+        if isinstance(items, dict):
+            items = [items]
+        words.extend((it.get("word") or "").replace("-", "").replace("^", "") for it in items)
+        try:
+            total = int(channel.get("total") or 0)
+        except ValueError:
+            return tuple(words), False
+        if page * 100 >= total:
+            return tuple(dict.fromkeys(words)), True
+    return tuple(dict.fromkeys(words)), False
+
+
 @lru_cache(maxsize=4096)
 def _fetch_opendict(query: str) -> dict:
     if not OPENDICT_API_KEY:
