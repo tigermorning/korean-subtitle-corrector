@@ -12,6 +12,7 @@ from subtitle_corrector.dictionary import DIALECT_MARKERS
 from subtitle_corrector.engine import (
     apply_report_fixes,
     correct_entries,
+    normalize_llm_settings,
     normalize_punctuation_style,
     normalize_subtitle_markers,
     normalize_spacing_mode,
@@ -89,6 +90,11 @@ def correct(
         "--tone-bracket",
         help="자막 모드 전용. 어조·지문 표기 부호(예: [] 또는 ()). 기본값은 대괄호.",
     ),
+    llm: bool = typer.Option(
+        True,
+        "--llm/--no-llm",
+        help="언어 모델 패스(되/돼·로서/로써 등 문맥 판단 제안). .env의 LLM_MODEL·LLM_BASE_URL이 없으면 저절로 꺼집니다. 고치지 않고 리포트에 제안만 올립니다.",
+    ),
 ):
     """자막(.srt), Word 문서(.docx), 일반 텍스트(.txt)를 교정하고, 모호한 항목은 리포트로 모아 출력합니다."""
     register_custom_words(_read_word_list(names), tag="NNP")
@@ -115,6 +121,9 @@ def correct(
             screen_text_marker, line_break_marker, position_marker,
             speaker_bracket, tone_bracket,
         ),
+        # 2026-11-13 사용자 결정으로 기본 켬. 원고를 어디로 보낼지는 .env(서버 설정)가 정한다 —
+        # localhost Ollama면 밖으로 나가지 않는다. 끄려면 --no-llm.
+        llm=normalize_llm_settings(enabled=llm),
     )
 
     # .docx는 서식까지 보존하는 새 문서를 만들지 않고(범위 밖), 다른 일반
