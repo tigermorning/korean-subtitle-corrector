@@ -201,8 +201,8 @@ def correct_noun_phrase_hada_detach(text: str) -> tuple[str, list[str]]:
             continue
         if noun2.start + noun2.len != hae.start:
             continue  # 명사와 '하'가 이미 떨어져 있으면 대상 아님
-        if text[noun1.start + noun1.len : noun2.start] not in (" ", ""):
-            continue  # 두 명사 사이에 다른 말이 끼어 있으면 이 패턴이 아님
+        if text[noun1.start + noun1.len : noun2.start] != "":
+            continue  # 두 명사가 붙어 있을 때만 — 띄어 쓴 '명사 명사하다'는 그대로 둔다
         if compound_status(noun1.form + noun2.form) != "명사구":
             continue
         cuts.append(hae.start)
@@ -579,6 +579,9 @@ def correct_ordinal_prefix_je(text: str) -> tuple[str, list[str]]:
     '제 1차'(x), '제일차'(o)/'제 일차'(x) — '차'는 앞말에 붙여도 띄워도 맞으므로
     건드리지 않는다).
 
+    kiwi가 비순번 '제'도 XPN으로 태깅하는 문장이 있어 뒤 토큰이 수인지 함께 본다
+    ('제 생명보험'의 '제'는 XPN으로 나오지만 뒤가 수가 아니라 붙이지 않는다).
+
     반환값: (교정된 텍스트, 적용 로그)."""
     tokens = _kiwi.tokenize(text)
     cuts = []
@@ -586,6 +589,8 @@ def correct_ordinal_prefix_je(text: str) -> tuple[str, list[str]]:
         nxt, je = tokens[i], tokens[i - 1]
         if je.form != "제" or je.tag != "XPN":
             continue
+        if nxt.tag not in ("SN", "NR") and not nxt.form[:1].isdigit():
+            continue  # 뒤가 수가 아니면 대명사 '제'다('제 생명보험')
         if text[je.start + je.len : nxt.start] != " ":
             continue
         cuts.append((je.start + je.len, nxt.start))

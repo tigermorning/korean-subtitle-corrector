@@ -214,10 +214,16 @@ class TestNounPhraseHadaDetach:
     def test_fully_joined_noun_phrase_gets_hada_detached(self):
         assert self._detach("우리는 매일 초과근무했다") == "우리는 매일 초과근무 했다"
 
-    def test_spaced_noun_pair_still_gets_hada_detached(self):
-        """두 명사 사이 띄어쓰기는 건드리지 않는다 — 명사구는 붙여도
-        띄어도 둘 다 사전이 인정하는 형태라 정답이 갈리지 않는다."""
-        assert self._detach("우리는 매일 초과 근무했다") == "우리는 매일 초과 근무 했다"
+    def test_spaced_noun_pair_left_alone(self):
+        """두 명사가 띄어 있으면 건드리지 않는다 — '초과 근무했다'는 정답 표기라
+        '초과 근무 했다'로 바꾸면 오교정이다(평가 정답 gold '초과 근무했다')."""
+        assert self._detach("우리는 매일 초과 근무했다") == "우리는 매일 초과 근무했다"
+
+    def test_spaced_noun_plus_hada_verb_left_alone(self):
+        # 앞 둘은 고치기 전 코드에서 '준비 하셔야'·'체결 할'로 띄우던 문장(2026-11-13 재현 확인).
+        assert self._detach("회의 자료 준비하셔야 해요") == "회의 자료 준비하셔야 해요"
+        assert self._detach("곧 계약 체결할 예정이다") == "곧 계약 체결할 예정이다"
+        assert self._detach("내일까지 보고서 제출하세요") == "내일까지 보고서 제출하세요"
 
     def test_already_detached_untouched(self):
         assert self._detach("우리는 매일 초과근무 했다") == "우리는 매일 초과근무 했다"

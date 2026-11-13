@@ -1330,6 +1330,12 @@ class TestOrdinalPrefixJe:
         """'제 생각'의 '제'는 1인칭 대명사(NP)라 대상이 아니다."""
         assert correct_ordinal_prefix_je("제 생각에는 그래요") == ("제 생각에는 그래요", [])
 
+    def test_non_ordinal_je_before_noun_untouched(self):
+        """kiwi가 비순번 '제'도 XPN으로 태깅하는 문장이 있어 뒤가 수일 때만 붙인다."""
+        # 첫 예문은 고치기 전 코드에서 '제생명'으로 붙던 문장(2026-11-13 재현 확인).
+        for text in ("형이 제 생명 보험 증서를 찾았다", "제 생명보험을 해지했다"):
+            assert correct_ordinal_prefix_je(text) == (text, [])
+
     def test_already_attached_untouched(self):
         assert correct_ordinal_prefix_je("제3자 입장에서") == ("제3자 입장에서", [])
 
