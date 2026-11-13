@@ -136,3 +136,56 @@ def parse_pdf(path: Path) -> list[SubtitleEntry]:
         SubtitleEntry(index=i, start="", end="", text=line, speaker=None, original_text=line)
         for i, line in enumerate(lines)
     ]
+
+
+# 한글 문서(.hwp/.hwpx)는 kordoc(MIT, github.com/chrisryugj/kordoc)으로 마크다운으로 바꿔
+# 읽는다. 한컴오피스가 없어도 된다. Node.js의 npx로 판을 고정해 부른다 — 판이 바뀌면
+# 읽는 결과가 달라질 수 있으므로 올릴 때는 여기 숫자를 고치고 시험을 다시 돈다.
+KORDOC_VERSION = "4.24.71"
+_MD_SEPARATOR_RE = re.compile(r"^\|?\s*:?-{3,}")
+
+
+def _kordoc_markdown(path: Path) -> str:
+    import shutil
+    import subprocess
+    import tempfile
+
+    npx = shutil.which("npx") or shutil.which("npx.cmd")
+    if not npx:
+        raise ValueError("한글 문서(.hwp/.hwpx)를 읽으려면 Node.js(npx)가 필요합니다.")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out.md"
+        r = subprocess.run(
+            [npx, "-y", f"kordoc@{KORDOC_VERSION}", str(path), "-o", str(out)],
+            capture_output=True, timeout=300,
+        )
+        if r.returncode != 0 or not out.exists():
+            err = r.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+            raise ValueError(f"한글 문서를 읽지 못했습니다(kordoc): {err[0]}")
+        return out.read_text(encoding="utf-8")
+
+
+def markdown_to_lines(markdown: str) -> list[str]:
+    """kordoc 마크다운에서 교정할 줄만 뽑는다. 굵게 `**`·제목 `#` 표시는 벗기고, 표는
+    칸마다 한 줄로 나눈다(교정기가 `|`를 문장으로 읽지 않게)."""
+    lines: list[str] = []
+    for raw in markdown.splitlines():
+        line = raw.strip()
+        if not line or _MD_SEPARATOR_RE.match(line):
+            continue
+        line = re.sub(r"^#{1,6}\s+", "", line).replace("**", "")
+        if line.startswith("|") and line.endswith("|"):
+            lines.extend(c.strip() for c in line.strip("|").split("|") if c.strip())
+        else:
+            lines.append(line)
+    return lines
+
+
+def parse_hwp(path: Path) -> list[SubtitleEntry]:
+    """한글 문서(.hwp/.hwpx)에서 글을 뽑아 한 줄씩 SubtitleEntry로 만든다.
+    서식은 돌려주지 않는다 — 결과는 .docx·.pdf와 같이 순수 텍스트다."""
+    lines = markdown_to_lines(_kordoc_markdown(Path(path)))
+    return [
+        SubtitleEntry(index=i, start="", end="", text=line, speaker=None, original_text=line)
+        for i, line in enumerate(lines)
+    ]

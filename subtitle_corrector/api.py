@@ -169,10 +169,10 @@ def correct_subtitle(
         # **읽어 낸 원문이 업로드한 파일과 같은지 매번 증명한다.** 파싱이 원문을 조금이라도
         # 바꿔 놓으면 그 뒤 교정이 정확해도 다른 문서를 고친 것이 된다(2026-08-03 사용자
         # 요구). 어긋나면 교정하지 않고 무엇이 어긋났는지 알린다 — 조용히 진행하는 것이
-        # 가장 나쁘다. 바이너리(.docx/.pdf)는 텍스트를 뽑아내는 것이라 이 비교가 성립하지
+        # 가장 나쁘다. 바이너리(.docx/.pdf/.hwp/.hwpx)는 텍스트를 뽑아내는 것이라 이 비교가 성립하지
         # 않으므로 건너뛴다.
         ingest_problems: list[str] = []
-        if ext not in (".docx", ".pdf"):
+        if ext not in (".docx", ".pdf", ".hwp", ".hwpx"):
             source_text, source_encoding = decode_bytes(raw)
             ingest_problems = verify_ingest_fidelity(source_text, [e.text for e in entries])
             if ingest_problems:
@@ -244,7 +244,7 @@ def correct_subtitle(
 
         # .docx·.pdf는 원본이 바이너리라 그대로 디코드할 수 없다. 우리가 읽어 낸
         # 텍스트를 원문으로 삼는다.
-        if ext in (".docx", ".pdf"):
+        if ext in (".docx", ".pdf", ".hwp", ".hwpx"):
             original_text = "\n".join(e.text for e in entries) + "\n"
         else:
             original_text = raw.decode("utf-8-sig")

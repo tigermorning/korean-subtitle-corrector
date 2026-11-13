@@ -19,6 +19,9 @@ from functools import lru_cache
 import requests
 from dotenv import load_dotenv
 
+from . import local_dict
+from .disk_cache import disk_cache
+
 load_dotenv()
 
 STDICT_API_KEY = os.getenv("STDICT_API_KEY")
@@ -282,6 +285,17 @@ def _api_error_code(body: str) -> str | None:
 
 
 @lru_cache(maxsize=4096)
+def _local_stdict(query: str) -> dict | None:
+    return local_dict.stdict_search(query)
+
+
+@lru_cache(maxsize=4096)
+def _local_opendict(query: str) -> dict | None:
+    return local_dict.opendict_search(query)
+
+
+@lru_cache(maxsize=4096)
+@disk_cache("stdict")
 def _fetch_stdict(query: str) -> dict:
     if not STDICT_API_KEY:
         raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
@@ -292,7 +306,14 @@ def _fetch_stdict(query: str) -> dict:
 def search_stdict(query: str) -> dict:
     """표준국어대사전 검색. 실패는 "찾지 못함"과 똑같이 처리한다 — 이 함수의 판단
     근거가 불확실하다는 뜻이므로, 호출부는 이미 "등재 안 됨/판단 근거 불충분"일 때와
-    같은 경로(확인 플래그)로 넘어간다. 실패 사실은 리포트에 실린다."""
+    같은 경로(확인 플래그)로 넘어간다. 실패 사실은 리포트에 실린다.
+
+    `DICT_LOCAL_DIR`이 켜져 있으면 내려받은 사전 색인을 먼저 본다. 로컬이 답하지 못하면
+    (없음 포함 — 내려받은 판 뒤에 실린 낱말일 수 있다) 지금처럼 API(디스크 캐시 거침)로
+    확인한다. 규칙과 대조 근거는 `local_dict.py` 설명."""
+    local = _local_stdict(query)
+    if local is not None:
+        return local
     try:
         return _fetch_stdict(query)
     except _LookupFailed:
@@ -305,6 +326,7 @@ _ENDING_SEARCH_MAX_PAGES = 3
 
 
 @lru_cache(maxsize=2048)
+@disk_cache("stdict_end", keep=lambda v: bool(v[1]), decode=lambda v: (tuple(v[0]), v[1]))
 def search_stdict_words_ending_with(suffix: str, syllables: int) -> tuple[tuple[str, ...], bool]:
     """표준국어대사전에서 `suffix`로 끝나고 음절 수가 `syllables`인 표제어를 모은다.
 
@@ -344,6 +366,7 @@ def search_stdict_words_ending_with(suffix: str, syllables: int) -> tuple[tuple[
 
 
 @lru_cache(maxsize=4096)
+@disk_cache("opendict")
 def _fetch_opendict(query: str) -> dict:
     if not OPENDICT_API_KEY:
         raise RuntimeError("OPENDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
@@ -352,7 +375,11 @@ def _fetch_opendict(query: str) -> dict:
 
 
 def search_opendict(query: str) -> dict:
-    """우리말샘 검색. 실패 처리 원칙은 `search_stdict()`와 같다."""
+    """우리말샘 검색. 실패 처리 원칙과 로컬 색인을 먼저 보는 방식은 `search_stdict()`와 같다
+    (우리말샘은 결과 순서를 재현할 수 있는 경우에만 로컬이 답한다)."""
+    local = _local_opendict(query)
+    if local is not None:
+        return local
     try:
         return _fetch_opendict(query)
     except _LookupFailed:
@@ -379,6 +406,7 @@ def _opendict_examples_for_target(target_code) -> list[str]:
 
 
 @lru_cache(maxsize=2048)
+@disk_cache("stdict_view")
 def _fetch_stdict_view(target_code: str) -> str:
     if not STDICT_API_KEY:
         raise RuntimeError("STDICT_API_KEY가 .env에 설정되어 있지 않습니다.")
@@ -426,6 +454,7 @@ def search_kornorms_partial(keyword: str, rows: int = 30) -> list[dict]:
 
 
 @lru_cache(maxsize=4096)
+@disk_cache("kornorms")
 def _fetch_kornorms(keyword: str) -> list[dict]:
     """외래어·로마자 표기 용례를 조회한다 (한국어 어문 규범 Open API).
 
@@ -450,6 +479,7 @@ def _fetch_kornorms(keyword: str) -> list[dict]:
 
 
 @lru_cache(maxsize=4096)
+@disk_cache("kornorms_partial")
 def _fetch_kornorms_partial(keyword: str, rows: int = 30) -> list[dict]:
     """kornorms 외래어 용례를 **부분 일치**로 조회한다.
 
@@ -585,6 +615,7 @@ def search_krdict(query: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @lru_cache(maxsize=4096)
+@disk_cache("dialect")
 def _fetch_dialect(query: str) -> list[dict]:
     """지역어 종합 정보 API에서 query를 검색한다(원시 조회, 실패는 예외로 올린다).
 

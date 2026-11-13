@@ -10,6 +10,7 @@ from . import formats
 from .parsers import (
     SubtitleEntry,
     parse_docx,
+    parse_hwp,
     parse_pdf,
     parse_plain_text,
     parse_srt,
@@ -38,10 +39,13 @@ _HANDLERS: dict[str, tuple] = {
     ".docx": (parse_docx, write_plain_text, False),
     # PDF는 읽기 전용 입력이다. 서식·쪽 배치를 되돌릴 수 없어 결과는 텍스트로 준다.
     ".pdf": (parse_pdf, write_plain_text, False),
+    # 한글 문서도 읽기 전용 입력이다(kordoc으로 읽음, Node.js 필요). 결과는 텍스트로 준다.
+    ".hwp": (parse_hwp, write_plain_text, False),
+    ".hwpx": (parse_hwp, write_plain_text, False),
 }
 
 SUBTITLE_EXTENSIONS = tuple(
-    ext for ext in _HANDLERS if ext not in (".txt", ".docx", ".pdf")
+    ext for ext in _HANDLERS if ext not in (".txt", ".docx", ".pdf", ".hwp", ".hwpx")
 )
 SUPPORTED_EXTENSIONS = tuple(_HANDLERS)
 
