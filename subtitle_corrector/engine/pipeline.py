@@ -101,6 +101,7 @@ from .dependent_nouns import (
 )
 from .spacing_guards import check_spacing
 from .translationese import check_double_passive_voice
+from .rosseo import EVIDENCE as ROSSEO_EVIDENCE, check_rosseo, correct_rosseo
 from .text_utils import _josa
 from .edit_guard import verify_edit
 from .llm_pass import LlmSettings, propose_corrections
@@ -270,6 +271,9 @@ def _correct_line(
     corrected_text, je_fixes = correct_ordinal_prefix_je(corrected_text)
     corrected_text = _guard("접두사 제-", before, corrected_text, je_fixes)
     before = corrected_text
+    corrected_text, rosseo_fixes = correct_rosseo(corrected_text)
+    corrected_text = _guard("로서/로써", before, corrected_text, rosseo_fixes)
+    before = corrected_text
     corrected_text, comma_fixes = correct_interjection_vocative_comma(corrected_text)
     corrected_text = _guard("감탄사·호격 쉼표", before, corrected_text, comma_fixes)
     before = corrected_text
@@ -344,6 +348,7 @@ def _correct_line(
             + noun_phrase_hada_fixes
             + honorific_fixes
             + cheo_fixes
+            + rosseo_fixes
             + comma_fixes
             + term_join_fixes
             + compound_fixes
@@ -374,6 +379,9 @@ def _correct_line(
             applied.append(
                 AppliedNote(message=f"[근거] {fixed_form}: {norm_note}", is_edit=False)
             )
+
+    if rosseo_fixes:
+        applied.append(AppliedNote(message=f"[근거] 로서/로써: {ROSSEO_EVIDENCE}", is_edit=False))
 
     flags.extend(former_term_flags)
 
@@ -506,6 +514,7 @@ def _correct_line(
         check_honorific_dependent_noun(index, corrected_text),
         check_adnominal_noun_verb_split(index, corrected_text),
         check_intensive_prefix_cheo(index, corrected_text),
+        check_rosseo(index, corrected_text),
         # 제42항 의존명사 검사도 일반 띄어쓰기 검사보다 **먼저** 온다(도로명과 같은
         # 이유) — 같은 제안이면 규칙 이름과 근거를 말해 주는 쪽이 남아야 한다.
         check_action_noun_affix(index, corrected_text),
