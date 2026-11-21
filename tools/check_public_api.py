@@ -24,18 +24,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # (모듈 경로, 이름, 종류, 있어야 하는 것)
+# 종류:
+#   function          인자 이름이 모두 있어야 한다(순서는 안 본다)
+#   function_ordered  맨 앞 위치 인자가 이 이름·순서여야 한다(밖에서 위치로 넘긴다)
+#   class             필드(dataclass·NamedTuple·self.x)가 모두 있어야 한다
+#   constant          모듈 맨 위에 이 이름의 값이 있어야 한다
+#   export            패키지 `__init__.py`가 이 이름을 내보내야 한다(import 또는 정의)
 CONTRACT: list[tuple[str, str, str, tuple[str, ...]]] = [
     (
         "subtitle_corrector/engine/pipeline.py",
         "correct_entries",
         "function",
-        ("entries", "doc_type", "spacing_mode"),
+        ("entries", "doc_type", "spacing_mode",
+         # 5절: 교정 옵션을 이름으로 넘긴다
+         "dialect_map", "dialect_modes", "dialect_region", "dialect_mode",
+         "markers", "style", "llm"),
     ),
     (
         "subtitle_corrector/parsers.py",
         "SubtitleEntry",
         "class",
-        ("index", "start", "end", "text"),
+        ("index", "start", "end", "text", "speaker"),
     ),
     (
         "subtitle_corrector/report.py",
@@ -49,6 +58,23 @@ CONTRACT: list[tuple[str, str, str, tuple[str, ...]]] = [
         "class",
         ("message", "line_index", "is_edit"),
     ),
+    # ── 5절: 교정 옵션을 만드는 함수와 값 ──
+    ("subtitle_corrector/engine/options.py", "SubtitleMarkers", "class", ("speaker", "tone")),
+    ("subtitle_corrector/engine/options.py", "normalize_punctuation_style", "function_ordered",
+     ("ellipsis_style", "quote_style")),
+    ("subtitle_corrector/engine/options.py", "normalize_spacing_mode", "function_ordered", ("mode",)),
+    ("subtitle_corrector/engine/options.py", "normalize_dialect_mode", "function_ordered", ("mode",)),
+    ("subtitle_corrector/engine/options.py", "normalize_subtitle_markers", "function_ordered",
+     ("screen_text", "line_break", "position", "speaker", "tone")),
+    ("subtitle_corrector/engine/llm_pass.py", "normalize_llm_settings", "function", ("enabled",)),
+    ("subtitle_corrector/engine/__init__.py", "normalize_llm_settings", "export", ()),
+    ("subtitle_corrector/engine/kiwi_adapter.py", "register_custom_words", "function_ordered",
+     ("words", "tag")),
+    ("subtitle_corrector/engine/__init__.py", "register_custom_words", "export", ()),
+    ("subtitle_corrector/dictionary/dialect.py", "DIALECT_MARKERS", "constant", ()),
+    ("subtitle_corrector/dictionary/__init__.py", "DIALECT_MARKERS", "export", ()),
+    ("subtitle_corrector/dictionary/terms.py", "lookup_by_source", "function_ordered",
+     ("source", "token")),
 ]
 
 # `AppliedNote`는 사람이 읽는 한 줄을 이 메서드로 준다. 밖에서 문자열을 다시 파싱하지
@@ -60,12 +86,37 @@ def _module(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
+def _assigns(node, name: str) -> bool:
+    if isinstance(node, ast.AnnAssign):
+        return isinstance(node.target, ast.Name) and node.target.id == name
+    if isinstance(node, ast.Assign):
+        return any(isinstance(t, ast.Name) and t.id == name for t in node.targets)
+    return False
+
+
 def _find(tree: ast.Module, name: str, kind: str):
-    want = (ast.FunctionDef, ast.AsyncFunctionDef) if kind == "function" else (ast.ClassDef,)
+    if kind in ("constant", "export"):
+        for node in tree.body:
+            if _assigns(node, name):
+                return node
+            if kind == "export":
+                if isinstance(node, (ast.ImportFrom, ast.Import)) and any(
+                        (a.asname or a.name) == name for a in node.names):
+                    return node
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                        and node.name == name:
+                    return node
+        return None
+    want = (ast.FunctionDef, ast.AsyncFunctionDef) if kind.startswith("function") else (ast.ClassDef,)
     for node in tree.body:
         if isinstance(node, want) and node.name == name:
             return node
     return None
+
+
+def _positional(fn) -> list[str]:
+    a = fn.args
+    return [p.arg for p in (*a.posonlyargs, *a.args)]
 
 
 def _params(fn) -> set[str]:
@@ -109,6 +160,14 @@ def main() -> int:
             problems.append(f"{rel}: {kind} `{name}`을 찾지 못했습니다")
             continue
         checked += 1
+        if kind in ("constant", "export"):
+            continue
+        if kind == "function_ordered":
+            lead = _positional(node)[: len(required)]
+            if lead != list(required):
+                problems.append(f"{rel}: `{name}`의 앞 위치 인자가 ({', '.join(required)})여야 "
+                                f"합니다 — 지금 ({', '.join(lead)})")
+            continue
         have = _params(node) if kind == "function" else _fields(node)
         missing = [r for r in required if r not in have]
         if missing:

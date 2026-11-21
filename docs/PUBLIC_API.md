@@ -1,6 +1,6 @@
 # 공개 계약 — 이 저장소를 라이브러리로 부를 때
 
-이 교정기는 **다른 도구가 `import`해서 쓴다.** 아래 넷은 그 도구가 기대는 모양이고,
+이 교정기는 **다른 도구가 `import`해서 쓴다.** 아래 다섯 절은 그 도구가 기대는 모양이고,
 바꾸면 밖이 깨진다. **우리 시험은 그것을 못 잡는다** — 우리 시험은 우리 호출부만 본다.
 
 `tools/check_public_api.py`가 이 문서의 내용을 정적으로 지킨다(커밋 훅에 물려 있다).
@@ -50,6 +50,25 @@ correct_entries(
 
 `line_index`가 `None`이면 문서 전체에 대한 안내이고, `is_edit`이 거짓이면 무언가를
 **하지 않았다**는 안내다. 줄 단위 되돌리기가 이 둘에 기댄다.
+
+## 5. 교정 옵션 — 웹앱과 같은 설정을 밖에서 넘길 때
+
+2026-11-21에 더했다. 밖은 1~4절만이 아니라 아래 이름도 쓰고 있었고, 몇 곳은 `ImportError`를
+삼키고 기능을 조용히 뺀다(예: 화자 부호를 못 넘기면 화자명을 대사로 읽는다). 그래서 계약에 넣었다.
+
+- `correct_entries`의 옵션 인자(이름으로 넘긴다): `dialect_map` · `dialect_modes` ·
+  `dialect_region` · `dialect_mode` · `markers` · `style` · `llm`
+- `SubtitleEntry.speaker` — 화자별 사투리 지정에 쓴다
+- `subtitle_corrector.engine.options`
+  - `SubtitleMarkers` — 필드 `speaker` · `tone`을 이름으로 넘긴다
+  - **위치 인자로 부르므로 순서까지 계약이다**:
+    `normalize_punctuation_style(ellipsis_style, quote_style)` ·
+    `normalize_spacing_mode(mode)` · `normalize_dialect_mode(mode)` ·
+    `normalize_subtitle_markers(screen_text, line_break, position, speaker, tone)`
+- `subtitle_corrector.engine`에서 내보내는 `normalize_llm_settings(enabled=…)` ·
+  `register_custom_words(words, tag)`
+- `subtitle_corrector.dictionary`에서 내보내는 `DIALECT_MARKERS`(지역 이름이 키인 dict)
+- `subtitle_corrector.dictionary.terms.lookup_by_source(source, token)`
 
 ---
 

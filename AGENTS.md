@@ -6,7 +6,7 @@
 
 ## 확인 명령
 - 고친 뒤 돌린다(2026-11-20 돌려 봄, 파이썬은 `.venv/Scripts/python.exe`)
-  - 공개 계약: `python tools/check_public_api.py` → `공개 계약 4개 확인, 어긋난 것 0건`
+  - 공개 계약: `python tools/check_public_api.py` → `공개 계약 16개 확인, 어긋난 것 0건`(2026-11-21 4개에서 넓힘)
   - 미해석 이름: `python tools/check_names.py` → `… 미해석 전역 이름 0건`
   - 전체 시험: `pytest` → `768 passed`(약 32분, 오래 걸리니 백그라운드로). 사전 API를 실시간으로 부른다(네트워크·`.env` 키 필요). 실패하면 코드 회귀인지 사전 개정인지부터 가린다
 - 구조를 바꾼 뒤(모듈 분할·함수 이동): `python tools/diff_behavior.py` → 순수 이동이면 SHA256까지 같다
